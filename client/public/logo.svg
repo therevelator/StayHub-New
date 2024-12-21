@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="150" height="24" viewBox="0 0 150 24" xmlns="http://www.w3.org/2000/svg">
+  <text x="0" y="20" fill="white" font-family="Arial" font-size="24" font-weight="bold">
+    StayHub
+  </text>
+  <circle cx="135" cy="12" r="4" fill="white" opacity="0.8"/>
+</svg>

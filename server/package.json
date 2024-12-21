@@ -1,0 +1,36 @@
+{
+  "name": "hotel-booking-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed": "node src/scripts/seedProperties.js",
+    "migrate": "node src/db/runMigrations.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.13",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-validator": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.3",
+    "mysql2": "^3.11.5",
+    "node-fetch": "^3.3.2",
+    "unsplash-js": "^7.0.19",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}
