@@ -7,6 +7,9 @@ import {
   HomeIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
+import DatePicker from 'react-datepicker';
+import "react-datepicker/dist/react-datepicker.css";
+import '../../styles/searchBar.css';
 
 const propertyTypes = [
   { label: 'Any Type', value: '' },
@@ -47,6 +50,8 @@ const Home = () => {
   const [properties, setProperties] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [userCity, setUserCity] = useState('');
+  const [checkInDate, setCheckInDate] = useState(null);
+  const [checkOutDate, setCheckOutDate] = useState(null);
 
   useEffect(() => {
     // Get user's location if they allow it
@@ -84,18 +89,19 @@ const Home = () => {
     }
   }, []);
 
-  const handleSearch = async (e, cityOverride = null) => {
+  const handleSearch = async (e) => {
     if (e) e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const searchLocation = cityOverride || location || userCity;
       const response = await api.get('/properties/search', {
         params: {
-          location: searchLocation,
+          location,
           guests,
-          type: propertyType
+          type: propertyType,
+          checkIn: checkInDate,
+          checkOut: checkOutDate
         }
       });
 
@@ -128,76 +134,83 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Hero Section */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Find Your Perfect Stay
-          </h1>
-          <p className="text-xl text-gray-600">
-            Discover amazing properties at the best prices
-          </p>
-        </div>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4 text-center">
+          Find Your Perfect Stay
+        </h1>
+        <p className="text-lg text-gray-600 text-center mb-8">
+          Discover amazing properties at the best prices
+        </p>
 
         {/* Search Form */}
-        <form onSubmit={handleSearch} className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-12">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <div className="flex items-center border rounded-lg px-3 py-2">
-                <MapPinIcon className="h-5 w-5 text-gray-400 mr-2" />
+        <form onSubmit={handleSearch} className="mb-12">
+          <div className="search-bar">
+            <div className="search-section">
+              <label className="search-label">Location</label>
+              <div className="flex items-center">
                 <input
                   type="text"
-                  placeholder="Location"
+                  placeholder="Where are you going?"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  className="w-full focus:outline-none"
+                  className="search-input"
                 />
               </div>
             </div>
 
-            <div className="relative">
-              <div className="flex items-center border rounded-lg px-3 py-2">
-                <HomeIcon className="h-5 w-5 text-gray-400 mr-2" />
-                <select
-                  value={propertyType}
-                  onChange={(e) => setPropertyType(e.target.value)}
-                  className="w-full focus:outline-none bg-transparent"
-                >
-                  {propertyTypes.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="search-section">
+              <label className="search-label">Property Type</label>
+              <select
+                value={propertyType}
+                onChange={(e) => setPropertyType(e.target.value)}
+                className="search-select"
+              >
+                <option value="">Any Type</option>
+                {propertyTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="relative">
-              <div className="flex items-center border rounded-lg px-3 py-2">
-                <UserIcon className="h-5 w-5 text-gray-400 mr-2" />
-                <input
-                  type="number"
-                  min="1"
-                  value={guests}
-                  onChange={(e) => setGuests(e.target.value)}
-                  className="w-full focus:outline-none"
-                  placeholder="Guests"
-                />
-              </div>
+            <div className="search-section">
+              <label className="search-label">Guests</label>
+              <input
+                type="number"
+                min="1"
+                value={guests}
+                onChange={(e) => setGuests(parseInt(e.target.value))}
+                className="search-input"
+              />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/>
-              ) : (
-                <>
-                  <MagnifyingGlassIcon className="h-5 w-5 mr-2" />
-                  Search
-                </>
-              )}
+            <div className="search-section">
+              <label className="search-label">Check-in Date</label>
+              <DatePicker
+                selected={checkInDate}
+                onChange={date => setCheckInDate(date)}
+                placeholderText="Select check-in date"
+                className="date-picker"
+                dateFormat="MMM d, yyyy"
+                minDate={new Date()}
+              />
+            </div>
+
+            <div className="search-section">
+              <label className="search-label">Check-out Date</label>
+              <DatePicker
+                selected={checkOutDate}
+                onChange={date => setCheckOutDate(date)}
+                placeholderText="Select check-out date"
+                className="date-picker"
+                dateFormat="MMM d, yyyy"
+                minDate={checkInDate || new Date()}
+              />
+            </div>
+
+            <button type="submit" className="search-button" disabled={loading}>
+              <MagnifyingGlassIcon className="search-icon" />
+              <span className="search-button-text">Search</span>
             </button>
           </div>
         </form>

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import propertyService from '../../services/propertyService';
@@ -9,6 +9,8 @@ import AmenitiesForm from './steps/AmenitiesForm';
 import RoomForm from '../../components/Room/RoomForm';
 import PhotosForm from './steps/PhotosForm';
 import RulesForm from './steps/RulesForm';
+import DatePicker from 'react-datepicker';
+import "react-datepicker/dist/react-datepicker.css";
 import { CheckCircleIcon } from '@heroicons/react/20/solid';
 
 const steps = [
@@ -23,6 +25,11 @@ const steps = [
 const ListProperty = () => {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const query = new URLSearchParams(location.search);
+  const checkInDate = query.get('checkIn');
+  const checkOutDate = query.get('checkOut');
+
   const [activeStep, setActiveStep] = useState(0);
   const [completed, setCompleted] = useState({});
   const [formData, setFormData] = useState({
@@ -60,6 +67,12 @@ const ListProperty = () => {
       houseRules: []
     }
   });
+
+  useEffect(() => {
+    if (checkInDate && checkOutDate) {
+      // Fetch properties based on the selected dates
+    }
+  }, [checkInDate, checkOutDate]);
 
   const handleNext = () => {
     const newCompleted = { ...completed };
@@ -311,6 +324,30 @@ const ListProperty = () => {
             Next
           </button>
         )}
+      </div>
+
+      <div className="flex space-x-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Date</label>
+          <DatePicker
+            selected={checkInDate}
+            onChange={date => setCheckInDate(date)}
+            minDate={new Date()}
+            className="w-full border p-2 rounded"
+            placeholderText="Select check-in date"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Check-out Date</label>
+          <DatePicker
+            selected={checkOutDate}
+            onChange={date => setCheckOutDate(date)}
+            minDate={checkInDate ? addDays(checkInDate, 1) : new Date()}
+            className="w-full border p-2 rounded"
+            placeholderText="Select check-out date"
+            disabled={!checkInDate}
+          />
+        </div>
       </div>
     </div>
   );
