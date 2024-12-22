@@ -2,9 +2,12 @@ import jwt from 'jsonwebtoken';
 import User from '../models/user.js';
 import bcrypt from 'bcrypt';
 
-const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
+const generateToken = (user) => {
+  return jwt.sign({ 
+    id: user.id,
+    role: user.role
+  }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
   });
 };
 
@@ -46,7 +49,7 @@ export const register = async (req, res) => {
     ]);
 
     // Generate JWT token
-    const token = generateToken(user.id);
+    const token = generateToken(user);
 
     res.status(201).json({
       status: 'success',
@@ -57,6 +60,7 @@ export const register = async (req, res) => {
           firstName: user.first_name,
           lastName: user.last_name,
           createdAt: user.created_at,
+          role: user.role
         },
         token,
       },
@@ -89,15 +93,7 @@ export const login = async (req, res) => {
 
       console.log('Sending user data:', userData);
 
-      const token = jwt.sign(
-        { 
-          userId: user.id,
-          email: user.email,
-          role: user.role
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: '24h' }
-      );
+      const token = generateToken(user);
 
       res.json({
         status: 'success',

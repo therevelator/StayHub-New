@@ -14,14 +14,11 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Invalid login data');
     }
 
-    console.log('Login data received:', { userData }); // Don't log token
-    
     const userWithAdmin = {
       ...userData,
       isAdmin: userData.role === 'admin'
     };
     
-    // Store user data and token
     localStorage.setItem('user', JSON.stringify(userWithAdmin));
     localStorage.setItem('token', token);
     setUser(userWithAdmin);

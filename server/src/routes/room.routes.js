@@ -36,4 +36,10 @@ router.delete('/:roomId',
   roomController.deleteRoom
 );
 
+// Get room availability
+router.get('/:roomId/availability', roomController.getRoomAvailability);
+
+// Create a booking
+router.post('/:roomId/book', authenticateToken, roomController.createBooking);
+
 export default router;

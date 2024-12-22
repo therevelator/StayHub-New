@@ -12,6 +12,8 @@ import ListProperty from './pages/ListProperty/ListProperty';
 import PropertyDetails from './pages/PropertyDetails/PropertyDetails';
 import SearchResults from './pages/SearchResults/SearchResults';
 import EditRooms from './pages/EditRooms/EditRooms';
+import RoomPage from './pages/RoomPage/RoomPage';
+import AdminRoute from './components/AdminRoute';
 
 export const router = createBrowserRouter([
   {
@@ -27,12 +29,17 @@ export const router = createBrowserRouter([
           { path: 'register', element: <Register /> },
           { path: 'list-property', element: <ListProperty /> },
           { path: 'property/:id', element: <PropertyDetails /> },
+          { path: 'property/:propertyId/room/:roomId', element: <RoomPage /> },
           { path: 'search', element: <SearchResults /> },
         ],
       },
       {
         path: 'admin',
-        element: <AdminLayout />,
+        element: (
+          <AdminRoute>
+            <AdminLayout />
+          </AdminRoute>
+        ),
         children: [
           { index: true, element: <AdminDashboard /> },
           { path: 'properties', element: <AdminProperties /> },

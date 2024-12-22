@@ -75,7 +75,7 @@ const PropertyDetails = () => {
   };
 
   const handleBookRoom = (roomId) => {
-    navigate(`/property/${id}/room/${roomId}/book`);
+    navigate(`/property/${id}/room/${roomId}`);
   };
 
   return (

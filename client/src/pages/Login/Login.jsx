@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
+import api from '../../services/api';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -20,6 +21,18 @@ const Login = () => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleLogin = async (values) => {
+    try {
+      const response = await api.post('/auth/login', values);
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        // ... rest of login logic
+      }
+    } catch (error) {
+      // ... error handling
+    }
   };
 
   const handleSubmit = async (e) => {

@@ -1,23 +1,43 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/user.js';
 
 export const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  console.log('Auth header:', authHeader);
-
   const token = authHeader && authHeader.split(' ')[1];
+
   if (!token) {
-    console.log('No token found');
-    return res.status(401).json({ message: 'Authentication required' });
+    return res.status(401).json({
+      status: 'error',
+      message: 'No token provided'
+    });
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log('Decoded token:', decoded);
     req.user = decoded;
+    
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid user information in token'
+      });
+    }
+
     next();
   } catch (error) {
     console.error('Token verification error:', error);
-    return res.status(403).json({ message: 'Invalid token' });
+    return res.status(403).json({
+      status: 'error',
+      message: 'Invalid token'
+    });
   }
+};
+
+export const requireAdmin = (req, res, next) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
+      status: 'error',
+      message: 'Admin access required'
+    });
+  }
+  next();
 };
