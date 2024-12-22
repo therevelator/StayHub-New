@@ -5,12 +5,12 @@ import { useParams } from 'react-router-dom';
 import api from '../../services/api';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 
 const RoomPage = () => {
   const { propertyId, roomId } = useParams();
   const [availableDates, setAvailableDates] = useState([]);
-  const [bookedDates, setBookedDates] = useState([]);
+  const [bookingDates, setBookingDates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [room, setRoom] = useState(null);
@@ -18,6 +18,7 @@ const RoomPage = () => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [checkInDate, setCheckInDate] = useState(null);
   const [checkOutDate, setCheckOutDate] = useState(null);
+  const [hoveredDate, setHoveredDate] = useState(null);
 
   useEffect(() => {
     const fetchRoomAndAvailability = async () => {
@@ -29,7 +30,7 @@ const RoomPage = () => {
 
         setRoom(roomResponse.data.data);
         setAvailableDates(availabilityResponse.data.availableDates || []);
-        setBookedDates(availabilityResponse.data.bookedDates || []);
+        setBookingDates(availabilityResponse.data.bookingDates || []);
       } catch (error) {
         console.error('Error fetching data:', error);
         setError('Failed to fetch room details');
@@ -39,6 +40,23 @@ const RoomPage = () => {
     };
 
     fetchRoomAndAvailability();
+  }, [roomId]);
+
+  useEffect(() => {
+    const fetchAvailableDates = async () => {
+      try {
+        const response = await fetch(`/api/rooms/${roomId}/availability`);
+        const data = await response.json();
+        setAvailableDates(data.availableDates || []);
+        setBookingDates(data.bookingDates || []);
+      } catch (error) {
+        console.error('Error fetching available dates:', error);
+        setAvailableDates([]);
+        setBookingDates([]);
+      }
+    };
+
+    fetchAvailableDates();
   }, [roomId]);
 
   const handleDateChange = (date) => {
@@ -52,13 +70,48 @@ const RoomPage = () => {
 
   const tileClassName = ({ date }) => {
     const dateString = format(date, 'yyyy-MM-dd');
-    if (bookedDates.includes(dateString)) {
+    const isCheckIn = checkInDate && dateString === format(checkInDate, 'yyyy-MM-dd');
+    const isCheckOut = checkOutDate && dateString === format(checkOutDate, 'yyyy-MM-dd');
+    
+    // Check if the date is between check-in and check-out
+    const isBetween = checkInDate && checkOutDate && 
+      date > checkInDate && 
+      date < checkOutDate;
+
+    // First priority: Check if it's a check-in date (should be red/blocked)
+    if (isCheckIn) {
       return 'bg-red-100 text-red-800';
     }
-    if (availableDates.includes(dateString)) {
+
+    // Second priority: Check if it's a check-out date (should be green/available)
+    if (isCheckOut) {
       return 'bg-green-100 text-green-800';
     }
+
+    // Third priority: Check if it's a date between check-in and check-out
+    if (isBetween) {
+      return 'bg-red-100 text-red-800';
+    }
+
+    // Fourth priority: Check existing bookings
+    if (Array.isArray(bookingDates) && bookingDates.includes(dateString)) {
+      return 'bg-red-100 text-red-800';
+    }
+
+    // Fifth priority: Check available dates
+    if (Array.isArray(availableDates) && availableDates.includes(dateString)) {
+      return 'bg-green-100 text-green-800';
+    }
+
     return '';
+  };
+
+  const handleMouseEnter = (date) => {
+    setHoveredDate(date);
+  };
+
+  const handleMouseLeave = () => {
+    setHoveredDate(null);
   };
 
   const handleBooking = async () => {
@@ -109,6 +162,8 @@ const RoomPage = () => {
                   onChange={handleDateChange}
                   value={checkInDate || checkOutDate ? [checkInDate, checkOutDate] : null}
                   className="rounded-lg border p-4 w-full"
+                  onMouseOver={handleMouseEnter}
+                  onMouseLeave={handleMouseLeave}
                 />
               </div>
               <div className="flex gap-4 mt-4">
@@ -119,6 +174,18 @@ const RoomPage = () => {
                 <div className="flex items-center">
                   <div className="w-4 h-4 bg-red-100 rounded mr-2"></div>
                   <span>Booked</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-blue-100 rounded mr-2"></div>
+                  <span>Check-in Date</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-blue-200 rounded mr-2"></div>
+                  <span>Check-out Date</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-blue-50 rounded mr-2"></div>
+                  <span>Selected Interval</span>
                 </div>
               </div>
             </div>

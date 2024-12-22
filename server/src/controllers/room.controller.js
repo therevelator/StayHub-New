@@ -92,35 +92,140 @@ export const getRooms = async (req, res) => {
   }
 };
 
+// Helper function (not exported)
+const getRoomHelper = async (roomId) => {
+  try {
+    const [rooms] = await db.query(
+      'SELECT * FROM rooms WHERE id = ?',
+      [roomId]
+    );
+    
+    if (!rooms || rooms.length === 0) {
+      return null;
+    }
+    
+    return rooms[0];
+  } catch (error) {
+    console.error('Error getting room:', error);
+    throw error;
+  }
+};
+
+// Exported controller functions
 export const getRoom = async (req, res) => {
   try {
-    const [rooms] = await db.query('SELECT * FROM rooms WHERE id = ?', [req.params.roomId]);
-    if (rooms.length === 0) {
-      return res.status(404).json({ message: 'Room not found' });
-    }
+    const { roomId } = req.params;
+    const room = await getRoomHelper(roomId);
     
-    // Parse beds JSON if it exists
-    const room = rooms[0];
-    try {
-      room.beds = JSON.parse(room.beds);
-      room.amenities = JSON.parse(room.amenities);
-      room.accessibility_features = JSON.parse(room.accessibility_features);
-      room.climate = JSON.parse(room.climate);
-      room.images = JSON.parse(room.images);
-      room.energy_saving_features = JSON.parse(room.energy_saving_features);
-    } catch (e) {
-      console.error('Error parsing JSON:', e);
+    if (!room) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Room not found'
+      });
     }
-    
+
     res.json({
       status: 'success',
       data: room
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('Error getting room:', error);
+    res.status(500).json({
       status: 'error',
-      message: 'Error fetching room', 
-      error: error.message 
+      message: 'Failed to get room'
+    });
+  }
+};
+
+export const getRoomAvailability = async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    console.log('Checking availability for roomId:', roomId);
+    
+    const room = await getRoomHelper(roomId);
+    if (!room) {
+      console.log('Room not found:', roomId);
+      return res.status(404).json({
+        status: 'error',
+        message: 'Room not found'
+      });
+    }
+    
+    // Get all confirmed bookings for this room
+    const [bookings] = await db.query(`
+      SELECT 
+        DATE(check_in_date) as check_in_date, 
+        DATE(check_out_date) as check_out_date,
+        status 
+      FROM bookings 
+      WHERE room_id = ? 
+      AND status = 'confirmed'
+      AND check_out_date >= CURDATE()
+    `, [roomId]);
+
+    console.log('Found bookings:', bookings);
+
+    const bookingDates = new Set();
+
+    // Mark all dates between check-in and check-out as booked
+    bookings.forEach(booking => {
+      // Create new Date objects from the database dates
+      const checkInDate = new Date(booking.check_in_date);
+      const checkOutDate = new Date(booking.check_out_date);
+
+      console.log('Processing booking:', {
+        checkIn: checkInDate.toISOString().split('T')[0],
+        checkOut: checkOutDate.toISOString().split('T')[0]
+      });
+
+      // Add dates from check-in up to (but not including) check-out
+      let currentDate = new Date(checkInDate);
+      while (currentDate < checkOutDate) {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}`;
+        
+        bookingDates.add(dateString);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    });
+
+    const bookedDates = Array.from(bookingDates).sort();
+    console.log('Booked dates:', bookedDates);
+
+    // Generate available dates (next 90 days)
+    const availableDates = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 90; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
+      
+      if (!bookingDates.has(dateString)) {
+        availableDates.push(dateString);
+      }
+    }
+
+    const response = {
+      status: 'success',
+      availableDates,
+      bookingDates: bookedDates
+    };
+
+    console.log('Sending response:', response);
+    res.json(response);
+
+  } catch (error) {
+    console.error('Error getting room availability:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get room availability'
     });
   }
 };
@@ -221,60 +326,6 @@ export const deleteRoom = async (req, res) => {
   }
 };
 
-export const getRoomAvailability = async (req, res) => {
-  try {
-    const { roomId } = req.params;
-    
-    // Get all confirmed bookings for this room
-    const [bookings] = await db.query(`
-      SELECT check_in_date, check_out_date 
-      FROM bookings 
-      WHERE room_id = ? 
-      AND status = 'confirmed'
-      AND check_out_date >= CURDATE()
-    `, [roomId]);
-
-    // Generate the next 90 days
-    const availableDates = [];
-    const bookedDates = new Set();
-
-    // Mark all dates between check-in and check-out as booked
-    bookings.forEach(booking => {
-      let currentDate = new Date(booking.check_in_date);
-      const checkOutDate = new Date(booking.check_out_date);
-      
-      while (currentDate < checkOutDate) {
-        bookedDates.add(currentDate.toISOString().split('T')[0]);
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-    });
-
-    // Generate available dates (next 90 days)
-    const today = new Date();
-    for (let i = 0; i < 90; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() + i);
-      const dateString = date.toISOString().split('T')[0];
-      
-      if (!bookedDates.has(dateString)) {
-        availableDates.push(dateString);
-      }
-    }
-
-    res.json({
-      status: 'success',
-      availableDates,
-      bookedDates: Array.from(bookedDates)
-    });
-  } catch (error) {
-    console.error('Error getting room availability:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to get room availability'
-    });
-  }
-};
-
 // Add a new controller function for creating bookings
 export const createBooking = async (req, res) => {
   try {
@@ -330,8 +381,8 @@ export const createBooking = async (req, res) => {
       WHERE room_id = ? 
       AND status IN ('confirmed', 'pending')
       AND (
+        (check_in_date < ? AND check_out_date > ?) OR
         (check_in_date <= ? AND check_out_date > ?) OR
-        (check_in_date < ? AND check_out_date >= ?) OR
         (check_in_date >= ? AND check_out_date <= ?)
       )
     `, [roomId, checkOutDate, checkInDate, checkOutDate, checkInDate, checkInDate, checkOutDate]);
@@ -401,7 +452,7 @@ export const createBooking = async (req, res) => {
     console.error('Error creating booking:', error);
     res.status(500).json({
       status: 'error',
-      message: error.message || 'Failed to create booking'
+      message: 'Internal server error'
     });
   }
 };
