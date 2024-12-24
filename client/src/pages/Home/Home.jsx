@@ -149,7 +149,7 @@ const Home = () => {
               <div className="flex items-center">
                 <input
                   type="text"
-                  placeholder="Where are you going?"
+                  placeholder="Destination..."
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   className="search-input"
@@ -189,7 +189,7 @@ const Home = () => {
               <DatePicker
                 selected={checkInDate}
                 onChange={date => setCheckInDate(date)}
-                placeholderText="Select check-in date"
+                placeholderText="Check-in date"
                 className="date-picker"
                 dateFormat="MMM d, yyyy"
                 minDate={new Date()}
@@ -201,7 +201,7 @@ const Home = () => {
               <DatePicker
                 selected={checkOutDate}
                 onChange={date => setCheckOutDate(date)}
-                placeholderText="Select check-out date"
+                placeholderText="Check-out date"
                 className="date-picker"
                 dateFormat="MMM d, yyyy"
                 minDate={checkInDate || new Date()}

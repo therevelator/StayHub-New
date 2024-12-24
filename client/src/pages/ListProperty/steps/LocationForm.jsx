@@ -58,13 +58,62 @@ const MapComponent = ({ center, markerPosition, onMarkerDrag }) => {
 };
 
 const LocationForm = ({ onChange, data = {} }) => {
-  const defaultCoordinates = { lat: 53.38934125, lng: -6.242886621880416 }; // Default to Dublin
-  const [mapCenter, setMapCenter] = useState([defaultCoordinates.lat, defaultCoordinates.lng]);
-  const [markerPosition, setMarkerPosition] = useState([defaultCoordinates.lat, defaultCoordinates.lng]);
+  const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
+  const [mapCenter, setMapCenter] = useState([
+    data.coordinates?.lat || 0,
+    data.coordinates?.lng || 0
+  ]);
+  const [markerPosition, setMarkerPosition] = useState([
+    data.coordinates?.lat || 0,
+    data.coordinates?.lng || 0
+  ]);
+
+  // Add useEffect to load Google Maps API
+  useEffect(() => {
+    const loadGoogleMapsAPI = () => {
+      if (!window.google) {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/gh/somanchiu/Keyless-Google-Maps-API@v6.8/mapsJavaScriptAPI.js';
+        script.async = true;
+        script.defer = true;
+        script.crossOrigin = "anonymous";
+        script.onload = () => {
+          console.log('Google Maps API loaded successfully');
+          setIsGoogleMapsLoaded(true);
+        };
+        script.onerror = (error) => {
+          console.error('Error loading Google Maps API:', error);
+        };
+        document.head.appendChild(script);
+      } else {
+        setIsGoogleMapsLoaded(true);
+      }
+    };
+
+    loadGoogleMapsAPI();
+    
+    // Cleanup function to remove the script when component unmounts
+    return () => {
+      const script = document.querySelector('script[src*="mapsJavaScriptAPI.js"]');
+      if (script) {
+        script.remove();
+      }
+    };
+  }, []);
 
   // Debug log for initial values
   console.log('Initial values:', data);
-  console.log('Default coordinates:', defaultCoordinates);
+
+  // Update map when data changes
+  useEffect(() => {
+    if (data.coordinates?.lat && data.coordinates?.lng) {
+      const newLat = parseFloat(data.coordinates.lat);
+      const newLng = parseFloat(data.coordinates.lng);
+      setMapCenter([newLat, newLng]);
+      setMarkerPosition([newLat, newLng]);
+      console.log('Updating map with coordinates:', { lat: newLat, lng: newLng });
+    }
+  }, [data.coordinates]);
 
   const formik = useFormik({
     initialValues: {
@@ -73,7 +122,7 @@ const LocationForm = ({ onChange, data = {} }) => {
       state: data.state || '',
       country: data.country || '',
       postalCode: data.postalCode || '',
-      coordinates: data.coordinates || defaultCoordinates,
+      coordinates: data.coordinates || { lat: 0, lng: 0 },
     },
     validationSchema: Yup.object({
       street: Yup.string().required('Street address is required'),
@@ -87,18 +136,9 @@ const LocationForm = ({ onChange, data = {} }) => {
       }).required('Please verify location on map'),
     }),
     onSubmit: (values) => {
-      // This is now just for form validation
       console.log('Form is valid:', values);
     },
   });
-
-  // Update form coordinates when marker is moved
-  useEffect(() => {
-    const lat = parseFloat(markerPosition[0].toFixed(9));
-    const lng = parseFloat(markerPosition[1].toFixed(9));
-    console.log('Updating form coordinates from marker:', { lat, lng });
-    formik.setFieldValue('coordinates', { lat, lng });
-  }, [markerPosition]);
 
   // Update parent component on form changes
   useEffect(() => {
@@ -115,70 +155,62 @@ const LocationForm = ({ onChange, data = {} }) => {
 
   const handleVerifyAddress = async () => {
     try {
-      const { street, city, country, postalCode } = formik.values;
+      if (!isGoogleMapsLoaded) {
+        console.log('Waiting for Google Maps API to load...');
+        formik.setFieldError('street', 'Map service is loading. Please try again in a moment.');
+        return;
+      }
+
+      const { street, city, state, country, postalCode } = formik.values;
       
-      // Format address for better Nominatim results
+      if (!street || !city || !country) {
+        formik.setFieldError('street', 'Please fill in at least street, city, and country');
+        return;
+      }
+      
+      // Format address for Google Geocoding
       const searchQuery = [
         street.trim(),
         city.trim(),
+        state.trim(),
         postalCode ? postalCode.trim() : '',
         country.trim()
       ].filter(Boolean).join(', ');
       
-      const encodedAddress = encodeURIComponent(searchQuery);
       console.log('Searching for address:', searchQuery);
       
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&addressdetails=1&limit=1`
-      );
+      const geocoder = new window.google.maps.Geocoder();
+      console.log('Geocoder created:', geocoder);
       
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      
-      const data = await response.json();
-      console.log('Nominatim response:', data);
+      const results = await new Promise((resolve, reject) => {
+        geocoder.geocode({ address: searchQuery }, (results, status) => {
+          console.log('Geocoding results:', { results, status });
+          if (status === 'OK' && results && results.length > 0) {
+            resolve(results);
+          } else {
+            reject(new Error(`Geocoding failed with status: ${status}`));
+          }
+        });
+      });
 
-      if (data && data.length > 0) {
-        const { lat, lon } = data[0];
-        const newLat = parseFloat(parseFloat(lat).toFixed(9));
-        const newLon = parseFloat(parseFloat(lon).toFixed(9));
-        console.log('Setting new coordinates:', { lat: newLat, lng: newLon });
-        setMapCenter([newLat, newLon]);
-        setMarkerPosition([newLat, newLon]);
-      } else {
-        // Try alternative search without postal code
-        const alternativeQuery = [street.trim(), city.trim(), country.trim()]
-          .filter(Boolean)
-          .join(', ');
-        
-        console.log('Trying alternative search:', alternativeQuery);
-        
-        const altResponse = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(alternativeQuery)}&addressdetails=1&limit=1`
-        );
-        
-        if (!altResponse.ok) {
-          throw new Error('Network response was not ok');
-        }
-        
-        const altData = await altResponse.json();
-        console.log('Alternative search response:', altData);
-        
-        if (altData && altData.length > 0) {
-          const { lat, lon } = altData[0];
-          const newLat = parseFloat(parseFloat(lat).toFixed(9));
-          const newLon = parseFloat(parseFloat(lon).toFixed(9));
-          console.log('Setting new coordinates from alternative search:', { lat: newLat, lng: newLon });
-          setMapCenter([newLat, newLon]);
-          setMarkerPosition([newLat, newLon]);
-        } else {
-          formik.setFieldError('street', 'Could not find this address. Please verify it and try again.');
-        }
-      }
+      const location = results[0].geometry.location;
+      const newLat = parseFloat(location.lat().toFixed(9));
+      const newLng = parseFloat(location.lng().toFixed(9));
+      console.log('Setting new coordinates:', { lat: newLat, lng: newLng });
+      
+      const newCoords = [newLat, newLng];
+      setMapCenter(newCoords);
+      setMarkerPosition(newCoords);
+      
+      formik.setFieldValue('coordinates', { lat: newLat, lng: newLng });
+      onChange({
+        ...formik.values,
+        coordinates: { lat: newLat, lng: newLng }
+      });
+
     } catch (error) {
       console.error('Error verifying address:', error);
-      formik.setFieldError('street', 'Error verifying address. Please try again.');
+      formik.setFieldError('street', 'Could not find this address. Please verify it and try again.');
     }
   };
 
@@ -279,9 +311,14 @@ const LocationForm = ({ onChange, data = {} }) => {
             <button
               type="button"
               onClick={handleVerifyAddress}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              disabled={!isGoogleMapsLoaded}
+              className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                isGoogleMapsLoaded 
+                  ? 'bg-primary-600 hover:bg-primary-700' 
+                  : 'bg-gray-400 cursor-not-allowed'
+              }`}
             >
-              Verify on Map
+              {isGoogleMapsLoaded ? 'Verify on Map' : 'Loading Map Service...'}
             </button>
           </div>
 
@@ -295,7 +332,13 @@ const LocationForm = ({ onChange, data = {} }) => {
                 center={mapCenter}
                 markerPosition={markerPosition}
                 onMarkerDrag={(position) => {
+                  console.log('Marker dragged to:', position);
                   setMarkerPosition([position.lat, position.lng]);
+                  formik.setFieldValue('coordinates', { lat: position.lat, lng: position.lng });
+                  onChange({
+                    ...formik.values,
+                    coordinates: { lat: position.lat, lng: position.lng }
+                  });
                 }}
               />
             </MapContainer>

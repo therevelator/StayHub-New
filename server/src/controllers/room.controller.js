@@ -233,69 +233,68 @@ export const getRoomAvailability = async (req, res) => {
 export const updateRoom = async (req, res) => {
   try {
     const roomId = req.params.roomId;
-    console.log('Received update data:', req.body);
-    
-    // Map frontend fields to database fields and remove timestamps
-    const { 
-      created_at,
-      updated_at,
-      id,
-      ...otherData 
-    } = req.body;
+    console.log('Updating room:', roomId);
+    console.log('Update data:', req.body);
+    console.log('Beds data:', req.body.beds); // Debug log for beds
 
-    const updateData = {
-      ...otherData,
-      beds: typeof req.body.beds === 'string' ? req.body.beds : JSON.stringify(req.body.beds),
-      amenities: typeof req.body.amenities === 'string' ? req.body.amenities : JSON.stringify(req.body.amenities),
-      accessibility_features: typeof req.body.accessibility_features === 'string' ? req.body.accessibility_features : JSON.stringify(req.body.accessibility_features),
-      climate: typeof req.body.climate === 'string' ? req.body.climate : JSON.stringify(req.body.climate),
-      images: typeof req.body.images === 'string' ? req.body.images : JSON.stringify(req.body.images),
-      energy_saving_features: typeof req.body.energy_saving_features === 'string' ? req.body.energy_saving_features : JSON.stringify(req.body.energy_saving_features),
-      updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    // Format the room data
+    const roomData = {
+      ...req.body,
+      beds: Array.isArray(req.body.beds) 
+        ? JSON.stringify(req.body.beds)
+        : typeof req.body.beds === 'string'
+          ? req.body.beds // If already stringified, leave as is
+          : JSON.stringify([]), // Default to empty array if undefined
+      amenities: JSON.stringify(req.body.amenities || []),
+      accessibility_features: JSON.stringify(req.body.accessibility_features || []),
+      energy_saving_features: JSON.stringify(req.body.energy_saving_features || []),
+      images: JSON.stringify(req.body.images || []),
+      has_private_bathroom: req.body.has_private_bathroom ? 1 : 0,
+      smoking: req.body.smoking ? 1 : 0,
+      has_balcony: req.body.has_balcony ? 1 : 0,
+      has_kitchen: req.body.has_kitchen ? 1 : 0,
+      has_minibar: req.body.has_minibar ? 1 : 0,
+      includes_breakfast: req.body.includes_breakfast ? 1 : 0,
+      extra_bed_available: req.body.extra_bed_available ? 1 : 0,
+      pets_allowed: req.body.pets_allowed ? 1 : 0,
+      has_toiletries: req.body.has_toiletries ? 1 : 0,
+      has_towels_linens: req.body.has_towels_linens ? 1 : 0,
+      has_room_service: req.body.has_room_service ? 1 : 0,
+      updated_at: new Date()
     };
 
-    // Remove any undefined or null values
-    Object.keys(updateData).forEach(key => {
-      if (updateData[key] === undefined || updateData[key] === null) {
-        delete updateData[key];
-      }
-    });
+    console.log('Formatted room data:', roomData); // Debug log for formatted data
 
-    console.log('Final update data:', updateData);
-
-    await db.query('UPDATE rooms SET ? WHERE id = ?', [updateData, roomId]);
+    const result = await roomModel.updateRoom(roomId, roomData);
     
-    // Fetch and return the updated room
-    const [updatedRoom] = await db.query('SELECT * FROM rooms WHERE id = ?', [roomId]);
-    if (updatedRoom.length === 0) {
-      return res.status(404).json({ 
+    if (result.affectedRows > 0) {
+      // Parse the stringified fields back for the response
+      const responseData = {
+        ...roomData,
+        beds: JSON.parse(roomData.beds),
+        amenities: JSON.parse(roomData.amenities),
+        accessibility_features: JSON.parse(roomData.accessibility_features),
+        energy_saving_features: JSON.parse(roomData.energy_saving_features),
+        images: JSON.parse(roomData.images)
+      };
+
+      res.json({
+        status: 'success',
+        message: 'Room updated successfully',
+        data: { id: roomId, ...responseData }
+      });
+    } else {
+      res.status(404).json({
         status: 'error',
-        message: 'Room not found after update' 
+        message: 'Room not found or no changes made'
       });
     }
-
-    // Parse JSON fields in response
-    try {
-      updatedRoom[0].beds = JSON.parse(updatedRoom[0].beds);
-      updatedRoom[0].amenities = JSON.parse(updatedRoom[0].amenities);
-      updatedRoom[0].accessibility_features = JSON.parse(updatedRoom[0].accessibility_features);
-      updatedRoom[0].climate = JSON.parse(updatedRoom[0].climate);
-      updatedRoom[0].images = JSON.parse(updatedRoom[0].images);
-      updatedRoom[0].energy_saving_features = JSON.parse(updatedRoom[0].energy_saving_features);
-    } catch (e) {
-      console.error('Error parsing JSON in response:', e);
-    }
-
-    res.json({
-      status: 'success',
-      data: updatedRoom[0]
-    });
   } catch (error) {
-    console.error('Error updating room:', error);
-    res.status(500).json({ 
+    console.error('Error in updateRoom controller:', error);
+    res.status(500).json({
       status: 'error',
-      message: 'Error updating room', 
-      error: error.message 
+      message: 'Error updating room',
+      error: error.message
     });
   }
 };

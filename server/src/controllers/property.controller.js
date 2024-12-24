@@ -1,4 +1,4 @@
-import { findPropertiesInRadius, getPropertyDetails, getPropertyById, createProperty, updateProperty, deleteProperty } from '../models/property.model.js';
+import { findPropertiesInRadius, getPropertyDetails, getPropertyById as getProperty, updateProperty as update, deleteProperty } from '../models/property.model.js';
 import { createRoom, getRoomsByPropertyId } from '../models/room.model.js';
 import axios from 'axios';
 import db from '../db/index.js';
@@ -179,7 +179,7 @@ const getPropertyDetailsById = async (req, res) => {
     const { id } = req.params;
     
     console.log('Fetching property from database...');
-    const property = await getPropertyById(id);
+    const property = await getProperty(id);
     console.log('Property from database:', property);
     
     if (!property) {
@@ -216,31 +216,73 @@ const getPropertyDetailsById = async (req, res) => {
 };
 
 const createNewProperty = async (req, res) => {
+  const connection = await db.getConnection();
   try {
-    const propertyData = {
-      ...req.body,
-      host_id: req.user.userId
-    };
+    await connection.beginTransaction();
+    
+    console.log('Creating property with data:', req.body); // Debug log
+    const { photos, ...propertyData } = req.body;
 
-    const newProperty = await createProperty(propertyData);
-    console.log('New property created:', newProperty);
+    // Add created_at and updated_at
+    propertyData.created_at = new Date();
+    propertyData.updated_at = new Date();
+    
+    console.log('Property data to insert:', propertyData); // Debug log
+    
+    // Insert property
+    const [result] = await connection.query(
+      'INSERT INTO properties SET ?',
+      [propertyData]
+    );
+    
+    console.log('Property insert result:', result); // Debug log
+    const propertyId = result.insertId;
+
+    // Insert photos if they exist
+    if (photos && photos.length > 0) {
+      console.log('Photos to insert:', photos); // Debug log
+      
+      const photoValues = photos.map(photo => [
+        propertyId,
+        photo.url,
+        photo.caption || null
+      ]);
+
+      console.log('Photo values to insert:', photoValues); // Debug log
+
+      await connection.query(
+        'INSERT INTO property_images (property_id, url, caption) VALUES ?',
+        [photoValues]
+      );
+    }
+
+    await connection.commit();
+    
+    // Get the created property with photos
+    const [createdProperty] = await connection.query(
+      `SELECT p.*, 
+        (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', pi.id, 'url', pi.url, 'caption', pi.caption))
+         FROM property_images pi 
+         WHERE pi.property_id = p.id) as photos
+       FROM properties p
+       WHERE p.id = ?`,
+      [propertyId]
+    );
 
     res.status(201).json({
       status: 'success',
-      data: {
-        id: newProperty.id,
-        name: newProperty.basicInfo.name,
-        description: newProperty.basicInfo.description,
-        created_at: newProperty.created_at,
-        updated_at: newProperty.updated_at
-      }
+      data: createdProperty[0]
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Error creating property:', error);
     res.status(500).json({
       status: 'error',
-      message: error.message
+      message: error.message,
+      details: error.stack // Include stack trace for debugging
     });
+  } finally {
+    connection.release();
   }
 };
 
@@ -256,7 +298,7 @@ const updatePropertyById = async (req, res) => {
     });
     
     // First check if property exists and get owner info
-    const property = await getPropertyById(id);
+    const property = await getProperty(id);
     if (!property) {
       return res.status(404).json({
         status: 'error',
@@ -298,7 +340,7 @@ const updatePropertyById = async (req, res) => {
         });
       }
 
-      const updatedProperty = await updateProperty(id, req.body);
+      const updatedProperty = await update(id, req.body);
       return res.json({
         status: 'success',
         data: updatedProperty
@@ -331,7 +373,7 @@ const deletePropertyById = async (req, res) => {
     }
 
     // Check if property exists
-    const property = await getPropertyById(id);
+    const property = await getProperty(id);
     if (!property) {
       return res.status(404).json({
         status: 'error',
@@ -463,7 +505,7 @@ export const updatePropertyStatus = async (req, res) => {
     console.log('Updating property status:', { id, is_active });
 
     // First check if property exists and get owner info
-    const property = await getPropertyById(id);
+    const property = await getProperty(id);
     if (!property) {
       return res.status(404).json({
         status: 'error',
@@ -498,4 +540,118 @@ export const updatePropertyStatus = async (req, res) => {
   }
 };
 
-export { searchProperties, getPropertyDetailsById, createNewProperty, updatePropertyById, deletePropertyById };
+export const getPropertyById = async (req, res) => {
+  try {
+    // First get the property details
+    const [properties] = await db.query(
+      `SELECT p.*, 
+        u.email as host_email,
+        u.first_name as host_first_name,
+        u.last_name as host_last_name
+       FROM properties p
+       LEFT JOIN users u ON p.host_id = u.id
+       WHERE p.id = ?`,
+      [req.params.id]
+    );
+
+    if (properties.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
+    }
+
+    // Get property photos
+    const [photos] = await db.query(
+      'SELECT id, url, caption FROM property_images WHERE property_id = ? ORDER BY id',
+      [req.params.id]
+    );
+
+    // Get rooms if they exist
+    const [rooms] = await db.query(
+      'SELECT * FROM rooms WHERE property_id = ?',
+      [req.params.id]
+    );
+
+    // Combine all data
+    const propertyData = {
+      ...properties[0],
+      photos: photos || [],
+      rooms: rooms || []
+    };
+
+    res.json({
+      status: 'success',
+      data: propertyData
+    });
+  } catch (error) {
+    console.error('Error getting property:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+};
+
+export const updateProperty = async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { photos, ...propertyData } = req.body;
+    const propertyId = req.params.id;
+
+    // Update property data
+    await connection.query(
+      'UPDATE properties SET ? WHERE id = ?',
+      [propertyData, propertyId]
+    );
+
+    // Handle photos update
+    if (photos) {
+      // Delete existing photos
+      await connection.query(
+        'DELETE FROM property_images WHERE property_id = ?',
+        [propertyId]
+      );
+
+      // Insert new photos
+      if (photos.length > 0) {
+        const photoValues = photos.map(photo => [
+          propertyId,
+          photo.url,
+          photo.caption || null
+        ]);
+
+        await connection.query(
+          'INSERT INTO property_images (property_id, url, caption) VALUES ?',
+          [photoValues]
+        );
+      }
+    }
+
+    await connection.commit();
+
+    res.json({
+      status: 'success',
+      message: 'Property updated successfully'
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error updating property:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+export { 
+  searchProperties, 
+  getPropertyDetailsById, 
+  updatePropertyById, 
+  deletePropertyById,
+  createNewProperty
+};

@@ -23,7 +23,11 @@ const PEOPLE_PER_BED = {
   'Bunk Bed': 2
 };
 
-const RoomForm = ({ initialData, onSubmit, onClose }) => {
+const RoomForm = ({ initialData, onSubmit, onChange, onClose }) => {
+  if (typeof onSubmit !== 'function') {
+    console.error('RoomForm: onSubmit prop must be a function');
+  }
+
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     id: initialData?.id || null,
@@ -260,7 +264,7 @@ const RoomForm = ({ initialData, onSubmit, onClose }) => {
 
       const submissionData = {
         ...restFormData,
-        ...priceData, // Add converted price fields
+        ...priceData,
         // Convert boolean values to 0/1
         has_private_bathroom: restFormData.has_private_bathroom ? 1 : 0,
         has_balcony: restFormData.has_balcony ? 1 : 0,
@@ -284,8 +288,15 @@ const RoomForm = ({ initialData, onSubmit, onClose }) => {
         images: JSON.stringify(restFormData.images || [])
       };
 
-      console.log('Submitting data:', submissionData); // Debug log
-      await onSubmit(submissionData);
+      console.log('Submitting data:', submissionData);
+      
+      // Call both onSubmit and onChange with the same data
+      if (onSubmit) {
+        await onSubmit(submissionData);
+      }
+      if (onChange) {
+        onChange(submissionData);
+      }
     } catch (error) {
       console.error('Error submitting form:', error);
       throw error;
@@ -891,12 +902,15 @@ const RoomForm = ({ initialData, onSubmit, onClose }) => {
 
 RoomForm.propTypes = {
   initialData: PropTypes.object,
-  onSubmit: PropTypes.func.isRequired,
+  onSubmit: PropTypes.func,
+  onChange: PropTypes.func,
   onClose: PropTypes.func
 };
 
 RoomForm.defaultProps = {
   initialData: null,
+  onSubmit: null,
+  onChange: null,
   onClose: null
 };
 

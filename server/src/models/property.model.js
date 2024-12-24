@@ -417,144 +417,120 @@ const createProperty = async (propertyData) => {
   const connection = await db.getConnection();
   
   try {
+    // Validate required host_id
+    if (!propertyData.host_id) {
+      throw new Error('Host ID is required');
+    }
+
     await connection.beginTransaction();
     
-    // Convert time values before the query
-    const checkInTime = propertyData.rules.checkInTime ? 
-      new Date(propertyData.rules.checkInTime).toTimeString().split(' ')[0] : 
-      '15:00:00';
-    
-    const checkOutTime = propertyData.rules.checkOutTime ? 
-      new Date(propertyData.rules.checkOutTime).toTimeString().split(' ')[0] : 
-      '11:00:00';
-    
     // Insert the main property
-    const [result] = await connection.query(
+    const [propertyResult] = await connection.query(
       `INSERT INTO properties (
         name, description, latitude, longitude, street, city, state, country,
         postal_code, host_id, guests, bedrooms, beds, bathrooms,
         property_type, check_in_time, check_out_time, cancellation_policy,
-        pet_policy, event_policy, star_rating, languages_spoken, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        pet_policy, event_policy, star_rating, languages_spoken, is_active,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
       [
-        propertyData.basicInfo.name,
-        propertyData.basicInfo.description,
-        propertyData.location.coordinates.lat,
-        propertyData.location.coordinates.lng,
-        propertyData.location.street,
-        propertyData.location.city,
-        propertyData.location.state,
-        propertyData.location.country,
-        propertyData.location.postalCode,
-        propertyData.host_id,
-        parseInt(propertyData.basicInfo.guests) || 1,
-        parseInt(propertyData.basicInfo.bedrooms) || 1,
-        parseInt(propertyData.basicInfo.beds) || 1,
-        parseInt(propertyData.basicInfo.bathrooms) || 1,
-        propertyData.basicInfo.propertyType,
-        checkInTime,
-        checkOutTime,
-        propertyData.rules.cancellationPolicy,
-        propertyData.rules.petPolicy,
-        propertyData.rules.eventPolicy,
-        propertyData.basicInfo.starRating || null,
-        propertyData.basicInfo.languagesSpoken || null,
-        propertyData.rules.isActive ? 1 : 0
+        propertyData.name,
+        propertyData.description,
+        propertyData.latitude || 0,
+        propertyData.longitude || 0,
+        propertyData.street,
+        propertyData.city,
+        propertyData.state,
+        propertyData.country,
+        propertyData.postal_code,
+        propertyData.host_id, // This should now be guaranteed to exist
+        propertyData.guests || 1,
+        propertyData.bedrooms || 1,
+        propertyData.beds || 1,
+        propertyData.bathrooms || 1,
+        propertyData.property_type,
+        propertyData.check_in_time || '14:00:00',
+        propertyData.check_out_time || '11:00:00',
+        propertyData.cancellation_policy || 'flexible',
+        propertyData.pet_policy || '',
+        propertyData.event_policy || '',
+        propertyData.star_rating || 0,
+        JSON.stringify(propertyData.languages_spoken || []),
+        propertyData.is_active ? 1 : 0
       ]
     );
 
-    const propertyId = result.insertId;
+    const propertyId = propertyResult.insertId;
 
-    // Insert rooms
-    if (propertyData.rooms?.length > 0) {
+    // Insert rooms if they exist
+    if (propertyData.rooms && propertyData.rooms.length > 0) {
+      const roomInsertQuery = `
+        INSERT INTO rooms (
+          property_id, name, room_type, bed_type, beds, max_occupancy, 
+          base_price, cleaning_fee, service_fee, tax_rate, security_deposit,
+          description, bathroom_type, view_type, has_private_bathroom,
+          smoking, accessibility_features, floor_level, has_balcony,
+          has_kitchen, has_minibar, climate, price_per_night,
+          cancellation_policy, includes_breakfast, extra_bed_available,
+          pets_allowed, images, cleaning_frequency, has_toiletries,
+          has_towels_linens, has_room_service, flooring_type,
+          energy_saving_features, status, room_size, amenities,
+          created_at, updated_at
+        ) VALUES ?
+      `;
+
       const roomValues = propertyData.rooms.map(room => [
         propertyId,
         room.name,
-        room.type,
-        JSON.stringify(room.beds),
-        calculateOccupancy(room.beds),
-        parseFloat(room.basePrice) || 0,
-        parseFloat(room.cleaningFee) || null,
-        parseFloat(room.serviceFee) || null,
-        parseFloat(room.taxRate) || null,
-        parseFloat(room.securityDeposit) || null,
+        room.room_type,
+        room.bed_type,
+        room.beds,
+        room.max_occupancy,
+        room.base_price,
+        room.cleaning_fee,
+        room.service_fee,
+        room.tax_rate,
+        room.security_deposit,
         room.description,
-        room.bathroom_type || 'private'
+        room.bathroom_type,
+        room.view_type,
+        room.has_private_bathroom,
+        room.smoking,
+        room.accessibility_features,
+        room.floor_level,
+        room.has_balcony,
+        room.has_kitchen,
+        room.has_minibar,
+        room.climate,
+        room.price_per_night,
+        room.cancellation_policy,
+        room.includes_breakfast,
+        room.extra_bed_available,
+        room.pets_allowed,
+        room.images,
+        room.cleaning_frequency,
+        room.has_toiletries,
+        room.has_towels_linens,
+        room.has_room_service,
+        room.flooring_type,
+        room.energy_saving_features,
+        room.status,
+        room.room_size,
+        room.amenities,
+        new Date(),
+        new Date()
       ]);
 
-      await connection.query(
-        `INSERT INTO rooms 
-        (property_id, name, room_type, beds, max_occupancy, base_price, cleaning_fee, service_fee, tax_rate, security_deposit, description, bathroom_type) 
-        VALUES ?`,
-        [roomValues]
-      );
-    }
-
-    // Handle amenities with duplicate prevention
-    if (propertyData.amenities) {
-      const processedAmenities = new Set();
-      const amenityValues = [];
-
-      Object.entries(propertyData.amenities).forEach(([category, amenities]) => {
-        // Remove duplicates within each category
-        const uniqueAmenities = [...new Set(amenities)];
-        
-        uniqueAmenities.forEach(amenity => {
-          const amenityKey = `${propertyId}-${category}-${amenity}`;
-          
-          if (!processedAmenities.has(amenityKey)) {
-            processedAmenities.add(amenityKey);
-            amenityValues.push([
-              propertyId,
-              amenity,
-              category
-            ]);
-          }
-        });
-      });
-
-      if (amenityValues.length > 0) {
-        await connection.query(
-          `INSERT INTO property_amenities (property_id, amenity, category) 
-           VALUES ?`,
-          [amenityValues]
-        );
+      if (roomValues.length > 0) {
+        await connection.query(roomInsertQuery, [roomValues]);
       }
     }
 
-    // Insert house rules
-    if (propertyData.rules.houseRules?.length > 0) {
-      const ruleValues = propertyData.rules.houseRules.map(rule => [propertyId, rule]);
-      await connection.query(
-        'INSERT INTO property_rules (property_id, rule) VALUES ?',
-        [ruleValues]
-      );
-    }
-
-    // Insert images
-    if (propertyData.photos?.length > 0) {
-      const imageValues = propertyData.photos.map(photo => [
-        propertyId,
-        photo.url,
-        photo.caption || null
-      ]);
-      await connection.query(
-        'INSERT INTO property_images (property_id, url, caption) VALUES ?',
-        [imageValues]
-      );
-    }
-
     await connection.commit();
-    return {
-      id: propertyId,
-      ...propertyData,
-      created_at: new Date(),
-      updated_at: new Date()
-    };
-
+    return { status: 'success', propertyId };
   } catch (error) {
-    console.error('Error in createProperty:', error);
     await connection.rollback();
+    console.error('Error in createProperty:', error);
     throw error;
   } finally {
     connection.release();
