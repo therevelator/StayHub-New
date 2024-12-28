@@ -28,7 +28,7 @@ export const router = createBrowserRouter([
           { path: 'login', element: <Login /> },
           { path: 'register', element: <Register /> },
           { path: 'list-property', element: <ListProperty /> },
-          { path: 'property/:id', element: <PropertyDetails /> },
+          { path: 'property/:propertyId', element: <PropertyDetails /> },
           { path: 'property/:propertyId/room/:roomId', element: <RoomPage /> },
           { path: 'search', element: <SearchResults /> },
           { 

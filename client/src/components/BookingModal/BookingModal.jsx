@@ -3,18 +3,17 @@ import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext'; // Import auth context
+import { useAuth } from '../../context/AuthContext';
 
 const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, specialRequests, termsAccepted }) => {
   const [checkInDate, setCheckInDate] = useState(null);
   const [checkOutDate, setCheckOutDate] = useState(null);
   const [numberOfGuests, setNumberOfGuests] = useState(1);
   const navigate = useNavigate();
-  const { user } = useAuth(); // Get user from auth context
+  const { user } = useAuth();
+  const [error, setError] = useState('');
 
-  // Function to determine if a date should be marked as unavailable
   const isDateUnavailable = (date) => {
-    // Convert availableDates to a map for O(1) lookup
     const availableDatesMap = availableDates.reduce((acc, date) => {
       acc[date] = true;
       return acc;
@@ -38,7 +37,13 @@ const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, spec
         return;
       }
 
-      const response = await api.post(`/rooms/${roomId}/book`, {
+      const endpoint = `/properties/rooms/${roomId}/book`;
+      console.log('Room ID:', roomId);
+      console.log('API endpoint:', endpoint);
+      console.log('API base URL:', api.defaults.baseURL);
+      console.log('Full URL:', `${api.defaults.baseURL}${endpoint}`);
+      
+      const response = await api.post(endpoint, {
         checkInDate: checkInDate.toISOString().split('T')[0],
         checkOutDate: checkOutDate.toISOString().split('T')[0],
         numberOfGuests,
@@ -53,6 +58,11 @@ const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, spec
       }
     } catch (error) {
       console.error('Error creating booking:', error);
+      console.error('Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config
+      });
       if (error.response?.status === 401 || error.response?.status === 403) {
         alert('Please log in to book a room');
         onClose();

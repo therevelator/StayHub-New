@@ -5,41 +5,33 @@ import checkPropertyOwnership from '../middleware/checkPropertyOwnership.js';
 
 const router = express.Router();
 
-// Create a new room for a property
-router.post('/properties/:propertyId/rooms', 
+// Public endpoints
+router.get('/rooms/:roomId', roomController.getRoom);
+router.get('/rooms/:roomId/availability', roomController.getRoomAvailability);
+router.get('/:propertyId/rooms', roomController.getRooms);
+
+// Protected endpoints
+router.post('/:propertyId/rooms', 
   authenticateToken,
   checkPropertyOwnership,
   roomController.createRoom
 );
 
-// Get all rooms for a property
-router.get('/properties/:propertyId/rooms',
-  roomController.getRooms
-);
-
-// Get a specific room
-router.get('/properties/rooms/:roomId',
-  roomController.getRoom
-);
-
-// Update a room
-router.put('/properties/rooms/:roomId',
+router.put('/rooms/:roomId',
   authenticateToken,
   checkPropertyOwnership,
   roomController.updateRoom
 );
 
-// Delete a room
-router.delete('/properties/rooms/:roomId',
+router.delete('/rooms/:roomId',
   authenticateToken,
   checkPropertyOwnership,
   roomController.deleteRoom
 );
 
-// Get room availability
-router.get('/properties/rooms/:roomId/availability', roomController.getRoomAvailability);
-
-// Create a booking
-router.post('/properties/rooms/:roomId/book', authenticateToken, roomController.createBooking);
+router.post('/rooms/:roomId/book', 
+  authenticateToken, 
+  roomController.createBooking
+);
 
 export default router;

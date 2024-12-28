@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import BookingModal from '@/components/BookingModal';
+import BookingModal from '../../../../../client/src/components/BookingModal/BookingModal';
+import api from '../../../../../client/src/services/api';
 
 const RoomPage = () => {
   const { propertyId, roomId } = useParams();
@@ -12,9 +13,8 @@ const RoomPage = () => {
   useEffect(() => {
     const fetchAvailableDates = async () => {
       try {
-        const response = await fetch(`/api/rooms/${roomId}/availability`);
-        const data = await response.json();
-        setAvailableDates(data.availableDates);
+        const response = await api.get(`/properties/rooms/${roomId}/availability`);
+        setAvailableDates(response.data.availableDates);
       } catch (error) {
         console.error('Error fetching available dates:', error);
         setAvailableDates([]);

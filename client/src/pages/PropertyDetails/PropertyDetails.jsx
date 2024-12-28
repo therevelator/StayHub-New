@@ -14,7 +14,7 @@ import {
 import api from '../../services/api';
 
 const PropertyDetails = () => {
-  const { id } = useParams();
+  const { propertyId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [property, setProperty] = useState(null);
@@ -25,13 +25,13 @@ const PropertyDetails = () => {
   useEffect(() => {
     const fetchProperty = async () => {
       try {
-        const response = await api.get(`/properties/${id}`);
+        const response = await api.get(`/properties/${propertyId}`);
         console.log('API Response:', response.data);
         // Log the room amenities specifically
         response.data.data.rooms?.forEach(room => {
           console.log('Room amenities for', room.name, ':', room.amenities);
         });
-        setProperty(response.data.data); // Access the data property from the response
+        setProperty(response.data.data);
       } catch (err) {
         console.error('Error fetching property:', err);
         setError(err.response?.data?.message || 'Failed to fetch property details');
@@ -41,7 +41,7 @@ const PropertyDetails = () => {
     };
 
     fetchProperty();
-  }, [id]);
+  }, [propertyId]);
 
   if (loading) {
     return (
@@ -75,7 +75,7 @@ const PropertyDetails = () => {
   };
 
   const handleBookRoom = (roomId) => {
-    navigate(`/property/${id}/room/${roomId}`);
+    navigate(`/property/${propertyId}/room/${roomId}`);
   };
 
   return (

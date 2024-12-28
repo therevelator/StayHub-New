@@ -49,11 +49,11 @@ const RoomCalendar = ({
       
       console.log('Fetching availability for dates:', { startDate, endDate });
       
-      const response = await api.get(`/rooms/${roomId}/availability`, {
+      const response = await api.get(`/properties/rooms/${roomId}/availability`, {
         params: { startDate, endDate }
       });
       
-      setAvailability(response.data.data);
+      setAvailability(response.data);
     } catch (err) {
       setError('Failed to fetch room availability');
       console.error('Error fetching availability:', err);

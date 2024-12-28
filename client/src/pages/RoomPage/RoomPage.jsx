@@ -24,8 +24,8 @@ const RoomPage = () => {
     const fetchRoomAndAvailability = async () => {
       try {
         const [roomResponse, availabilityResponse] = await Promise.all([
-          api.get(`/rooms/${roomId}`),
-          api.get(`/rooms/${roomId}/availability`)
+          api.get(`/properties/rooms/${roomId}`),
+          api.get(`/properties/rooms/${roomId}/availability`)
         ]);
 
         setRoom(roomResponse.data.data);
@@ -40,23 +40,6 @@ const RoomPage = () => {
     };
 
     fetchRoomAndAvailability();
-  }, [roomId]);
-
-  useEffect(() => {
-    const fetchAvailableDates = async () => {
-      try {
-        const response = await fetch(`/api/rooms/${roomId}/availability`);
-        const data = await response.json();
-        setAvailableDates(data.availableDates || []);
-        setBookingDates(data.bookingDates || []);
-      } catch (error) {
-        console.error('Error fetching available dates:', error);
-        setAvailableDates([]);
-        setBookingDates([]);
-      }
-    };
-
-    fetchAvailableDates();
   }, [roomId]);
 
   const handleDateChange = (date) => {
@@ -133,7 +116,7 @@ const RoomPage = () => {
         termsAccepted,
       };
 
-      const response = await api.post(`/rooms/${roomId}/book`, bookingData);
+      const response = await api.post(`/properties/rooms/${roomId}/book`, bookingData);
       alert('Booking successful!');
     } catch (error) {
       console.error('Error booking the room:', error);
