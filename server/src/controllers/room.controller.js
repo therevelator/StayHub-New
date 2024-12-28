@@ -9,19 +9,37 @@ export const createRoom = async (req, res) => {
     const property = await propertyModel.getPropertyById(propertyId);
     
     if (!property) {
-      return res.status(404).json({ message: 'Property not found' });
+      return res.status(404).json({
+        status: 'error',
+        message: 'Property not found'
+      });
     }
 
     console.log('Request body:', req.body);
     const result = await roomModel.createRoom(propertyId, req.body);
     
+    // Format the response data
+    const formattedRoom = {
+      ...result,
+      beds: typeof result.beds === 'string' ? JSON.parse(result.beds) : result.beds,
+      amenities: typeof result.amenities === 'string' ? JSON.parse(result.amenities) : result.amenities,
+      accessibility_features: typeof result.accessibility_features === 'string' ? JSON.parse(result.accessibility_features) : result.accessibility_features,
+      climate: typeof result.climate === 'string' ? JSON.parse(result.climate) : result.climate,
+      images: typeof result.images === 'string' ? JSON.parse(result.images) : result.images,
+      energy_saving_features: typeof result.energy_saving_features === 'string' ? JSON.parse(result.energy_saving_features) : result.energy_saving_features
+    };
+
     res.status(201).json({
-      message: 'Room created successfully',
-      room: result
+      status: 'success',
+      data: formattedRoom
     });
   } catch (error) {
     console.error('Error in createRoom controller:', error);
-    res.status(500).json({ message: 'Error creating room', error: error.message });
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Error creating room',
+      error: error.message 
+    });
   }
 };
 

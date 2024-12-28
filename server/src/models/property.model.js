@@ -268,50 +268,88 @@ const getPropertyById = async (id) => {
   const query = `
     SELECT 
       p.*,
-      (
-        SELECT JSON_ARRAYAGG(
-          JSON_OBJECT(
-            'id', r.id,
-            'name', r.name,
-            'type', r.room_type,
-            'beds', r.beds,
-            'maxOccupancy', r.max_occupancy,
-            'basePrice', r.base_price,
-            'cleaningFee', r.cleaning_fee,
-            'serviceFee', r.service_fee,
-            'taxRate', r.tax_rate,
-            'securityDeposit', r.security_deposit,
-            'description', r.description
+      COALESCE(
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', r.id,
+              'name', r.name,
+              'room_type', r.room_type,
+              'beds', COALESCE(r.beds, '[]'),
+              'max_occupancy', r.max_occupancy,
+              'base_price', r.base_price,
+              'cleaning_fee', r.cleaning_fee,
+              'service_fee', r.service_fee,
+              'tax_rate', r.tax_rate,
+              'security_deposit', r.security_deposit,
+              'description', r.description,
+              'bathroom_type', r.bathroom_type,
+              'view_type', r.view_type,
+              'has_private_bathroom', r.has_private_bathroom,
+              'smoking', r.smoking,
+              'accessibility_features', COALESCE(r.accessibility_features, '[]'),
+              'floor_level', r.floor_level,
+              'has_balcony', r.has_balcony,
+              'has_kitchen', r.has_kitchen,
+              'has_minibar', r.has_minibar,
+              'climate', COALESCE(r.climate, 'null'),
+              'price_per_night', r.price_per_night,
+              'cancellation_policy', r.cancellation_policy,
+              'includes_breakfast', r.includes_breakfast,
+              'extra_bed_available', r.extra_bed_available,
+              'pets_allowed', r.pets_allowed,
+              'images', COALESCE(r.images, '[]'),
+              'cleaning_frequency', r.cleaning_frequency,
+              'has_toiletries', r.has_toiletries,
+              'has_towels_linens', r.has_towels_linens,
+              'has_room_service', r.has_room_service,
+              'flooring_type', r.flooring_type,
+              'energy_saving_features', COALESCE(r.energy_saving_features, '[]'),
+              'status', r.status,
+              'room_size', r.room_size,
+              'amenities', COALESCE(r.amenities, '[]')
+            )
           )
-        )
-        FROM rooms r
-        WHERE r.property_id = p.id
+          FROM rooms r
+          WHERE r.property_id = p.id
+        ),
+        '[]'
       ) as rooms,
-      (
-        SELECT JSON_ARRAYAGG(
-          JSON_OBJECT(
-            'category', COALESCE(pa.category, 'general'),
-            'amenity', pa.amenity
+      COALESCE(
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'category', COALESCE(pa.category, 'general'),
+              'amenity', pa.amenity
+            )
           )
-        )
-        FROM property_amenities pa
-        WHERE pa.property_id = p.id
+          FROM property_amenities pa
+          WHERE pa.property_id = p.id
+        ),
+        '[]'
       ) as amenities,
-      (
-        SELECT JSON_ARRAYAGG(rule)
-        FROM property_rules pr
-        WHERE pr.property_id = p.id
+      COALESCE(
+        (
+          SELECT JSON_ARRAYAGG(rule)
+          FROM property_rules pr
+          WHERE pr.property_id = p.id
+        ),
+        '[]'
       ) as house_rules,
-      (
-        SELECT JSON_ARRAYAGG(
-          JSON_OBJECT(
-            'url', pi.url,
-            'caption', pi.caption
+      COALESCE(
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', pi.id,
+              'url', pi.url,
+              'caption', pi.caption
+            )
           )
-        )
-        FROM property_images pi
-        WHERE pi.property_id = p.id
-      ) as images
+          FROM property_images pi
+          WHERE pi.property_id = p.id
+        ),
+        '[]'
+      ) as photos
     FROM properties p
     WHERE p.id = ?
   `;
@@ -334,78 +372,14 @@ const getPropertyById = async (id) => {
       }
     };
 
-    // Transform amenities array into categories
-    const amenitiesByCategory = {
-      general: [],
-      room: [],
-      bathroom: [],
-      kitchen: [],
-      outdoor: [],
-      accessibility: []
-    };
+    // Parse JSON fields
+    property.rooms = safeJSONParse(property.rooms, []);
+    property.amenities = safeJSONParse(property.amenities, []);
+    property.house_rules = safeJSONParse(property.house_rules, []);
+    property.photos = safeJSONParse(property.photos, []);
+    property.languages_spoken = safeJSONParse(property.languages_spoken, []);
 
-    const amenities = safeJSONParse(property.amenities);
-    if (Array.isArray(amenities)) {
-      amenities.forEach(item => {
-        if (item && item.category && item.amenity) {
-          if (amenitiesByCategory[item.category]) {
-            amenitiesByCategory[item.category].push(item.amenity);
-          }
-        }
-      });
-    }
-
-    // Transform room data to match form structure
-    const rooms = safeJSONParse(property.rooms).map(room => ({
-      name: room.name,
-      type: room.type || room.room_type, // Handle both formats
-      beds: safeJSONParse(room.beds),
-      maxOccupancy: room.maxOccupancy || room.max_occupancy,
-      basePrice: room.basePrice || room.base_price,
-      cleaningFee: room.cleaningFee || room.cleaning_fee,
-      serviceFee: room.serviceFee || room.service_fee,
-      taxRate: room.taxRate || room.tax_rate,
-      securityDeposit: room.securityDeposit || room.security_deposit,
-      description: room.description
-    }));
-
-    return {
-      basicInfo: {
-        name: property.name || '',
-        description: property.description || '',
-        propertyType: property.property_type || 'hotel',
-        guests: property.guests?.toString() || '',
-        bedrooms: property.bedrooms?.toString() || '',
-        beds: property.beds?.toString() || '',
-        bathrooms: property.bathrooms?.toString() || ''
-      },
-      location: {
-        street: property.street || '',
-        city: property.city || '',
-        state: property.state || '',
-        country: property.country || '',
-        postalCode: property.postal_code || '',
-        coordinates: {
-          lat: parseFloat(property.latitude) || 0,
-          lng: parseFloat(property.longitude) || 0
-        }
-      },
-      amenities: amenitiesByCategory,
-      rooms: rooms,
-      photos: safeJSONParse(property.images),
-      rules: {
-        checkInTime: property.check_in_time ? 
-          property.check_in_time.slice(0, 5) : // Convert HH:mm:ss to HH:mm
-          '14:00',
-        checkOutTime: property.check_out_time ? 
-          property.check_out_time.slice(0, 5) : // Convert HH:mm:ss to HH:mm
-          '11:00',
-        cancellationPolicy: property.cancellation_policy || '',
-        houseRules: safeJSONParse(property.house_rules),
-        petPolicy: property.pet_policy || '',
-        eventPolicy: property.event_policy || ''
-      }
-    };
+    return property;
   } catch (error) {
     console.error('Error in getPropertyById:', error);
     throw error;
@@ -540,171 +514,60 @@ const createProperty = async (propertyData) => {
 // Update a property
 const updateProperty = async (propertyId, propertyData) => {
   const connection = await db.getConnection();
-  
   try {
     await connection.beginTransaction();
+    
+    console.log('\n[PropertyModel] ====== UPDATE PROPERTY START ======');
+    console.log('[PropertyModel] Property ID:', propertyId);
+    console.log('[PropertyModel] Raw update data:', JSON.stringify(propertyData, null, 2));
 
-    // Format time values
-    const formatTime = (timeString, type) => {
-      if (!timeString || timeString === 'Invalid') {
-        // Default to 2 PM for check-in, 11 AM for check-out
-        return type === 'check_in_time' ? '14:00:00' : '11:00:00';
-      }
+    // Get current property data
+    const [currentProperty] = await connection.query(
+      'SELECT * FROM properties WHERE id = ?',
+      [propertyId]
+    );
 
-      // If time is in HH:mm format, append :00 for MySQL TIME format
-      if (/^\d{2}:\d{2}$/.test(timeString)) {
-        return `${timeString}:00`;
-      }
-
-      try {
-        // Handle other formats by parsing them
-        const [hours, minutes] = timeString.split(':').map(num => parseInt(num));
-        if (!isNaN(hours) && !isNaN(minutes) &&
-            hours >= 0 && hours <= 23 &&
-            minutes >= 0 && minutes <= 59) {
-          return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
-        }
-        
-        // Return default if parsing fails
-        return type === 'check_in_time' ? '14:00:00' : '11:00:00';
-      } catch (error) {
-        console.error('Error formatting time:', error);
-        return type === 'check_in_time' ? '14:00:00' : '11:00:00';
-      }
-    };
-
-    const checkInTime = formatTime(propertyData.rules.checkInTime, 'check_in_time');
-    const checkOutTime = formatTime(propertyData.rules.checkOutTime, 'check_out_time');
-
-    console.log('Formatted check-in time:', checkInTime);
-    console.log('Formatted check-out time:', checkOutTime);
-
-    // Update basic property information
-    const updateQuery = `
-      UPDATE properties 
-      SET 
-        name = ?,
-        description = ?,
-        property_type = ?,
-        guests = ?,
-        bedrooms = ?,
-        beds = ?,
-        bathrooms = ?,
-        street = ?,
-        city = ?,
-        state = ?,
-        country = ?,
-        postal_code = ?,
-        latitude = ?,
-        longitude = ?,
-        check_in_time = ?,
-        check_out_time = ?,
-        cancellation_policy = ?,
-        pet_policy = ?,
-        event_policy = ?,
-        updated_at = NOW()
-      WHERE id = ?
-    `;
-
-    await connection.query(updateQuery, [
-      propertyData.basicInfo.name,
-      propertyData.basicInfo.description,
-      propertyData.basicInfo.propertyType,
-      propertyData.basicInfo.guests,
-      propertyData.basicInfo.bedrooms,
-      propertyData.basicInfo.beds,
-      propertyData.basicInfo.bathrooms,
-      propertyData.location.street,
-      propertyData.location.city,
-      propertyData.location.state,
-      propertyData.location.country,
-      propertyData.location.postalCode,
-      propertyData.location.coordinates.lat,
-      propertyData.location.coordinates.lng,
-      checkInTime,
-      checkOutTime,
-      propertyData.rules.cancellationPolicy,
-      propertyData.rules.petPolicy,
-      propertyData.rules.eventPolicy,
-      propertyId
-    ]);
-
-    // Handle amenities with duplicate prevention and error reporting
-    if (propertyData.amenities) {
-      const duplicates = [];
-      const processedAmenities = new Set();
-      const amenityValues = [];
-
-      Object.entries(propertyData.amenities).forEach(([category, amenities]) => {
-        // Remove duplicates within each category
-        amenities.forEach(amenity => {
-          const amenityKey = `${propertyId}-${category}-${amenity}`;
-          
-          if (processedAmenities.has(amenityKey)) {
-            duplicates.push({ category, amenity });
-          } else {
-            processedAmenities.add(amenityKey);
-            amenityValues.push([propertyId, amenity, category]);
-          }
-        });
-      });
-
-      if (duplicates.length > 0) {
-        const duplicateMessages = duplicates.map(d => 
-          `"${d.amenity}" is already added in ${d.category}`
-        );
-        throw new Error(`Duplicate amenities found: ${duplicateMessages.join(', ')}`);
-      }
-
-      // Delete existing amenities
-      await connection.query(
-        'DELETE FROM property_amenities WHERE property_id = ?',
-        [propertyId]
-      );
-
-      // Insert unique amenities
-      if (amenityValues.length > 0) {
-        await connection.query(
-          `INSERT INTO property_amenities (property_id, amenity, category) 
-           VALUES ?`,
-          [amenityValues]
-        );
-      }
+    if (!currentProperty || currentProperty.length === 0) {
+      throw new Error('Property not found');
     }
 
-    // Handle rooms update if needed
-    if (propertyData.rooms) {
-      // Your existing room update logic
+    // Only update the fields that are provided in the request
+    const updateData = {};
+    if (propertyData.name !== undefined) updateData.name = propertyData.name.trim();
+    if (propertyData.description !== undefined) updateData.description = propertyData.description.trim();
+    if (propertyData.property_type !== undefined) updateData.property_type = propertyData.property_type;
+    if (propertyData.guests !== undefined) updateData.guests = parseInt(propertyData.guests);
+    if (propertyData.bedrooms !== undefined) updateData.bedrooms = parseInt(propertyData.bedrooms);
+    if (propertyData.beds !== undefined) updateData.beds = parseInt(propertyData.beds);
+    if (propertyData.bathrooms !== undefined) updateData.bathrooms = parseFloat(propertyData.bathrooms);
+    if (propertyData.star_rating !== undefined) updateData.star_rating = parseFloat(propertyData.star_rating);
+
+    console.log('[PropertyModel] Formatted update data:', JSON.stringify(updateData, null, 2));
+    
+    if (Object.keys(updateData).length === 0) {
+      console.log('[PropertyModel] No fields to update');
+      return { status: 'success', message: 'No fields to update' };
     }
 
-    // Handle photos update if needed
-    if (propertyData.photos) {
-      // Your existing photo update logic
-    }
+    // Generate and log the SQL query
+    const query = 'UPDATE properties SET ? WHERE id = ?';
+    const sqlQuery = connection.format(query, [updateData, propertyId]);
+    console.log('[PropertyModel] SQL Query:', sqlQuery);
+    
+    const [result] = await connection.query(query, [updateData, propertyId]);
+    console.log('[PropertyModel] Update result:', result);
+    console.log('[PropertyModel] ====== UPDATE PROPERTY END ======\n');
 
     await connection.commit();
     
-    // Return updated data with deduplicated amenities
-    const updatedAmenities = {};
-    Object.entries(propertyData.amenities).forEach(([category, amenities]) => {
-      updatedAmenities[category] = [...new Set(amenities)];
-    });
-
     return {
-      id: propertyId,
-      ...propertyData,
-      amenities: updatedAmenities,
-      rules: {
-        ...propertyData.rules,
-        checkInTime,
-        checkOutTime
-      },
-      updated_at: new Date()
+      status: 'success',
+      message: 'Property updated successfully',
+      affectedRows: result.affectedRows
     };
-
   } catch (error) {
-    console.error('Error in updateProperty:', error);
     await connection.rollback();
+    console.error('[PropertyModel] Error updating property:', error);
     throw error;
   } finally {
     connection.release();

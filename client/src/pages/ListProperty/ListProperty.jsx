@@ -14,6 +14,8 @@ import L from 'leaflet';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import PhotosForm from './steps/PhotosForm';
+import AmenitiesForm from './steps/AmenitiesForm';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -62,9 +64,19 @@ const steps = [
     fields: ['street', 'city', 'state', 'country', 'postal_code', 'latitude', 'longitude']
   },
   {
+    id: 'amenities',
+    title: 'Amenities',
+    fields: ['amenities']
+  },
+  {
     id: 'rooms',
     title: 'Rooms',
     fields: ['rooms']
+  },
+  {
+    id: 'photos',
+    title: 'Photos',
+    fields: ['photos']
   },
   {
     id: 'policies',
@@ -131,7 +143,8 @@ const ListProperty = () => {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     rooms: [],
-    photos: []
+    photos: [],
+    amenities: []
   });
   const [mapPosition, setMapPosition] = useState([44.8566, 24.8524]); // Default to Romania coordinates
 
@@ -564,6 +577,14 @@ const ListProperty = () => {
           </div>
         );
 
+      case 'amenities':
+        return (
+          <AmenitiesForm
+            data={formData.amenities || []}
+            onChange={(amenities) => setFormData(prev => ({ ...prev, amenities }))}
+          />
+        );
+
       case 'rooms':
         return (
           <div className="space-y-6">
@@ -595,6 +616,14 @@ const ListProperty = () => {
               />
             )}
           </div>
+        );
+
+      case 'photos':
+        return (
+          <PhotosForm
+            data={formData.photos}
+            onChange={(data) => setFormData(prev => ({ ...prev, photos: data.photos }))}
+          />
         );
 
       case 'policies':

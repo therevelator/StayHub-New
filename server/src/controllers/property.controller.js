@@ -221,7 +221,7 @@ const createNewProperty = async (req, res) => {
     await connection.beginTransaction();
     
     console.log('Creating property with data:', req.body); // Debug log
-    const { photos, ...propertyData } = req.body;
+    const { photos, rooms, ...propertyData } = req.body;
 
     // Add created_at and updated_at
     propertyData.created_at = new Date();
@@ -256,14 +256,107 @@ const createNewProperty = async (req, res) => {
       );
     }
 
+    // Insert rooms if they exist
+    if (rooms && rooms.length > 0) {
+      console.log('Rooms to insert:', rooms); // Debug log
+
+      for (const room of rooms) {
+        const roomData = {
+          property_id: propertyId,
+          name: room.name,
+          room_type: room.room_type,
+          bed_type: room.bed_type,
+          beds: room.beds,
+          max_occupancy: room.max_occupancy,
+          base_price: room.base_price,
+          cleaning_fee: room.cleaning_fee,
+          service_fee: room.service_fee,
+          tax_rate: room.tax_rate,
+          security_deposit: room.security_deposit,
+          description: room.description,
+          bathroom_type: room.bathroom_type,
+          view_type: room.view_type,
+          has_private_bathroom: room.has_private_bathroom,
+          smoking: room.smoking,
+          accessibility_features: room.accessibility_features,
+          floor_level: room.floor_level,
+          has_balcony: room.has_balcony,
+          has_kitchen: room.has_kitchen,
+          has_minibar: room.has_minibar,
+          climate: room.climate,
+          price_per_night: room.price_per_night,
+          cancellation_policy: room.cancellation_policy,
+          includes_breakfast: room.includes_breakfast,
+          extra_bed_available: room.extra_bed_available,
+          pets_allowed: room.pets_allowed,
+          images: room.images,
+          cleaning_frequency: room.cleaning_frequency,
+          has_toiletries: room.has_toiletries,
+          has_towels_linens: room.has_towels_linens,
+          has_room_service: room.has_room_service,
+          flooring_type: room.flooring_type,
+          energy_saving_features: room.energy_saving_features,
+          status: room.status || 'available',
+          room_size: room.room_size,
+          amenities: room.amenities,
+          created_at: new Date(),
+          updated_at: new Date()
+        };
+
+        await connection.query('INSERT INTO rooms SET ?', [roomData]);
+      }
+    }
+
     await connection.commit();
     
-    // Get the created property with photos
+    // Get the created property with photos and rooms
     const [createdProperty] = await connection.query(
       `SELECT p.*, 
         (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', pi.id, 'url', pi.url, 'caption', pi.caption))
          FROM property_images pi 
-         WHERE pi.property_id = p.id) as photos
+         WHERE pi.property_id = p.id) as photos,
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'id', r.id,
+            'name', r.name,
+            'room_type', r.room_type,
+            'bed_type', r.bed_type,
+            'beds', r.beds,
+            'max_occupancy', r.max_occupancy,
+            'base_price', r.base_price,
+            'cleaning_fee', r.cleaning_fee,
+            'service_fee', r.service_fee,
+            'tax_rate', r.tax_rate,
+            'security_deposit', r.security_deposit,
+            'description', r.description,
+            'bathroom_type', r.bathroom_type,
+            'view_type', r.view_type,
+            'has_private_bathroom', r.has_private_bathroom,
+            'smoking', r.smoking,
+            'accessibility_features', r.accessibility_features,
+            'floor_level', r.floor_level,
+            'has_balcony', r.has_balcony,
+            'has_kitchen', r.has_kitchen,
+            'has_minibar', r.has_minibar,
+            'climate', r.climate,
+            'price_per_night', r.price_per_night,
+            'cancellation_policy', r.cancellation_policy,
+            'includes_breakfast', r.includes_breakfast,
+            'extra_bed_available', r.extra_bed_available,
+            'pets_allowed', r.pets_allowed,
+            'images', r.images,
+            'cleaning_frequency', r.cleaning_frequency,
+            'has_toiletries', r.has_toiletries,
+            'has_towels_linens', r.has_towels_linens,
+            'has_room_service', r.has_room_service,
+            'flooring_type', r.flooring_type,
+            'energy_saving_features', r.energy_saving_features,
+            'status', r.status,
+            'room_size', r.room_size,
+            'amenities', r.amenities
+          )
+         ) FROM rooms r 
+         WHERE r.property_id = p.id) as rooms
        FROM properties p
        WHERE p.id = ?`,
       [propertyId]
@@ -290,69 +383,55 @@ const updatePropertyById = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Add debug logging
-    console.log('Update property request:', {
-      userId: req.user?.userId,
-      userRole: req.user?.role,
-      propertyId: id
-    });
+    console.log('\n[PropertyController] ====== UPDATE PROPERTY START ======');
+    console.log('[PropertyController] Property ID:', id);
+    console.log('[PropertyController] Request body:', JSON.stringify(req.body, null, 2));
     
     // First check if property exists and get owner info
     const property = await getProperty(id);
     if (!property) {
+      console.log('[PropertyController] Property not found');
       return res.status(404).json({
         status: 'error',
         message: 'Property not found'
       });
     }
 
-    console.log('Property details:', {
-      hostId: property.host_id,
-      requestUserId: req.user?.userId,
-      userRole: req.user?.role
-    });
-
-    // Check if this is a status update or full property update
-    if (req.body.hasOwnProperty('is_active')) {
-      // Status update - allow both admin and owner
-      if (req.user.role !== 'admin' && req.user.userId !== property.host_id) {
-        return res.status(403).json({ 
-          status: 'error',
-          message: 'Only administrators and property owners can update property status' 
-        });
-      }
-
-      await db.query(
-        'UPDATE properties SET is_active = ? WHERE id = ?',
-        [req.body.is_active, id]
-      );
-    } else {
-      // Full property update - allow both admin and owner
-      if (req.user.role !== 'admin' && req.user.userId !== property.host_id) {
-        console.log('Authorization failed:', {
-          userRole: req.user.role,
-          userId: req.user.userId,
-          hostId: property.host_id
-        });
-        return res.status(403).json({ 
-          status: 'error',
-          message: 'Only administrators and property owners can update this property' 
-        });
-      }
-
-      const updatedProperty = await update(id, req.body);
-      return res.json({
-        status: 'success',
-        data: updatedProperty
+    // Check authorization
+    if (req.user.role !== 'admin' && req.user.userId !== property.host_id) {
+      console.log('[PropertyController] Update authorization failed:', {
+        userRole: req.user.role,
+        userId: req.user.userId,
+        hostId: property.host_id
+      });
+      return res.status(403).json({ 
+        status: 'error',
+        message: 'Only administrators and property owners can update this property' 
       });
     }
 
-    res.json({
+    // Only update the fields that are provided in the request
+    const updateFields = {};
+    const allowedFields = ['name', 'description', 'property_type', 'guests', 'bedrooms', 'beds', 'bathrooms', 'star_rating'];
+    
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updateFields[field] = req.body[field];
+      }
+    }
+
+    console.log('[PropertyController] Fields to update:', updateFields);
+
+    const updatedProperty = await update(id, updateFields);
+    console.log('[PropertyController] Update result:', updatedProperty);
+    console.log('[PropertyController] ====== UPDATE PROPERTY END ======\n');
+
+    return res.json({
       status: 'success',
-      message: 'Property updated successfully'
+      data: updatedProperty
     });
   } catch (error) {
-    console.error('Error updating property:', error);
+    console.error('[PropertyController] Error updating property:', error);
     res.status(500).json({
       status: 'error',
       message: error.message

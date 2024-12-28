@@ -47,7 +47,7 @@ const BasicInfoForm = ({ data = {}, onChange }) => {
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
           required
         >
-          <option value="">Select a property type</option>
+          <option value="">Select a type</option>
           {Object.entries(PROPERTY_TYPES).map(([value, label]) => (
             <option key={value} value={value}>
               {label}

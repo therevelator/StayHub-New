@@ -8,7 +8,9 @@ const VIEW_TYPES = ['City View', 'Ocean View', 'Garden View', 'Mountain View', '
 const BATHROOM_TYPES = [
   { value: 'private', label: 'Private' },
   { value: 'shared', label: 'Shared' },
-  { value: 'ensuite', label: 'En-suite' }
+  { value: 'en-suite', label: 'En-suite' },
+  { value: 'jack-and-jill', label: 'Jack and Jill' },
+  { value: 'split', label: 'Split' }
 ];
 const CANCELLATION_POLICIES = ['flexible', 'moderate', 'strict'];
 const CLEANING_FREQUENCIES = ['daily', 'weekly', 'biweekly', 'monthly', 'on_request'];
@@ -51,24 +53,33 @@ const RoomForm = ({ initialData, onSubmit, onChange, onClose }) => {
     price_per_night: initialData?.price_per_night || '',
     cancellation_policy: initialData?.cancellation_policy || CANCELLATION_POLICIES[0],
     description: initialData?.description || '',
-    bathroom_type: initialData?.bathroom_type || BATHROOM_TYPES[0].value,
+    bathroom_type: initialData?.bathroom_type || 'private',
     view_type: initialData?.view_type || VIEW_TYPES[0],
     has_private_bathroom: initialData?.has_private_bathroom === 1,
     smoking: initialData?.smoking === 1,
     accessibility_features: initialData?.accessibility_features ? 
       (typeof initialData.accessibility_features === 'string' ? 
         JSON.parse(initialData.accessibility_features) : 
-        initialData.accessibility_features) : 
+        Array.isArray(initialData.accessibility_features) ?
+          initialData.accessibility_features :
+          []
+      ) : 
       [],
     energy_saving_features: initialData?.energy_saving_features ?
       (typeof initialData.energy_saving_features === 'string' ?
         JSON.parse(initialData.energy_saving_features) :
-        initialData.energy_saving_features) :
+        Array.isArray(initialData.energy_saving_features) ?
+          initialData.energy_saving_features :
+          []
+      ) :
       [],
     amenities: initialData?.amenities ?
       (typeof initialData.amenities === 'string' ?
         JSON.parse(initialData.amenities) :
-        initialData.amenities) :
+        Array.isArray(initialData.amenities) ?
+          initialData.amenities :
+          []
+      ) :
       [],
     room_size: initialData?.room_size || '',
     floor_level: initialData?.floor_level || '',
@@ -719,34 +730,98 @@ const RoomForm = ({ initialData, onSubmit, onChange, onClose }) => {
       <div className="space-y-4">
         <h4 className="text-md font-medium text-gray-700">Additional Features</h4>
         <div>
-          <label htmlFor="accessibility_features" className="block text-sm font-medium text-gray-700">Accessibility Features</label>
-          <input
-            type="text"
-            id="accessibility_features"
-            name="accessibility_features"
-            value={formData.accessibility_features.join(', ')}
-            onChange={(e) => setFormData(prev => ({
-              ...prev,
-              accessibility_features: e.target.value.split(',').map(item => item.trim()).filter(Boolean)
-            }))}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            placeholder="Enter features separated by commas"
-          />
+          <label className="block text-sm font-medium text-gray-700">
+            Accessibility Features
+          </label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {Array.isArray(formData.accessibility_features) && formData.accessibility_features.map((feature, index) => (
+              <span
+                key={index}
+                className="inline-flex items-center px-2 py-1 rounded-md text-sm font-medium bg-blue-100 text-blue-800"
+              >
+                {feature}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newFeatures = formData.accessibility_features.filter((_, i) => i !== index);
+                    setFormData(prev => ({ ...prev, accessibility_features: newFeatures }));
+                  }}
+                  className="ml-1 text-blue-600 hover:text-blue-800"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-2">
+            <input
+              type="text"
+              name="accessibility_feature_input"
+              className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md"
+              placeholder="Add accessibility feature"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const value = e.target.value.trim();
+                  if (value) {
+                    setFormData(prev => ({
+                      ...prev,
+                      accessibility_features: Array.isArray(prev.accessibility_features) 
+                        ? [...prev.accessibility_features, value]
+                        : [value]
+                    }));
+                    e.target.value = '';
+                  }
+                }
+              }}
+            />
+          </div>
         </div>
         <div>
-          <label htmlFor="energy_saving_features" className="block text-sm font-medium text-gray-700">Energy Saving Features</label>
-          <input
-            type="text"
-            id="energy_saving_features"
-            name="energy_saving_features"
-            value={formData.energy_saving_features.join(', ')}
-            onChange={(e) => setFormData(prev => ({
-              ...prev,
-              energy_saving_features: e.target.value.split(',').map(item => item.trim()).filter(Boolean)
-            }))}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            placeholder="Enter features separated by commas"
-          />
+          <label className="block text-sm font-medium text-gray-700">Energy Saving Features</label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {Array.isArray(formData.energy_saving_features) && formData.energy_saving_features.map((feature, index) => (
+              <span
+                key={index}
+                className="inline-flex items-center px-2 py-1 rounded-md text-sm font-medium bg-green-100 text-green-800"
+              >
+                {feature}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newFeatures = formData.energy_saving_features.filter((_, i) => i !== index);
+                    setFormData(prev => ({ ...prev, energy_saving_features: newFeatures }));
+                  }}
+                  className="ml-1 text-green-600 hover:text-green-800"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-2">
+            <input
+              type="text"
+              name="energy_saving_feature_input"
+              className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md"
+              placeholder="Add energy saving feature"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const value = e.target.value.trim();
+                  if (value) {
+                    setFormData(prev => ({
+                      ...prev,
+                      energy_saving_features: Array.isArray(prev.energy_saving_features) 
+                        ? [...prev.energy_saving_features, value]
+                        : [value]
+                    }));
+                    e.target.value = '';
+                  }
+                }
+              }}
+            />
+          </div>
         </div>
         <div>
           <label htmlFor="amenities" className="block text-sm font-medium text-gray-700">Additional Amenities</label>

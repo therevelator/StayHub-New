@@ -1,6 +1,4 @@
 import React from 'react';
-import { useFormik } from 'formik';
-import * as Yup from 'yup';
 import {
   WifiIcon,
   TvIcon,
@@ -50,32 +48,17 @@ const amenityCategories = [
   },
 ];
 
-const AmenitiesForm = ({ onSubmit, initialValues = {} }) => {
-  const formik = useFormik({
-    initialValues: {
-      amenities: initialValues.amenities || [],
-    },
-    validationSchema: Yup.object({
-      amenities: Yup.array()
-        .min(1, 'Please select at least one amenity')
-        .required('Amenities are required'),
-    }),
-    onSubmit: (values) => {
-      onSubmit(values);
-    },
-  });
-
+const AmenitiesForm = ({ data = [], onChange }) => {
   const handleAmenityToggle = (amenityId) => {
-    const currentAmenities = formik.values.amenities;
-    const newAmenities = currentAmenities.includes(amenityId)
-      ? currentAmenities.filter((id) => id !== amenityId)
-      : [...currentAmenities, amenityId];
+    const newAmenities = data.includes(amenityId)
+      ? data.filter((id) => id !== amenityId)
+      : [...data, amenityId];
     
-    formik.setFieldValue('amenities', newAmenities);
+    onChange(newAmenities);
   };
 
   return (
-    <form onSubmit={formik.handleSubmit} className="space-y-8">
+    <div className="space-y-8">
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Property Amenities
@@ -92,7 +75,7 @@ const AmenitiesForm = ({ onSubmit, initialValues = {} }) => {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {category.items.map((amenity) => {
                 const Icon = amenity.icon;
-                const isSelected = formik.values.amenities.includes(amenity.id);
+                const isSelected = data.includes(amenity.id);
                 
                 return (
                   <button
@@ -115,28 +98,8 @@ const AmenitiesForm = ({ onSubmit, initialValues = {} }) => {
             </div>
           </div>
         ))}
-
-        {formik.touched.amenities && formik.errors.amenities && (
-          <p className="text-sm text-red-600 mt-2">{formik.errors.amenities}</p>
-        )}
       </div>
-
-      <div className="flex justify-end space-x-4">
-        {/* <button
-          type="button"
-          onClick={() => formik.resetForm()}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
-        >
-          Reset
-        </button>
-        <button
-          type="submit"
-          className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
-        >
-          Save and Continue
-        </button> */}
-      </div>
-    </form>
+    </div>
   );
 };
 

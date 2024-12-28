@@ -1,2 +1,0 @@
-ALTER TABLE rooms
-ADD COLUMN amenities JSON;

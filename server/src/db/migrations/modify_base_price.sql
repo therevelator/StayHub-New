@@ -1,2 +1,0 @@
-ALTER TABLE rooms
-MODIFY COLUMN base_price DECIMAL(10,2) NULL;

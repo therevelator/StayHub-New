@@ -38,17 +38,27 @@ const ROOM_TYPE_DESCRIPTIONS = {
   'other': 'Custom room type'
 };
 
+// Define valid bathroom types
+const VALID_BATHROOM_TYPES = ['private', 'shared', 'en-suite', 'jack-and-jill', 'split'];
+
 export const createRoom = async (propertyId, roomData) => {
   const connection = await db.getConnection();
   
   try {
     await connection.beginTransaction();
 
+    // Normalize bathroom type
+    const normalizedBathroomType = roomData.bathroom_type?.toLowerCase();
+    if (!VALID_BATHROOM_TYPES.includes(normalizedBathroomType)) {
+      throw new Error(`Invalid bathroom type. Must be one of: ${VALID_BATHROOM_TYPES.join(', ')}`);
+    }
+
     // Ensure all JSON fields are properly stringified
     const roomDataWithStringifiedJson = {
       property_id: propertyId,
       name: roomData.name,
       room_type: roomData.room_type,
+      bathroom_type: normalizedBathroomType,
       beds: JSON.stringify(roomData.beds),
       room_size: roomData.room_size,
       max_occupancy: roomData.max_occupancy,
@@ -75,7 +85,9 @@ export const createRoom = async (propertyId, roomData) => {
       has_room_service: roomData.has_room_service,
       flooring_type: roomData.flooring_type,
       energy_saving_features: JSON.stringify(roomData.energy_saving_features),
-      status: roomData.status || 'available'
+      status: roomData.status || 'available',
+      created_at: new Date(),
+      updated_at: new Date()
     };
 
     console.log('Room data before insert:', roomDataWithStringifiedJson);
@@ -90,7 +102,29 @@ export const createRoom = async (propertyId, roomData) => {
     );
 
     await connection.commit();
-    return { id: result.insertId, ...roomData };
+
+    // Get the created room with parsed JSON fields
+    const [createdRoom] = await connection.query(
+      'SELECT * FROM rooms WHERE id = ?',
+      [result.insertId]
+    );
+
+    if (!createdRoom[0]) {
+      throw new Error('Room was created but could not be retrieved');
+    }
+
+    // Parse JSON fields in the response
+    const formattedRoom = {
+      ...createdRoom[0],
+      beds: JSON.parse(createdRoom[0].beds || '[]'),
+      amenities: JSON.parse(createdRoom[0].amenities || '[]'),
+      accessibility_features: JSON.parse(createdRoom[0].accessibility_features || '[]'),
+      climate: JSON.parse(createdRoom[0].climate || 'null'),
+      images: JSON.parse(createdRoom[0].images || '[]'),
+      energy_saving_features: JSON.parse(createdRoom[0].energy_saving_features || '[]')
+    };
+
+    return formattedRoom;
 
   } catch (error) {
     console.error('Error creating room:', error);
@@ -141,117 +175,87 @@ export const updateRoom = async (roomId, roomData) => {
   try {
     await connection.beginTransaction();
 
-    console.log('Updating room with beds:', roomData.beds); // Debug log
+    // Normalize bathroom type
+    const normalizedBathroomType = roomData.bathroom_type?.toLowerCase();
+    if (!VALID_BATHROOM_TYPES.includes(normalizedBathroomType)) {
+      throw new Error(`Invalid bathroom type. Must be one of: ${VALID_BATHROOM_TYPES.join(', ')}`);
+    }
 
-    // Ensure beds field is properly stringified
-    const bedsData = Array.isArray(roomData.beds) 
-      ? JSON.stringify(roomData.beds)
-      : typeof roomData.beds === 'string'
-        ? roomData.beds
-        : JSON.stringify([{ type: 'Single Bed', count: 1 }]); // Default value
+    // Ensure all JSON fields are properly stringified
+    const roomDataWithStringifiedJson = {
+      name: roomData.name,
+      room_type: roomData.room_type,
+      beds: JSON.stringify(roomData.beds || []),
+      max_occupancy: roomData.max_occupancy,
+      base_price: roomData.base_price,
+      cleaning_fee: roomData.cleaning_fee,
+      service_fee: roomData.service_fee,
+      tax_rate: roomData.tax_rate,
+      security_deposit: roomData.security_deposit,
+      description: roomData.description,
+      bathroom_type: normalizedBathroomType,
+      view_type: roomData.view_type,
+      has_private_bathroom: roomData.has_private_bathroom,
+      smoking: roomData.smoking,
+      accessibility_features: JSON.stringify(roomData.accessibility_features || []),
+      floor_level: roomData.floor_level,
+      has_balcony: roomData.has_balcony,
+      has_kitchen: roomData.has_kitchen,
+      has_minibar: roomData.has_minibar,
+      climate: JSON.stringify(roomData.climate || null),
+      price_per_night: roomData.price_per_night,
+      cancellation_policy: roomData.cancellation_policy,
+      includes_breakfast: roomData.includes_breakfast,
+      extra_bed_available: roomData.extra_bed_available,
+      pets_allowed: roomData.pets_allowed,
+      images: JSON.stringify(roomData.images || []),
+      cleaning_frequency: roomData.cleaning_frequency,
+      has_toiletries: roomData.has_toiletries,
+      has_towels_linens: roomData.has_towels_linens,
+      has_room_service: roomData.has_room_service,
+      flooring_type: roomData.flooring_type,
+      energy_saving_features: JSON.stringify(roomData.energy_saving_features || []),
+      status: roomData.status || 'available',
+      room_size: roomData.room_size,
+      amenities: JSON.stringify(roomData.amenities || []),
+      updated_at: new Date()
+    };
 
-    console.log('Formatted beds data:', bedsData); // Debug log
+    console.log('Room data before update:', roomDataWithStringifiedJson);
 
-    const updateQuery = `
-      UPDATE rooms 
-      SET 
-        name = ?,
-        room_type = ?,
-        beds = ?, -- Moved up and removed bed_type
-        max_occupancy = ?,
-        base_price = ?,
-        cleaning_fee = ?,
-        service_fee = ?,
-        tax_rate = ?,
-        security_deposit = ?,
-        description = ?,
-        bathroom_type = ?,
-        view_type = ?,
-        has_private_bathroom = ?,
-        smoking = ?,
-        accessibility_features = ?,
-        floor_level = ?,
-        has_balcony = ?,
-        has_kitchen = ?,
-        has_minibar = ?,
-        climate = ?,
-        price_per_night = ?,
-        cancellation_policy = ?,
-        includes_breakfast = ?,
-        extra_bed_available = ?,
-        pets_allowed = ?,
-        images = ?,
-        cleaning_frequency = ?,
-        has_toiletries = ?,
-        has_towels_linens = ?,
-        has_room_service = ?,
-        flooring_type = ?,
-        energy_saving_features = ?,
-        status = ?,
-        room_size = ?,
-        amenities = ?,
-        updated_at = ?
-      WHERE id = ?
-    `;
-
-    const [result] = await connection.query(updateQuery, [
-      roomData.name,
-      roomData.room_type,
-      bedsData, // Moved up and using formatted beds data
-      roomData.max_occupancy,
-      roomData.base_price,
-      roomData.cleaning_fee,
-      roomData.service_fee,
-      roomData.tax_rate,
-      roomData.security_deposit,
-      roomData.description,
-      roomData.bathroom_type,
-      roomData.view_type,
-      roomData.has_private_bathroom,
-      roomData.smoking,
-      roomData.accessibility_features,
-      roomData.floor_level,
-      roomData.has_balcony,
-      roomData.has_kitchen,
-      roomData.has_minibar,
-      roomData.climate,
-      roomData.price_per_night,
-      roomData.cancellation_policy,
-      roomData.includes_breakfast,
-      roomData.extra_bed_available,
-      roomData.pets_allowed,
-      roomData.images,
-      roomData.cleaning_frequency,
-      roomData.has_toiletries,
-      roomData.has_towels_linens,
-      roomData.has_room_service,
-      roomData.flooring_type,
-      roomData.energy_saving_features,
-      roomData.status,
-      roomData.room_size,
-      roomData.amenities,
-      new Date(),
-      roomId
-    ]);
+    const [result] = await connection.query(
+      'UPDATE rooms SET ? WHERE id = ?',
+      [roomDataWithStringifiedJson, roomId]
+    );
 
     await connection.commit();
-    
-    // Fetch and return the updated room data
+
+    // Get the updated room with parsed JSON fields
     const [updatedRoom] = await connection.query(
-      'SELECT *, CAST(beds AS JSON) as beds_json FROM rooms WHERE id = ?',
+      'SELECT * FROM rooms WHERE id = ?',
       [roomId]
     );
 
-    return {
-      ...result,
-      updatedRoom: updatedRoom[0] ? {
-        ...updatedRoom[0],
-        beds: updatedRoom[0].beds_json || JSON.parse(updatedRoom[0].beds || '[]')
-      } : null
+    if (!updatedRoom[0]) {
+      throw new Error('Room was updated but could not be retrieved');
+    }
+
+    // Parse JSON fields in the response
+    const formattedRoom = {
+      ...updatedRoom[0],
+      beds: JSON.parse(updatedRoom[0].beds || '[]'),
+      amenities: JSON.parse(updatedRoom[0].amenities || '[]'),
+      accessibility_features: JSON.parse(updatedRoom[0].accessibility_features || '[]'),
+      climate: JSON.parse(updatedRoom[0].climate || 'null'),
+      images: JSON.parse(updatedRoom[0].images || '[]'),
+      energy_saving_features: JSON.parse(updatedRoom[0].energy_saving_features || '[]')
     };
+
+    return formattedRoom;
+
   } catch (error) {
+    console.error('Error updating room:', error);
     await connection.rollback();
-    console.error('Error in updateRoom:', error);
     throw error;
   } finally {
     connection.release();

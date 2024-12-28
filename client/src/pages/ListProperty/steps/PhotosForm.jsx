@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PhotoIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 
 const PhotosForm = ({ onChange, data = {} }) => {
+  const [currentPreview, setCurrentPreview] = useState(0);
+
+  const isValidUrl = (url) => {
+    try {
+      return url && url.trim() !== '';
+    } catch (e) {
+      return false;
+    }
+  };
+
   const formik = useFormik({
     initialValues: {
       photos: data.photos || []
@@ -22,7 +32,11 @@ const PhotosForm = ({ onChange, data = {} }) => {
         )
     }),
     onSubmit: (values) => {
-      onChange({ photos: values.photos });
+      const formattedPhotos = values.photos.map(photo => ({
+        url: photo.url,
+        caption: photo.caption || ''
+      }));
+      onChange({ photos: formattedPhotos });
     }
   });
 
@@ -32,12 +46,28 @@ const PhotosForm = ({ onChange, data = {} }) => {
     }
     const newPhotos = [...formik.values.photos, { url: '', caption: '' }];
     formik.setFieldValue('photos', newPhotos);
+    onChange({ photos: newPhotos });
   };
 
   const handleRemovePhoto = (index) => {
     const newPhotos = formik.values.photos.filter((_, i) => i !== index);
     formik.setFieldValue('photos', newPhotos);
     onChange({ photos: newPhotos });
+    if (currentPreview >= newPhotos.length) {
+      setCurrentPreview(Math.max(0, newPhotos.length - 1));
+    }
+  };
+
+  const nextPreview = () => {
+    setCurrentPreview((prev) => 
+      prev === formik.values.photos.length - 1 ? 0 : prev + 1
+    );
+  };
+
+  const previousPreview = () => {
+    setCurrentPreview((prev) => 
+      prev === 0 ? formik.values.photos.length - 1 : prev - 1
+    );
   };
 
   useEffect(() => {
@@ -52,6 +82,54 @@ const PhotosForm = ({ onChange, data = {} }) => {
           Add up to 10 photo URLs for your property. First photo will be the main image.
         </p>
       </div>
+
+      {/* Photo Preview Carousel */}
+      {formik.values.photos.length > 0 && (
+        <div className="relative w-[250px] h-[150px] mx-auto bg-gray-100 rounded-lg overflow-hidden">
+          {isValidUrl(formik.values.photos[currentPreview]?.url) ? (
+            <img
+              src={formik.values.photos[currentPreview].url}
+              alt={formik.values.photos[currentPreview]?.caption || `Photo ${currentPreview + 1}`}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                console.error('Image failed to load:', e.target.src);
+                e.target.src = 'https://via.placeholder.com/250x150?text=Invalid+Image+URL';
+              }}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              <PhotoIcon className="h-12 w-12" />
+            </div>
+          )}
+          {formik.values.photos.length > 1 && (
+            <>
+              <button
+                onClick={previousPreview}
+                className="absolute left-2 top-1/2 -translate-y-1/2 p-1 rounded-full bg-black/50 text-white hover:bg-black/70"
+              >
+                <ChevronLeftIcon className="h-4 w-4" />
+              </button>
+              <button
+                onClick={nextPreview}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full bg-black/50 text-white hover:bg-black/70"
+              >
+                <ChevronRightIcon className="h-4 w-4" />
+              </button>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex space-x-1">
+                {formik.values.photos.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setCurrentPreview(index)}
+                    className={`w-2 h-2 rounded-full ${
+                      index === currentPreview ? 'bg-white' : 'bg-white/50'
+                    }`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="space-y-4">
         {formik.values.photos.map((photo, index) => (
@@ -80,7 +158,7 @@ const PhotosForm = ({ onChange, data = {} }) => {
                   <p className="mt-1 text-sm text-red-600">{formik.errors.photos[index].url}</p>
                 )}
               </div>
-              
+
               <div>
                 <label htmlFor={`photos.${index}.caption`} className="block text-sm font-medium text-gray-700">
                   Caption (optional)

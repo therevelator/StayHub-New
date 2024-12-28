@@ -145,17 +145,34 @@ const PropertyDetails = () => {
             <div className="mb-8">
               <h2 className="text-2xl font-semibold mb-4">Property Amenities</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {Object.entries(property.amenities || {}).map(([category, amenities]) => (
-                  <div key={category}>
-                    <h3 className="font-semibold text-gray-700 mb-2 capitalize">{category}</h3>
-                    {amenities.map((amenity, index) => (
+                {property.amenities ? (
+                  typeof property.amenities === 'object' && !Array.isArray(property.amenities) ? (
+                    // Handle object format with categories
+                    Object.entries(property.amenities).map(([category, items]) => (
+                      <div key={category}>
+                        <h3 className="font-semibold text-gray-700 mb-2 capitalize">{category}</h3>
+                        {Array.isArray(items) ? items.map((item, index) => (
+                          <div key={`${category}-${index}`} className="flex items-center mb-2">
+                            <CheckCircleIcon className="h-5 w-5 text-primary-600 mr-2" />
+                            <span className="text-gray-600">
+                              {typeof item === 'object' ? item.amenity || item.name : item}
+                            </span>
+                          </div>
+                        )) : null}
+                      </div>
+                    ))
+                  ) : Array.isArray(property.amenities) ? (
+                    // Handle array format
+                    property.amenities.map((item, index) => (
                       <div key={index} className="flex items-center mb-2">
                         <CheckCircleIcon className="h-5 w-5 text-primary-600 mr-2" />
-                        <span className="text-gray-600">{amenity}</span>
+                        <span className="text-gray-600">
+                          {typeof item === 'object' ? item.amenity || item.name : item}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                ))}
+                    ))
+                  ) : null
+                ) : null}
               </div>
             </div>
           </div>
