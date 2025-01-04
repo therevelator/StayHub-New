@@ -201,7 +201,7 @@ const LocationEdit = ({ property, onUpdate, disabled }) => {
     }
   };
 
-  const handleLocationSelect = (latlng) => {
+  const handleLocationSelect = async (latlng) => {
     if (disabled) return;
     
     const { lat, lng } = latlng;
@@ -211,6 +211,32 @@ const LocationEdit = ({ property, onUpdate, disabled }) => {
       longitude: lng.toString()
     }));
     setMarkerPosition([lat, lng]);
+
+    try {
+      // Reverse geocoding using OpenCage
+      const response = await fetch(
+        `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}`
+      );
+      const data = await response.json();
+      
+      if (data.results && data.results[0]) {
+        const result = data.results[0].components;
+        setFormData(prev => ({
+          ...prev,
+          street: result.road || result.street || '',
+          city: result.city || result.town || result.village || '',
+          state: result.state || '',
+          country: result.country || '',
+          postal_code: result.postcode || '',
+          latitude: lat.toString(),
+          longitude: lng.toString()
+        }));
+        toast.success('Location updated successfully');
+      }
+    } catch (error) {
+      console.error('Error getting address:', error);
+      toast.error('Failed to get address details');
+    }
   };
 
   return (
