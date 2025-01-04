@@ -727,6 +727,108 @@ export const updateProperty = async (req, res) => {
   }
 };
 
+// Get property owner's properties with bookings
+export const getOwnerProperties = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [properties] = await db.query(
+      `SELECT p.*, 
+        COUNT(DISTINCT b.id) as total_bookings,
+        COUNT(DISTINCT CASE WHEN b.status = 'pending' THEN b.id END) as pending_bookings,
+        COUNT(DISTINCT CASE WHEN b.status = 'confirmed' THEN b.id END) as confirmed_bookings
+      FROM properties p
+      LEFT JOIN rooms r ON p.id = r.property_id
+      LEFT JOIN bookings b ON r.id = b.room_id
+      WHERE p.host_id = ?
+      GROUP BY p.id`,
+      [userId]
+    );
+
+    res.json({
+      status: 'success',
+      data: properties
+    });
+  } catch (error) {
+    console.error('Error fetching owner properties:', error);
+    res.status(500).json({ message: 'Failed to fetch properties' });
+  }
+};
+
+// Get property bookings with details
+export const getPropertyBookings = async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user.id;
+
+    // Verify ownership
+    const [property] = await db.query(
+      'SELECT id FROM properties WHERE id = ? AND host_id = ?',
+      [propertyId, userId]
+    );
+
+    if (property.length === 0) {
+      return res.status(403).json({ message: 'Not authorized to access this property' });
+    }
+
+    const [bookings] = await db.query(
+      `SELECT b.*, r.name as room_name, 
+        u.first_name, u.last_name, u.email,
+        p.name as property_name
+      FROM bookings b
+      JOIN rooms r ON b.room_id = r.id
+      JOIN properties p ON r.property_id = p.id
+      JOIN users u ON b.user_id = u.id
+      WHERE p.id = ?
+      ORDER BY b.check_in_date DESC`,
+      [propertyId]
+    );
+
+    res.json({
+      status: 'success',
+      data: bookings
+    });
+  } catch (error) {
+    console.error('Error fetching property bookings:', error);
+    res.status(500).json({ message: 'Failed to fetch bookings' });
+  }
+};
+
+// Update booking status
+export const updateBookingStatus = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { status } = req.body;
+    const userId = req.user.id;
+
+    // Verify ownership
+    const [booking] = await db.query(
+      `SELECT b.id, p.host_id 
+      FROM bookings b
+      JOIN rooms r ON b.room_id = r.id
+      JOIN properties p ON r.property_id = p.id
+      WHERE b.id = ?`,
+      [bookingId]
+    );
+
+    if (booking.length === 0 || booking[0].host_id !== userId) {
+      return res.status(403).json({ message: 'Not authorized to update this booking' });
+    }
+
+    await db.query(
+      'UPDATE bookings SET status = ? WHERE id = ?',
+      [status, bookingId]
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Booking status updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating booking status:', error);
+    res.status(500).json({ message: 'Failed to update booking status' });
+  }
+};
+
 export { 
   searchProperties, 
   getPropertyDetailsById, 

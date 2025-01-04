@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.routes.js';
 import propertyRoutes from './routes/property.routes.js';
 import roomRoutes from './routes/room.routes.js';
 import bodyParser from 'body-parser';
+import ownerRoutes from './routes/owner.routes.js';
 
 dotenv.config();
 
@@ -31,5 +32,6 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/properties', roomRoutes);
+app.use('/api/owner', ownerRoutes);
 
 export default app;

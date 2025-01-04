@@ -18,7 +18,7 @@ router.get('/:id', getPropertyDetailsById);
 
 // Protected routes - require authentication
 router.use(authenticateToken); // Apply authentication middleware to all routes below
-router.get('/', getAllProperties);  // Add authentication here
+router.get('/', getAllProperties);
 router.post('/', createNewProperty);
 router.put('/:id', updatePropertyById);
 router.delete('/:id', deletePropertyById);

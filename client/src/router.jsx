@@ -14,6 +14,20 @@ import SearchResults from './pages/SearchResults/SearchResults';
 import EditRooms from './pages/EditRooms/EditRooms';
 import RoomPage from './pages/RoomPage/RoomPage';
 import AdminRoute from './components/AdminRoute';
+import PrivateRoute from './components/PrivateRoute';
+import Dashboard from './pages/PropertyOwner/Dashboard';
+
+// Property Owner Routes
+const propertyOwnerRoutes = [
+  {
+    path: '/owner/dashboard',
+    element: (
+      <PrivateRoute>
+        <Dashboard />
+      </PrivateRoute>
+    ),
+  }
+];
 
 export const router = createBrowserRouter([
   {
@@ -53,6 +67,7 @@ export const router = createBrowserRouter([
           { path: 'rooms/:id/edit', element: <EditRooms /> },
         ],
       },
+      ...propertyOwnerRoutes,
     ],
   },
 ]);
