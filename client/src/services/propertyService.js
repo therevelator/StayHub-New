@@ -190,6 +190,35 @@ const propertyService = {
       throw error;
     }
   },
+  getRoom: async (propertyId, roomId) => {
+    try {
+      console.log('[PropertyService] Fetching room:', { propertyId, roomId });
+      const response = await api.get(`/properties/${propertyId}/rooms/${roomId}`);
+      console.log('[PropertyService] Room response:', response.data);
+      
+      if (!response.data || !response.data.data) {
+        throw new Error('Invalid response format from server');
+      }
+      
+      // Parse the stringified fields in the response
+      const parsedData = {
+        ...response.data.data,
+        beds: typeof response.data.data.beds === 'string' ? JSON.parse(response.data.data.beds) : response.data.data.beds,
+        amenities: typeof response.data.data.amenities === 'string' ? JSON.parse(response.data.data.amenities) : response.data.data.amenities,
+        accessibility_features: typeof response.data.data.accessibility_features === 'string' ? 
+          JSON.parse(response.data.data.accessibility_features) : response.data.data.accessibility_features,
+        energy_saving_features: typeof response.data.data.energy_saving_features === 'string' ? 
+          JSON.parse(response.data.data.energy_saving_features) : response.data.data.energy_saving_features,
+        images: typeof response.data.data.images === 'string' ? JSON.parse(response.data.data.images) : response.data.data.images
+      };
+      
+      console.log('[PropertyService] Parsed room data:', parsedData);
+      return parsedData;
+    } catch (error) {
+      console.error('[PropertyService] Error fetching room:', error);
+      throw error;
+    }
+  },
   updateRoom: async (propertyId, roomId, roomData) => {
     console.log('[PropertyService] Updating room with data:', roomData);
     try {

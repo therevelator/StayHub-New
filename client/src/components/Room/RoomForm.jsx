@@ -46,8 +46,10 @@ const RoomForm = ({ room, onSubmit, onClose }) => {
 
   useEffect(() => {
     if (room) {
-      console.log('Setting form data with room:', room); // Debug log
-      setFormData({
+      console.log('[RoomForm] Setting form data with room:', room);
+      
+      // Ensure all fields are properly initialized
+      const initialData = {
         name: room.name || '',
         room_type: room.room_type || '',
         price_per_night: room.price_per_night || '',
@@ -59,6 +61,18 @@ const RoomForm = ({ room, onSubmit, onClose }) => {
         status: room.status || 'available',
         view_type: room.view_type || 'No View',
         flooring_type: room.flooring_type || 'Carpet',
+        cleaning_frequency: room.cleaning_frequency || 'daily',
+        cancellation_policy: room.cancellation_policy || 'flexible',
+        accessibility_features: Array.isArray(room.accessibility_features) 
+          ? room.accessibility_features 
+          : typeof room.accessibility_features === 'string' 
+            ? JSON.parse(room.accessibility_features) 
+            : [],
+        energy_saving_features: Array.isArray(room.energy_saving_features) 
+          ? room.energy_saving_features 
+          : typeof room.energy_saving_features === 'string' 
+            ? JSON.parse(room.energy_saving_features) 
+            : [],
         beds: Array.isArray(room.beds) 
           ? room.beds 
           : typeof room.beds === 'string' 
@@ -68,8 +82,16 @@ const RoomForm = ({ room, onSubmit, onClose }) => {
           ? room.amenities 
           : typeof room.amenities === 'string' 
             ? JSON.parse(room.amenities) 
+            : [],
+        images: Array.isArray(room.images) 
+          ? room.images 
+          : typeof room.images === 'string' 
+            ? JSON.parse(room.images) 
             : []
-      });
+      };
+
+      console.log('[RoomForm] Initialized form data:', initialData);
+      setFormData(initialData);
     }
   }, [room]);
 

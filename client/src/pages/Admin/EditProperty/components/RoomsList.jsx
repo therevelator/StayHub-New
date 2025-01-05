@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import RoomForm from '../../../../components/Room/RoomForm';
+import propertyService from '../../../../services/propertyService';
 
 const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -12,22 +13,21 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
     setIsDialogOpen(true);
   };
 
-  const handleEditRoom = (room) => {
-    console.log('Original room data:', room); // Debug log
-    // Parse beds if it's a string
-    const parsedRoom = {
-      ...room,
-      beds: typeof room.beds === 'string' ? JSON.parse(room.beds) : room.beds,
-      amenities: typeof room.amenities === 'string' ? JSON.parse(room.amenities) : room.amenities,
-      // Ensure numeric values
-      price_per_night: Number(room.price_per_night),
-      room_size: Number(room.room_size),
-      floor_level: Number(room.floor_level),
-      max_occupancy: Number(room.max_occupancy)
-    };
-    console.log('Parsed room data:', parsedRoom); // Debug log
-    setEditingRoom(parsedRoom);
-    setIsDialogOpen(true);
+  const handleEditRoom = async (room) => {
+    try {
+      console.log('[RoomsList] Fetching room data for editing:', room);
+      
+      // Fetch fresh room data from the server
+      const roomData = await propertyService.getRoom(propertyId, room.id);
+      console.log('[RoomsList] Fetched room data:', roomData);
+      
+      // Set the editing room with the fresh data
+      setEditingRoom(roomData);
+      setIsDialogOpen(true);
+    } catch (error) {
+      console.error('[RoomsList] Error fetching room data:', error);
+      // TODO: Show error notification to user
+    }
   };
 
   const handleSubmit = async (roomData) => {
