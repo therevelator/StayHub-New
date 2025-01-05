@@ -16,6 +16,7 @@ import RoomPage from './pages/RoomPage/RoomPage';
 import AdminRoute from './components/AdminRoute';
 import PrivateRoute from './components/PrivateRoute';
 import Dashboard from './pages/PropertyOwner/Dashboard';
+import PropertyView from './pages/PropertyOwner/PropertyView';
 
 // Property Owner Routes
 const propertyOwnerRoutes = [
@@ -24,6 +25,14 @@ const propertyOwnerRoutes = [
     element: (
       <PrivateRoute>
         <Dashboard />
+      </PrivateRoute>
+    ),
+  },
+  {
+    path: '/owner/properties/:propertyId',
+    element: (
+      <PrivateRoute>
+        <PropertyView />
       </PrivateRoute>
     ),
   }

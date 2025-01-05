@@ -1,94 +1,105 @@
 import api from './api';
 
-const propertyOwnerService = {
-  // Properties
-  getMyProperties: async () => {
-    return await api.get('/owner/properties');
-  },
+class PropertyOwnerService {
+  async getMyProperties() {
+    const response = await api.get('/owner/properties');
+    return response.data;
+  }
 
-  getPropertyBookings: async (propertyId) => {
-    return await api.get(`/owner/properties/${propertyId}/bookings`);
-  },
+  async getPropertyById(propertyId) {
+    const response = await api.get(`/owner/properties/${propertyId}`);
+    return response.data;
+  }
+
+  async getPropertyBookings(propertyId) {
+    const response = await api.get(`/owner/properties/${propertyId}/bookings`);
+    return response.data;
+  }
 
   // Calendar Management
-  getBlockedDates: async (propertyId) => {
-    return await api.get(`/owner/properties/${propertyId}/blocked-dates`);
-  },
+  async blockDate(propertyId, data) {
+    const response = await api.post(`/owner/properties/${propertyId}/calendar/block`, data);
+    return response.data;
+  }
 
-  blockDates: async (propertyId, data) => {
-    return await api.post(`/owner/properties/${propertyId}/blocked-dates`, data);
-  },
+  async unblockDate(propertyId, date) {
+    const response = await api.delete(`/owner/properties/${propertyId}/calendar/block/${date}`);
+    return response.data;
+  }
 
-  unblockDates: async (blockId) => {
-    return await api.delete(`/owner/blocked-dates/${blockId}`);
-  },
+  // Maintenance Tasks
+  async getMaintenanceTasks(propertyId) {
+    const response = await api.get(`/owner/properties/${propertyId}/maintenance`);
+    return response.data;
+  }
 
-  // Maintenance Management
-  getMaintenanceTasks: async (propertyId) => {
-    return await api.get(`/owner/properties/${propertyId}/maintenance`);
-  },
+  async createMaintenanceTask(propertyId, data) {
+    const response = await api.post(`/owner/properties/${propertyId}/maintenance`, data);
+    return response.data;
+  }
 
-  createMaintenanceTask: async (propertyId, data) => {
-    return await api.post(`/owner/properties/${propertyId}/maintenance`, data);
-  },
+  async updateTaskStatus(propertyId, taskId, status) {
+    const response = await api.patch(`/owner/properties/${propertyId}/maintenance/${taskId}/status`, { status });
+    return response.data;
+  }
 
-  updateTaskStatus: async (taskId, status) => {
-    return await api.patch(`/owner/maintenance/${taskId}/status`, { status });
-  },
+  async deleteTask(propertyId, taskId) {
+    const response = await api.delete(`/owner/properties/${propertyId}/maintenance/${taskId}`);
+    return response.data;
+  }
 
-  deleteTask: async (taskId) => {
-    return await api.delete(`/owner/maintenance/${taskId}`);
-  },
+  // Messages
+  async getBookingMessages(bookingId) {
+    const response = await api.get(`/owner/bookings/${bookingId}/messages`);
+    return response.data;
+  }
 
-  // Guest Communication
-  getBookingMessages: async (bookingId) => {
-    return await api.get(`/owner/bookings/${bookingId}/messages`);
-  },
+  async sendMessage(bookingId, data) {
+    const response = await api.post(`/owner/bookings/${bookingId}/messages`, data);
+    return response.data;
+  }
 
-  sendMessage: async (bookingId, data) => {
-    return await api.post(`/owner/bookings/${bookingId}/messages`, data);
-  },
+  async markMessagesAsRead(bookingId) {
+    const response = await api.patch(`/owner/bookings/${bookingId}/messages/read`);
+    return response.data;
+  }
 
-  markMessagesAsRead: async (bookingId) => {
-    return await api.patch(`/owner/bookings/${bookingId}/messages/read`);
-  },
+  async getUnreadCount() {
+    const response = await api.get('/owner/messages/unread');
+    return response.data;
+  }
 
-  getUnreadCount: async () => {
-    return await api.get('/owner/messages/unread');
-  },
+  // Financial Transactions
+  async getPropertyTransactions(propertyId) {
+    const response = await api.get(`/owner/properties/${propertyId}/transactions`);
+    return response.data;
+  }
 
-  // Financial Management
-  getPropertyTransactions: async (propertyId) => {
-    return await api.get(`/owner/properties/${propertyId}/transactions`);
-  },
+  async createTransaction(propertyId, data) {
+    const response = await api.post(`/owner/properties/${propertyId}/transactions`, data);
+    return response.data;
+  }
 
-  createTransaction: async (propertyId, data) => {
-    return await api.post(`/owner/properties/${propertyId}/transactions`, data);
-  },
-
-  updateTransactionStatus: async (transactionId, status) => {
-    return await api.patch(`/owner/transactions/${transactionId}/status`, { status });
-  },
+  async updateTransactionStatus(propertyId, transactionId, status) {
+    const response = await api.patch(`/owner/properties/${propertyId}/transactions/${transactionId}/status`, { status });
+    return response.data;
+  }
 
   // Seasonal Pricing
-  getSeasonalPricing: async (propertyId) => {
-    return await api.get(`/owner/properties/${propertyId}/seasonal-pricing`);
-  },
-
-  setSeasonalPricing: async (roomId, data) => {
-    return await api.post(`/owner/rooms/${roomId}/seasonal-pricing`, data);
-  },
-
-  deleteSeasonalPricing: async (pricingId) => {
-    return await api.delete(`/owner/seasonal-pricing/${pricingId}`);
-  },
-
-  // Analytics
-  getPropertyAnalytics: async (propertyId, startDate, endDate) => {
-    return await api.get(`/owner/properties/${propertyId}/analytics`, {
-      params: { startDate, endDate }
-    });
+  async getSeasonalPricing(roomId) {
+    const response = await api.get(`/owner/rooms/${roomId}/seasonal-pricing`);
+    return response.data;
   }
-};
 
-export default propertyOwnerService; 
+  async setSeasonalPricing(roomId, data) {
+    const response = await api.post(`/owner/rooms/${roomId}/seasonal-pricing`, data);
+    return response.data;
+  }
+
+  async deleteSeasonalPricing(pricingId) {
+    const response = await api.delete(`/owner/seasonal-pricing/${pricingId}`);
+    return response.data;
+  }
+}
+
+export const propertyOwnerService = new PropertyOwnerService(); 

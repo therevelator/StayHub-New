@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { format, isValid, parseISO } from 'date-fns';
-import propertyOwnerService from '../../services/propertyOwnerService';
+import { propertyOwnerService } from '../../services/propertyOwnerService';
 
 const statusColors = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -9,7 +9,7 @@ const statusColors = {
   cancelled: 'bg-red-100 text-red-800'
 };
 
-const FinancesSection = ({ selectedProperty }) => {
+export const FinancesSection = ({ selectedProperty }) => {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -278,6 +278,4 @@ const FinancesSection = ({ selectedProperty }) => {
       )}
     </div>
   );
-};
-
-export default FinancesSection; 
+}; 

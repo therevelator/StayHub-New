@@ -13,30 +13,51 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
   };
 
   const handleEditRoom = (room) => {
-    setEditingRoom(room);
+    console.log('Original room data:', room); // Debug log
+    // Parse beds if it's a string
+    const parsedRoom = {
+      ...room,
+      beds: typeof room.beds === 'string' ? JSON.parse(room.beds) : room.beds,
+      amenities: typeof room.amenities === 'string' ? JSON.parse(room.amenities) : room.amenities,
+      // Ensure numeric values
+      price_per_night: Number(room.price_per_night),
+      room_size: Number(room.room_size),
+      floor_level: Number(room.floor_level),
+      max_occupancy: Number(room.max_occupancy)
+    };
+    console.log('Parsed room data:', parsedRoom); // Debug log
+    setEditingRoom(parsedRoom);
     setIsDialogOpen(true);
   };
 
   const handleSubmit = async (roomData) => {
     try {
-      if (editingRoom) {
-        await onRoomSubmit({ ...roomData, id: editingRoom.id });
-      } else {
-        await onRoomSubmit(roomData);
-      }
+      console.log('[RoomsList] Submitting room data:', roomData);
+      const dataToSubmit = {
+        ...roomData,
+        // Ensure the ID is included if editing
+        ...(editingRoom && { id: editingRoom.id }),
+        // Convert to strings for API
+        beds: JSON.stringify(roomData.beds),
+        amenities: JSON.stringify(roomData.amenities)
+      };
+      console.log('[RoomsList] Formatted data for submission:', dataToSubmit);
+      
+      await onRoomSubmit(dataToSubmit);
+      
+      // Only close the dialog and reset state after successful submission
       setIsDialogOpen(false);
       setEditingRoom(null);
     } catch (error) {
-      console.error('Error submitting room:', error);
+      console.error('[RoomsList] Error submitting room:', error);
+      // Keep the dialog open on error
+      throw error; // Re-throw to be handled by the parent
     }
   };
 
-  const handleDelete = async (roomId) => {
-    try {
-      await onRoomDelete(roomId);
-    } catch (error) {
-      console.error('Error deleting room:', error);
-    }
+  const handleClose = () => {
+    setIsDialogOpen(false);
+    setEditingRoom(null);
   };
 
   return (
@@ -65,16 +86,18 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
                       {room.name}
                     </h3>
                     <p className="mt-1 text-sm text-gray-500">
-                      {room.type} • Max Occupancy: {room.maxOccupancy}
+                      {room.room_type} • Max Occupancy: {room.max_occupancy}
                     </p>
                     <p className="mt-1 text-sm text-gray-500">
-                      Base Price: ${room.basePrice} • Tax Rate: {room.taxRate}%
+                      Price per Night: ${room.price_per_night}
                     </p>
                     {room.beds && (
                       <p className="mt-1 text-sm text-gray-500">
                         Beds: {Array.isArray(room.beds) 
                           ? room.beds.map(bed => `${bed.count} ${bed.type}`).join(', ')
-                          : 'No bed information'}
+                          : typeof room.beds === 'string'
+                            ? JSON.parse(room.beds).map(bed => `${bed.count} ${bed.type}`).join(', ')
+                            : 'No bed information'}
                       </p>
                     )}
                   </div>
@@ -90,7 +113,7 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(room.id)}
+                      onClick={() => onRoomDelete(room.id)}
                       disabled={disabled}
                       className="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
@@ -116,11 +139,7 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
         <RoomForm
           room={editingRoom}
           onSubmit={handleSubmit}
-          onCancel={() => {
-            setIsDialogOpen(false);
-            setEditingRoom(null);
-          }}
-          disabled={disabled}
+          onClose={handleClose}
         />
       )}
     </div>

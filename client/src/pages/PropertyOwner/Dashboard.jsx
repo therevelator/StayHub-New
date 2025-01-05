@@ -8,13 +8,13 @@ import {
   BanknotesIcon,
   ChartBarIcon
 } from '@heroicons/react/24/outline';
-import propertyOwnerService from '../../services/propertyOwnerService';
-import PropertiesSection from '../../components/OwnerDashboard/PropertiesSection';
-import CalendarSection from '../../components/OwnerDashboard/CalendarSection';
-import MaintenanceSection from '../../components/OwnerDashboard/MaintenanceSection';
-import MessagesSection from '../../components/OwnerDashboard/MessagesSection';
-import FinancesSection from '../../components/OwnerDashboard/FinancesSection';
-import AnalyticsSection from '../../components/OwnerDashboard/AnalyticsSection';
+import { propertyOwnerService } from '../../services/propertyOwnerService';
+import { PropertiesSection } from '../../components/OwnerDashboard/PropertiesSection';
+import { CalendarSection } from '../../components/OwnerDashboard/CalendarSection';
+import { MaintenanceSection } from '../../components/OwnerDashboard/MaintenanceSection';
+import { MessagesSection } from '../../components/OwnerDashboard/MessagesSection';
+import { FinancesSection } from '../../components/OwnerDashboard/FinancesSection';
+import { AnalyticsSection } from '../../components/OwnerDashboard/AnalyticsSection';
 
 const navigation = [
   { name: 'Properties', icon: HomeIcon },
@@ -43,14 +43,10 @@ const Dashboard = () => {
     try {
       setLoading(true);
       const response = await propertyOwnerService.getMyProperties();
-      if (response.data.status === 'success' && Array.isArray(response.data.data)) {
-        setProperties(response.data.data);
-        if (response.data.data.length > 0) {
-          setSelectedProperty(response.data.data[0]);
-        }
-      } else {
-        console.error('Unexpected response format:', response.data);
-        toast.error('Failed to fetch properties: Invalid response format');
+      const properties = Array.isArray(response.data) ? response.data : [];
+      setProperties(properties);
+      if (properties.length > 0) {
+        setSelectedProperty(properties[0]);
       }
     } catch (error) {
       console.error('Error fetching properties:', error);

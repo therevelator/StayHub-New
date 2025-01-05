@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
 import { toast } from 'react-hot-toast';
 import { format, isValid, parseISO } from 'date-fns';
 import {
@@ -7,7 +9,7 @@ import {
   ClockIcon,
   ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
-import propertyOwnerService from '../../services/propertyOwnerService';
+import { propertyOwnerService } from '../../services/propertyOwnerService';
 
 const priorityColors = {
   low: 'bg-blue-100 text-blue-800',
@@ -30,7 +32,7 @@ const statusColors = {
   cancelled: 'text-red-500'
 };
 
-const MaintenanceSection = ({ selectedProperty }) => {
+export const MaintenanceSection = ({ selectedProperty }) => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -306,6 +308,4 @@ const MaintenanceSection = ({ selectedProperty }) => {
       )}
     </div>
   );
-};
-
-export default MaintenanceSection; 
+}; 

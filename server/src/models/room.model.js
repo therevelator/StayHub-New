@@ -181,6 +181,16 @@ export const updateRoom = async (roomId, roomData) => {
       throw new Error(`Invalid bathroom type. Must be one of: ${VALID_BATHROOM_TYPES.join(', ')}`);
     }
 
+    // First check if room exists and belongs to property
+    const [rooms] = await connection.query(
+      'SELECT id FROM rooms WHERE id = ? AND property_id = ?',
+      [roomId, roomData.property_id]
+    );
+
+    if (rooms.length === 0) {
+      throw new Error('Room not found or does not belong to this property');
+    }
+
     // Ensure all JSON fields are properly stringified
     const roomDataWithStringifiedJson = {
       name: roomData.name,

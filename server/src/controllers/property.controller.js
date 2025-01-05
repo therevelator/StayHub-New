@@ -621,17 +621,106 @@ export const updatePropertyStatus = async (req, res) => {
 
 export const getPropertyById = async (req, res) => {
   try {
-    // First get the property details
-    const [properties] = await db.query(
-      `SELECT p.*, 
-        u.email as host_email,
-        u.first_name as host_first_name,
-        u.last_name as host_last_name
-       FROM properties p
-       LEFT JOIN users u ON p.host_id = u.id
-       WHERE p.id = ?`,
-      [req.params.id]
-    );
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const query = `
+      SELECT 
+        p.*,
+        (SELECT COUNT(*) FROM rooms r WHERE r.property_id = p.id) as rooms_count,
+        (
+          SELECT COUNT(*) 
+          FROM bookings b 
+          JOIN rooms r ON b.room_id = r.id 
+          WHERE r.property_id = p.id 
+          AND b.status = 'confirmed' 
+          AND b.check_out_date >= CURDATE()
+        ) as active_bookings_count,
+        (
+          SELECT COUNT(*)
+          FROM maintenance_tasks mt
+          WHERE mt.property_id = p.id
+          AND mt.status != 'completed'
+        ) as maintenance_count,
+        (
+          SELECT COUNT(*)
+          FROM messages m
+          JOIN bookings b ON m.booking_id = b.id
+          JOIN rooms r ON b.room_id = r.id
+          WHERE r.property_id = p.id
+          AND m.is_read = FALSE
+          AND m.receiver_id = ?
+        ) as unread_messages_count,
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', r.id,
+              'name', r.name,
+              'base_price', r.base_price,
+              'description', r.description,
+              'max_guests', r.max_guests
+            )
+          )
+          FROM rooms r
+          WHERE r.property_id = p.id
+        ) as rooms,
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', b.id,
+              'guest_name', CONCAT(u.first_name, ' ', u.last_name),
+              'check_in_date', DATE_FORMAT(b.check_in_date, '%Y-%m-%d'),
+              'check_out_date', DATE_FORMAT(b.check_out_date, '%Y-%m-%d'),
+              'status', b.status,
+              'room_name', r.name,
+              'total_price', b.total_price
+            )
+          )
+          FROM bookings b
+          JOIN rooms r ON b.room_id = r.id
+          JOIN users u ON b.user_id = u.id
+          WHERE r.property_id = p.id
+          ORDER BY b.check_in_date DESC
+          LIMIT 5
+        ) as recent_bookings,
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', mt.id,
+              'title', mt.title,
+              'description', mt.description,
+              'priority', mt.priority,
+              'status', mt.status,
+              'due_date', DATE_FORMAT(mt.due_date, '%Y-%m-%d'),
+              'created_at', DATE_FORMAT(mt.created_at, '%Y-%m-%d %H:%i:%s')
+            )
+          )
+          FROM maintenance_tasks mt
+          WHERE mt.property_id = p.id
+          AND mt.status != 'completed'
+          ORDER BY mt.due_date ASC
+        ) as maintenance_tasks,
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', ft.id,
+              'amount', ft.amount,
+              'type', ft.type,
+              'description', ft.description,
+              'status', ft.status,
+              'created_at', DATE_FORMAT(ft.created_at, '%Y-%m-%d %H:%i:%s')
+            )
+          )
+          FROM financial_transactions ft
+          WHERE ft.property_id = p.id
+          ORDER BY ft.created_at DESC
+          LIMIT 10
+        ) as recent_transactions
+      FROM properties p
+      WHERE p.id = ? AND p.host_id = ?
+    `;
+
+    const [properties] = await db.query(query, [userId, id, userId]);
 
     if (properties.length === 0) {
       return res.status(404).json({
@@ -640,34 +729,26 @@ export const getPropertyById = async (req, res) => {
       });
     }
 
-    // Get property photos
-    const [photos] = await db.query(
-      'SELECT id, url, caption FROM property_images WHERE property_id = ? ORDER BY id',
-      [req.params.id]
-    );
-
-    // Get rooms if they exist
-    const [rooms] = await db.query(
-      'SELECT * FROM rooms WHERE property_id = ?',
-      [req.params.id]
-    );
-
-    // Combine all data
-    const propertyData = {
-      ...properties[0],
-      photos: photos || [],
-      rooms: rooms || []
+    // Parse JSON strings to objects
+    const property = properties[0];
+    const formattedProperty = {
+      ...property,
+      rooms: property.rooms ? JSON.parse(property.rooms) : [],
+      recent_bookings: property.recent_bookings ? JSON.parse(property.recent_bookings) : [],
+      maintenance_tasks: property.maintenance_tasks ? JSON.parse(property.maintenance_tasks) : [],
+      recent_transactions: property.recent_transactions ? JSON.parse(property.recent_transactions) : []
     };
 
     res.json({
       status: 'success',
-      data: propertyData
+      data: formattedProperty
     });
   } catch (error) {
-    console.error('Error getting property:', error);
+    console.error('Error fetching property details:', error);
     res.status(500).json({
       status: 'error',
-      message: error.message
+      message: 'Failed to fetch property details',
+      error: error.message
     });
   }
 };
@@ -731,26 +812,76 @@ export const updateProperty = async (req, res) => {
 export const getOwnerProperties = async (req, res) => {
   try {
     const userId = req.user.id;
-    const [properties] = await db.query(
-      `SELECT p.*, 
-        COUNT(DISTINCT b.id) as total_bookings,
-        COUNT(DISTINCT CASE WHEN b.status = 'pending' THEN b.id END) as pending_bookings,
-        COUNT(DISTINCT CASE WHEN b.status = 'confirmed' THEN b.id END) as confirmed_bookings
+
+    const query = `
+      SELECT 
+        p.*,
+        (SELECT COUNT(*) FROM rooms r WHERE r.property_id = p.id) as rooms_count,
+        (
+          SELECT COUNT(*) 
+          FROM bookings b 
+          JOIN rooms r ON b.room_id = r.id 
+          WHERE r.property_id = p.id 
+          AND b.status = 'confirmed' 
+          AND b.check_out_date >= CURDATE()
+        ) as active_bookings_count,
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', r.id,
+              'name', r.name,
+              'price_per_night', r.base_price
+            )
+          )
+          FROM rooms r
+          WHERE r.property_id = p.id
+        ) as rooms,
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'id', b.id,
+              'guest_name', CONCAT(u.first_name, ' ', u.last_name),
+              'check_in_date', b.check_in_date,
+              'check_out_date', b.check_out_date,
+              'status', b.status
+            )
+          )
+          FROM bookings b
+          JOIN rooms r ON b.room_id = r.id
+          JOIN users u ON b.user_id = u.id
+          WHERE r.property_id = p.id
+          ORDER BY b.check_in_date DESC
+          LIMIT 3
+        ) as recent_bookings
       FROM properties p
-      LEFT JOIN rooms r ON p.id = r.property_id
-      LEFT JOIN bookings b ON r.id = b.room_id
       WHERE p.host_id = ?
-      GROUP BY p.id`,
-      [userId]
-    );
+      ORDER BY p.created_at DESC
+    `;
+
+    const [properties] = await db.query(query, [userId]);
+
+    // Parse JSON strings to objects, but only if they're strings
+    const formattedProperties = properties.map(property => ({
+      ...property,
+      rooms: property.rooms ? 
+        (typeof property.rooms === 'string' ? JSON.parse(property.rooms) : property.rooms) : 
+        [],
+      recent_bookings: property.recent_bookings ? 
+        (typeof property.recent_bookings === 'string' ? JSON.parse(property.recent_bookings) : property.recent_bookings) : 
+        []
+    }));
 
     res.json({
       status: 'success',
-      data: properties
+      data: formattedProperties
     });
   } catch (error) {
     console.error('Error fetching owner properties:', error);
-    res.status(500).json({ message: 'Failed to fetch properties' });
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch properties',
+      error: error.message
+    });
   }
 };
 

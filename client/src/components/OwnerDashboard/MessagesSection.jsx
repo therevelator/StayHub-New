@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { format, isValid, parseISO } from 'date-fns';
-import propertyOwnerService from '../../services/propertyOwnerService';
+import { propertyOwnerService } from '../../services/propertyOwnerService';
 
-const MessagesSection = ({ selectedProperty }) => {
+export const MessagesSection = ({ selectedProperty }) => {
   const [bookings, setBookings] = useState([]);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -216,6 +216,4 @@ const MessagesSection = ({ selectedProperty }) => {
       )}
     </div>
   );
-};
-
-export default MessagesSection; 
+}; 

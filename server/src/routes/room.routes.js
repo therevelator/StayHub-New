@@ -6,8 +6,8 @@ import checkPropertyOwnership from '../middleware/checkPropertyOwnership.js';
 const router = express.Router();
 
 // Public endpoints
-router.get('/rooms/:roomId', roomController.getRoom);
-router.get('/rooms/:roomId/availability', roomController.getRoomAvailability);
+router.get('/:propertyId/rooms/:roomId', roomController.getRoom);
+router.get('/:propertyId/rooms/:roomId/availability', roomController.getRoomAvailability);
 router.get('/:propertyId/rooms', roomController.getRooms);
 
 // Protected endpoints
@@ -17,19 +17,19 @@ router.post('/:propertyId/rooms',
   roomController.createRoom
 );
 
-router.put('/rooms/:roomId',
+router.put('/:propertyId/rooms/:roomId',
   authenticateToken,
   checkPropertyOwnership,
   roomController.updateRoom
 );
 
-router.delete('/rooms/:roomId',
+router.delete('/:propertyId/rooms/:roomId',
   authenticateToken,
   checkPropertyOwnership,
   roomController.deleteRoom
 );
 
-router.post('/rooms/:roomId/book', 
+router.post('/:propertyId/rooms/:roomId/book', 
   authenticateToken, 
   roomController.createBooking
 );

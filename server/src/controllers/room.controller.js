@@ -251,18 +251,33 @@ export const getRoomAvailability = async (req, res) => {
 export const updateRoom = async (req, res) => {
   try {
     const roomId = req.params.roomId;
-    console.log('Updating room:', roomId);
-    console.log('Update data:', req.body);
-    console.log('Beds data:', req.body.beds); // Debug log for beds
+    const propertyId = req.params.propertyId;
+    console.log('[Server] Updating room:', { roomId, propertyId });
+    console.log('[Server] Update data:', req.body);
+
+    // First verify the room belongs to this property
+    const [rooms] = await db.query(
+      'SELECT id FROM rooms WHERE id = ? AND property_id = ?',
+      [roomId, propertyId]
+    );
+
+    if (rooms.length === 0) {
+      console.log('[Server] Room not found or does not belong to property');
+      return res.status(404).json({
+        status: 'error',
+        message: 'Room not found or does not belong to this property'
+      });
+    }
 
     // Format the room data
     const roomData = {
       ...req.body,
+      property_id: propertyId,
       beds: Array.isArray(req.body.beds) 
         ? JSON.stringify(req.body.beds)
         : typeof req.body.beds === 'string'
-          ? req.body.beds // If already stringified, leave as is
-          : JSON.stringify([]), // Default to empty array if undefined
+          ? req.body.beds
+          : JSON.stringify([]),
       amenities: JSON.stringify(req.body.amenities || []),
       accessibility_features: JSON.stringify(req.body.accessibility_features || []),
       energy_saving_features: JSON.stringify(req.body.energy_saving_features || []),
@@ -281,26 +296,38 @@ export const updateRoom = async (req, res) => {
       updated_at: new Date()
     };
 
-    console.log('Formatted room data:', roomData); // Debug log for formatted data
+    console.log('[Server] Formatted room data:', roomData);
 
     const result = await roomModel.updateRoom(roomId, roomData);
+    console.log('[Server] Update result:', result);
     
     if (result.affectedRows > 0) {
-      // Parse the stringified fields back for the response
-      const responseData = {
-        ...roomData,
-        beds: JSON.parse(roomData.beds),
-        amenities: JSON.parse(roomData.amenities),
-        accessibility_features: JSON.parse(roomData.accessibility_features),
-        energy_saving_features: JSON.parse(roomData.energy_saving_features),
-        images: JSON.parse(roomData.images)
-      };
+      // Get the updated room data
+      const [updatedRoom] = await db.query(
+        'SELECT * FROM rooms WHERE id = ?',
+        [roomId]
+      );
+      
+      if (updatedRoom.length > 0) {
+        // Parse the stringified fields for the response
+        const responseData = {
+          ...updatedRoom[0],
+          beds: JSON.parse(updatedRoom[0].beds),
+          amenities: JSON.parse(updatedRoom[0].amenities),
+          accessibility_features: JSON.parse(updatedRoom[0].accessibility_features),
+          energy_saving_features: JSON.parse(updatedRoom[0].energy_saving_features),
+          images: JSON.parse(updatedRoom[0].images)
+        };
 
-      res.json({
-        status: 'success',
-        message: 'Room updated successfully',
-        data: { id: roomId, ...responseData }
-      });
+        console.log('[Server] Sending response:', responseData);
+        res.json({
+          status: 'success',
+          message: 'Room updated successfully',
+          data: responseData
+        });
+      } else {
+        throw new Error('Failed to fetch updated room data');
+      }
     } else {
       res.status(404).json({
         status: 'error',
@@ -308,7 +335,7 @@ export const updateRoom = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error in updateRoom controller:', error);
+    console.error('[Server] Error in updateRoom controller:', error);
     res.status(500).json({
       status: 'error',
       message: 'Error updating room',
@@ -318,28 +345,68 @@ export const updateRoom = async (req, res) => {
 };
 
 export const deleteRoom = async (req, res) => {
+  const connection = await db.getConnection();
   try {
+    await connection.beginTransaction();
     const roomId = req.params.roomId;
-    const [result] = await db.query('DELETE FROM rooms WHERE id = ?', [roomId]);
+    const propertyId = req.params.propertyId;
 
-    if (result.affectedRows === 0) {
+    // Check if room exists and get property info
+    const [rooms] = await connection.query(
+      'SELECT id, property_id FROM rooms WHERE id = ? AND property_id = ?',
+      [roomId, propertyId]
+    );
+
+    if (rooms.length === 0) {
+      await connection.rollback();
       return res.status(404).json({
         status: 'error',
-        message: 'Room not found'
+        message: 'Room not found or does not belong to this property'
       });
     }
+
+    // Check for existing bookings
+    const [bookings] = await connection.query(
+      'SELECT id FROM bookings WHERE room_id = ? AND status != "cancelled"',
+      [roomId]
+    );
+
+    if (bookings.length > 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        status: 'error',
+        message: 'Cannot delete room with existing bookings'
+      });
+    }
+
+    // Delete any cancelled bookings
+    await connection.query(
+      'DELETE FROM bookings WHERE room_id = ? AND status = "cancelled"',
+      [roomId]
+    );
+
+    // Delete the room
+    const [result] = await connection.query(
+      'DELETE FROM rooms WHERE id = ? AND property_id = ?',
+      [roomId, propertyId]
+    );
+
+    await connection.commit();
 
     res.json({
       status: 'success',
       message: 'Room deleted successfully'
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Error deleting room:', error);
     res.status(500).json({
       status: 'error',
       message: 'Error deleting room',
       error: error.message
     });
+  } finally {
+    connection.release();
   }
 };
 

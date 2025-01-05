@@ -31,38 +31,21 @@ const EditPropertyPage = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Loading property with ID:', id);
-      const property = await propertyService.getById(id);
-      console.log('Property response:', property);
+      console.log('[EditPropertyPage] Loading property with ID:', id);
+      const propertyData = await propertyService.getById(id);
+      console.log('[EditPropertyPage] Loaded property data:', propertyData);
       
-      if (!property) {
+      if (!propertyData) {
         throw new Error('Property not found');
       }
       
-      // Process the property data
-      const processedProperty = {
-        ...property,
-        languages_spoken: Array.isArray(property.languages_spoken) 
-          ? property.languages_spoken 
-          : (property.languages_spoken ? JSON.parse(property.languages_spoken) : []),
-        rooms: property.rooms?.map(room => ({
-          ...room,
-          beds: typeof room.beds === 'string' ? JSON.parse(room.beds) : room.beds
-        })) || []
-      };
-      
-      console.log('Processed property:', processedProperty);
-      setProperty(processedProperty);
+      // Set the property data
+      setProperty(propertyData);
+      console.log('[EditPropertyPage] Property state updated:', propertyData);
     } catch (error) {
-      console.error('Error loading property:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to load property';
-      setError(errorMessage);
-      toast.error(errorMessage);
-      
-      // Only navigate away if it's a 404 error
-      if (error.response?.status === 404) {
-        navigate('/admin/properties');
-      }
+      console.error('[EditPropertyPage] Error loading property:', error);
+      setError(error.message || 'Failed to load property');
+      toast.error('Failed to load property details');
     } finally {
       setLoading(false);
     }
@@ -102,21 +85,27 @@ const EditPropertyPage = () => {
   const handleRoomSubmit = async (roomData) => {
     try {
       setSaving(true);
+      console.log('[Client] Starting room update with data:', roomData);
+      
       let response;
       if (roomData.id) {
         response = await propertyService.updateRoom(id, roomData.id, roomData);
+        console.log('[Client] Update response:', response);
       } else {
         response = await propertyService.createRoom(id, roomData);
+        console.log('[Client] Create response:', response);
       }
       
-      if (!response) {
+      if (!response || !response.data) {
         throw new Error(`Failed to ${roomData.id ? 'update' : 'create'} room`);
       }
+
+      // Reload the entire property data
+      await loadProperty();
       
-      await loadProperty(); // Refresh property data
       toast.success(`Room ${roomData.id ? 'updated' : 'created'} successfully`);
     } catch (error) {
-      console.error('Error saving room:', error);
+      console.error('[Client] Error saving room:', error);
       const errorMessage = error.response?.data?.message || error.message || `Failed to ${roomData.id ? 'update' : 'create'} room`;
       toast.error(errorMessage);
     } finally {

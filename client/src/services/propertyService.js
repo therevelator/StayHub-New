@@ -127,18 +127,33 @@ const propertyService = {
   },
   getById: async (id) => {
     try {
-      console.log('PropertyService: Fetching property:', id);
+      console.log('[PropertyService] Fetching property:', id);
       const response = await api.get(`/properties/${id}`);
-      console.log('PropertyService: Raw response:', response);
+      console.log('[PropertyService] Raw response:', response);
       
-      if (!response.data) {
+      if (!response.data || !response.data.data) {
         throw new Error('No data received from server');
       }
       
-      // Return the property data directly
-      return response.data.data;
+      // Parse the rooms data
+      const propertyData = response.data.data;
+      if (propertyData.rooms) {
+        propertyData.rooms = propertyData.rooms.map(room => ({
+          ...room,
+          beds: typeof room.beds === 'string' ? JSON.parse(room.beds) : room.beds,
+          amenities: typeof room.amenities === 'string' ? JSON.parse(room.amenities) : room.amenities,
+          accessibility_features: typeof room.accessibility_features === 'string' ? 
+            JSON.parse(room.accessibility_features) : room.accessibility_features,
+          energy_saving_features: typeof room.energy_saving_features === 'string' ? 
+            JSON.parse(room.energy_saving_features) : room.energy_saving_features,
+          images: typeof room.images === 'string' ? JSON.parse(room.images) : room.images
+        }));
+      }
+      
+      console.log('[PropertyService] Parsed property data:', propertyData);
+      return propertyData;
     } catch (error) {
-      console.error('PropertyService: Error getting property:', error);
+      console.error('[PropertyService] Error getting property:', error);
       throw error;
     }
   },
@@ -160,22 +175,59 @@ const propertyService = {
   },
   updateStatus: (id, status) => api.patch(`/properties/${id}/status`, { status }),
   createRoom: async (propertyId, roomData) => {
-    console.log('PropertyService: Creating room with data:', roomData);
+    console.log('[PropertyService] Creating room with data:', roomData);
     try {
-      const response = await api.post(`/properties/${propertyId}/rooms`, roomData);
+      const formattedData = {
+        ...roomData,
+        property_id: propertyId,
+        beds: JSON.stringify(roomData.beds || []),
+        amenities: JSON.stringify(roomData.amenities || [])
+      };
+      const response = await api.post(`/properties/${propertyId}/rooms`, formattedData);
       return response.data;
     } catch (error) {
-      console.error('PropertyService: Error creating room:', error);
+      console.error('[PropertyService] Error creating room:', error);
       throw error;
     }
   },
   updateRoom: async (propertyId, roomId, roomData) => {
-    console.log('PropertyService: Updating room with data:', roomData);
+    console.log('[PropertyService] Updating room with data:', roomData);
     try {
-      const response = await api.put(`/properties/${propertyId}/rooms/${roomId}`, roomData);
-      return response.data;
+      // Format the data to match the expected structure
+      const formattedData = {
+        ...roomData,
+        property_id: propertyId,
+        // Ensure arrays are stringified
+        beds: typeof roomData.beds === 'string' ? roomData.beds : JSON.stringify(roomData.beds || []),
+        amenities: typeof roomData.amenities === 'string' ? roomData.amenities : JSON.stringify(roomData.amenities || [])
+      };
+
+      console.log('[PropertyService] Sending formatted data:', formattedData);
+      const response = await api.put(`/properties/${propertyId}/rooms/${roomId}`, formattedData);
+      console.log('[PropertyService] Received response:', response.data);
+      
+      // Ensure we have the data property
+      if (!response.data || !response.data.data) {
+        console.error('[PropertyService] Invalid response format:', response);
+        throw new Error('Invalid response format from server');
+      }
+      
+      // Parse the stringified fields in the response
+      const parsedData = {
+        ...response.data.data,
+        beds: typeof response.data.data.beds === 'string' ? JSON.parse(response.data.data.beds) : response.data.data.beds,
+        amenities: typeof response.data.data.amenities === 'string' ? JSON.parse(response.data.data.amenities) : response.data.data.amenities,
+        accessibility_features: typeof response.data.data.accessibility_features === 'string' ? 
+          JSON.parse(response.data.data.accessibility_features) : response.data.data.accessibility_features,
+        energy_saving_features: typeof response.data.data.energy_saving_features === 'string' ? 
+          JSON.parse(response.data.data.energy_saving_features) : response.data.data.energy_saving_features,
+        images: typeof response.data.data.images === 'string' ? JSON.parse(response.data.data.images) : response.data.data.images
+      };
+      
+      console.log('[PropertyService] Returning parsed data:', parsedData);
+      return { ...response.data, data: parsedData };
     } catch (error) {
-      console.error('PropertyService: Error updating room:', error);
+      console.error('[PropertyService] Error updating room:', error);
       throw error;
     }
   },
@@ -184,7 +236,7 @@ const propertyService = {
       const response = await api.delete(`/properties/${propertyId}/rooms/${roomId}`);
       return response.data;
     } catch (error) {
-      console.error('PropertyService: Error deleting room:', error);
+      console.error('[PropertyService] Error deleting room:', error);
       throw error;
     }
   },
