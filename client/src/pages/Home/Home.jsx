@@ -56,6 +56,7 @@ const Home = () => {
   const [error, setError] = useState('');
   const [properties, setProperties] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [checkInDate, setCheckInDate] = useState(null);
   const [checkOutDate, setCheckOutDate] = useState(null);
 
@@ -66,15 +67,23 @@ const Home = () => {
   // Get user's location on component mount
   useEffect(() => {
     if (navigator.geolocation) {
+      setIsLoadingLocation(true);
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setUserLocation({
             lat: position.coords.latitude,
             lon: position.coords.longitude
           });
+          setIsLoadingLocation(false);
         },
         (error) => {
           console.error('Geolocation error:', error);
+          setIsLoadingLocation(false);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0
         }
       );
     }
@@ -82,6 +91,13 @@ const Home = () => {
 
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
+    
+    // If we're trying to use current location but it's still loading, show a message
+    if ((!location || location === 'Current Location') && isLoadingLocation) {
+      setError('Please wait while we get your location...');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -256,9 +272,21 @@ const Home = () => {
               />
             </div>
 
-            <button type="submit" className="search-button" disabled={loading}>
-              <MagnifyingGlassIcon className="search-icon" />
-              <span className="search-button-text">Search</span>
+            <button
+              type="submit"
+              className={`w-full bg-primary-600 text-white p-4 rounded-lg font-semibold hover:bg-primary-700 transition-colors ${
+                loading || ((!location || location === 'Current Location') && isLoadingLocation)
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
+              }`}
+              disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
+            >
+              {loading 
+                ? 'Searching...' 
+                : ((!location || location === 'Current Location') && isLoadingLocation)
+                  ? 'Getting location...'
+                  : 'Search'
+              }
             </button>
           </div>
         </form>
