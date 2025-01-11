@@ -9,7 +9,7 @@ import {
   CircularProgress,
   MenuItem,
   Grid
-} from ' ';
+} from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
@@ -25,6 +25,7 @@ const SearchBar = ({
   const [checkOut, setCheckOut] = useState(null);
   const [guests, setGuests] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [radius, setRadius] = useState(25);
 
   // Update location when initialLocation changes
   useEffect(() => {
@@ -50,9 +51,10 @@ const SearchBar = ({
 
       // Then search properties with these coordinates
       const searchParams = {
+        location,
         lat: parseFloat(lat),
         lon: parseFloat(lon),
-        radius: 25,
+        radius: radius,
         guests: parseInt(guests) || 1,
         checkIn: checkIn ? dayjs(checkIn).format('YYYY-MM-DD') : null,
         checkOut: checkOut ? dayjs(checkOut).format('YYYY-MM-DD') : null,
@@ -94,6 +96,12 @@ const SearchBar = ({
     { value: 'resort', label: 'Resort' },
     { value: 'guesthouse', label: 'Guesthouse' },
     { value: 'hostel', label: 'Hostel' }
+  ];
+
+  const radiusOptions = [
+    { value: 25, label: '25 km' },
+    { value: 50, label: '50 km' },
+    { value: 75, label: '75 km' }
   ];
 
   return (
@@ -153,6 +161,22 @@ const SearchBar = ({
             {propertyTypes.map((type) => (
               <MenuItem key={type.value} value={type.value}>
                 {type.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+
+        <Grid item xs={12} sm={3}>
+          <TextField
+            select
+            fullWidth
+            label="Radius"
+            value={radius}
+            onChange={(e) => setRadius(e.target.value)}
+          >
+            {radiusOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
               </MenuItem>
             ))}
           </TextField>

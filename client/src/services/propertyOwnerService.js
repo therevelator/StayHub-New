@@ -100,6 +100,27 @@ class PropertyOwnerService {
     const response = await api.delete(`/owner/seasonal-pricing/${pricingId}`);
     return response.data;
   }
+
+  // Analytics
+  async getPropertyAnalytics(propertyId) {
+    const response = await api.get(`/owner/properties/${propertyId}/analytics`);
+    return response.data;
+  }
+
+  async getRevenueAnalytics(propertyId, period = '30days') {
+    const response = await api.get(`/owner/properties/${propertyId}/analytics/revenue?period=${period}`);
+    return response.data;
+  }
+
+  async getBookingAnalytics(propertyId, period = '30days') {
+    const response = await api.get(`/owner/properties/${propertyId}/analytics/bookings?period=${period}`);
+    return response.data;
+  }
+
+  async getOccupancyAnalytics(propertyId, period = '30days') {
+    const response = await api.get(`/owner/properties/${propertyId}/analytics/occupancy?period=${period}`);
+    return response.data;
+  }
 }
 
-export const propertyOwnerService = new PropertyOwnerService(); 
+export const propertyOwnerService = new PropertyOwnerService();

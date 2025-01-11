@@ -76,14 +76,19 @@ export const PropertyDashboard = () => {
       </div>
 
       {/* Tabs for different sections */}
-      <Tabs defaultValue="calendar" className="w-full">
-        <TabsList className="grid grid-cols-5 gap-4">
+      <Tabs defaultValue="analytics" className="w-full">
+        <TabsList className="grid grid-cols-6 gap-4">
+          <TabsTrigger value="analytics" className="bg-white">Analytics</TabsTrigger>
           <TabsTrigger value="calendar">Calendar</TabsTrigger>
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
           <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
           <TabsTrigger value="messages">Messages</TabsTrigger>
           <TabsTrigger value="finances">Finances</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="analytics" className="mt-6">
+          <AnalyticsSection selectedProperty={property} />
+        </TabsContent>
 
         <TabsContent value="calendar">
           <CalendarSection selectedProperty={property} />

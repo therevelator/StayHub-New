@@ -1,5 +1,5 @@
 import { findPropertiesInRadius, getPropertyDetails, getPropertyById as getProperty, updateProperty as update, deleteProperty } from '../models/property.model.js';
-import { createRoom, getRoomsByPropertyId } from '../models/room.model.js';
+import { createRoom as createRoomModel, getRoomsByPropertyId } from '../models/room.model.js';
 import axios from 'axios';
 import db from '../db/index.js';
 
@@ -46,6 +46,43 @@ const searchProperties = async (req, res) => {
     const { location, guests = 1, type, lat, lon, radius = 25 } = req.query;
     console.log('Search params:', { location, guests, type, lat, lon, radius });
 
+    // Debug query to check available properties without distance filter
+    const basicQuery = `
+      SELECT id, guests, property_type, city, country, latitude, longitude
+      FROM properties p
+      WHERE is_active = 1 
+      AND guests >= ?
+    `;
+    const [basicProperties] = await db.query(basicQuery, [parseInt(guests)]);
+    console.log('Properties before distance filter:', basicProperties);
+
+    // Debug distance calculations
+    const distanceQuery = `
+      SELECT 
+        id, 
+        guests, 
+        property_type, 
+        city, 
+        country,
+        latitude,
+        longitude,
+        ST_Distance_Sphere(
+          point(longitude, latitude),
+          point(?, ?)
+        ) * 0.001 as distance_km
+      FROM properties
+      WHERE is_active = 1 
+      AND guests >= ?
+      ORDER BY distance_km ASC
+    `;
+    const [propertiesWithDistance] = await db.query(distanceQuery, [
+      parseFloat(lon), 
+      parseFloat(lat), 
+      parseInt(guests)
+    ]);
+    console.log('Properties with distances:', propertiesWithDistance);
+
+    // Main search query
     let query = `
       SELECT 
         p.*,
@@ -76,9 +113,14 @@ const searchProperties = async (req, res) => {
           FROM rooms r
           WHERE r.property_id = p.id
         ) as rooms,
+        (
+          SELECT COALESCE(SUM(r.max_occupancy), 0)
+          FROM rooms r
+          WHERE r.property_id = p.id
+        ) as total_max_occupancy,
     `;
 
-    // Add distance calculation when coordinates are provided
+    // Add distance calculation
     if (lat && lon) {
       query += `
         ST_Distance_Sphere(
@@ -101,7 +143,7 @@ const searchProperties = async (req, res) => {
     }
 
     if (guests) {
-      query += ' AND p.guests >= ?';
+      query += ' AND (SELECT COALESCE(SUM(r.max_occupancy), 0) FROM rooms r WHERE r.property_id = p.id) >= ?';
       queryParams.push(parseInt(guests));
     }
 
@@ -110,23 +152,22 @@ const searchProperties = async (req, res) => {
       queryParams.push(type);
     }
 
-    if (location) {
+    if (location && location !== 'Current Location') {
       query += ' AND (LOWER(p.city) LIKE ? OR LOWER(p.country) LIKE ? OR LOWER(p.state) LIKE ?)';
       const searchLocation = `%${location.toLowerCase()}%`;
       queryParams.push(searchLocation, searchLocation, searchLocation);
     }
 
-    // When coordinates are provided, filter by radius and order by distance
+    // When coordinates are provided, filter by radius
     if (lat && lon) {
-      query += ` HAVING distance_km <= ?
-                ORDER BY distance_km ASC`;
+      query += ` HAVING distance_km <= ?`;
       queryParams.push(parseFloat(radius));
+      query += ` ORDER BY distance_km ASC`;
     } else {
-      // Default ordering
       query += ' ORDER BY p.created_at DESC';
     }
 
-    console.log('Executing query:', { query, params: queryParams });
+    console.log('Final search query:', { query, params: queryParams });
 
     const [properties] = await db.query(query, queryParams);
     console.log(`Found ${properties.length} properties`);
@@ -720,7 +761,7 @@ export const getPropertyById = async (req, res) => {
       WHERE p.id = ? AND p.host_id = ?
     `;
 
-    const [properties] = await db.query(query, [userId, id, userId]);
+    const [properties] = await db.query(query, [userId, id]);
 
     if (properties.length === 0) {
       return res.status(404).json({
@@ -885,7 +926,6 @@ export const getOwnerProperties = async (req, res) => {
   }
 };
 
-// Get property bookings with details
 export const getPropertyBookings = async (req, res) => {
   try {
     const { propertyId } = req.params;
@@ -924,7 +964,6 @@ export const getPropertyBookings = async (req, res) => {
   }
 };
 
-// Update booking status
 export const updateBookingStatus = async (req, res) => {
   try {
     const { bookingId } = req.params;
@@ -960,10 +999,113 @@ export const updateBookingStatus = async (req, res) => {
   }
 };
 
+// Update total max occupancy after room changes
+const updatePropertyMaxOccupancy = async (propertyId) => {
+  const query = `
+    UPDATE properties p
+    SET p.guests = (
+      SELECT COALESCE(SUM(r.max_occupancy), 0)
+      FROM rooms r
+      WHERE r.property_id = ?
+    )
+    WHERE p.id = ?
+  `;
+  await db.query(query, [propertyId, propertyId]);
+};
+
+// Create a new room
+const createRoom = async (req, res) => {
+  const { propertyId } = req.params;
+  const roomData = req.body;
+
+  try {
+    const [result] = await db.query(
+      'INSERT INTO rooms SET ?',
+      { ...roomData, property_id: propertyId }
+    );
+
+    // Update the property's total max occupancy
+    await updatePropertyMaxOccupancy(propertyId);
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        id: result.insertId,
+        ...roomData
+      }
+    });
+  } catch (error) {
+    console.error('Error creating room:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to create room'
+    });
+  }
+};
+
+// Update a room
+const updateRoom = async (req, res) => {
+  const { propertyId, roomId } = req.params;
+  const roomData = req.body;
+
+  try {
+    await db.query(
+      'UPDATE rooms SET ? WHERE id = ? AND property_id = ?',
+      [roomData, roomId, propertyId]
+    );
+
+    // Update the property's total max occupancy
+    await updatePropertyMaxOccupancy(propertyId);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        id: roomId,
+        ...roomData
+      }
+    });
+  } catch (error) {
+    console.error('Error updating room:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to update room'
+    });
+  }
+};
+
+// Delete a room
+const deleteRoom = async (req, res) => {
+  const { propertyId, roomId } = req.params;
+
+  try {
+    await db.query(
+      'DELETE FROM rooms WHERE id = ? AND property_id = ?',
+      [roomId, propertyId]
+    );
+
+    // Update the property's total max occupancy
+    await updatePropertyMaxOccupancy(propertyId);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Room deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting room:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to delete room'
+    });
+  }
+};
+
 export { 
   searchProperties, 
   getPropertyDetailsById, 
   updatePropertyById, 
   deletePropertyById,
-  createNewProperty
+  createNewProperty,
+  createRoom,
+  updateRoom,
+  deleteRoom
 };

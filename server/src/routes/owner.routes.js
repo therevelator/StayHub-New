@@ -4,6 +4,7 @@ import * as calendarController from '../controllers/calendar.controller.js';
 import * as maintenanceController from '../controllers/maintenance.controller.js';
 import * as messageController from '../controllers/message.controller.js';
 import * as financialController from '../controllers/financial.controller.js';
+import * as analyticsController from '../controllers/analytics.controller.js';
 import { getOwnerProperties, getPropertyBookings, updateBookingStatus } from '../controllers/property.controller.js';
 
 const router = express.Router();
@@ -15,6 +16,12 @@ router.use(authenticateToken);
 router.get('/properties', getOwnerProperties);
 router.get('/properties/:propertyId/bookings', checkPropertyOwnership, getPropertyBookings);
 router.patch('/bookings/:bookingId/status', updateBookingStatus);
+
+// Analytics Routes
+router.get('/properties/:propertyId/analytics', checkPropertyOwnership, analyticsController.getPropertyAnalytics);
+router.get('/properties/:propertyId/analytics/revenue', checkPropertyOwnership, analyticsController.getRevenueAnalytics);
+router.get('/properties/:propertyId/analytics/bookings', checkPropertyOwnership, analyticsController.getBookingAnalytics);
+router.get('/properties/:propertyId/analytics/occupancy', checkPropertyOwnership, analyticsController.getOccupancyAnalytics);
 
 // Calendar Management Routes
 router.get('/properties/:propertyId/blocked-dates', checkPropertyOwnership, calendarController.getBlockedDates);

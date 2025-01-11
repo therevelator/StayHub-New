@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapPinIcon } from '@heroicons/react/24/outline';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import axios from 'axios';
 import 'leaflet/dist/leaflet.css';
 
 // Fix Leaflet default icon issue
@@ -41,12 +42,62 @@ const LocationForm = ({ data = {}, onChange }) => {
     data.longitude || -0.09
   ]);
 
+  const fetchPostalCode = async () => {
+    // Only fetch if postal code is empty and other address details are present
+    if (!data.postalCode && data.street && data.city && data.country) {
+      try {
+        const fullAddress = `${data.street}, ${data.city}, ${data.country}`;
+        const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+          params: {
+            format: 'json',
+            street: data.street,
+            city: data.city,
+            country: data.country,
+            addressdetails: 1
+          },
+          headers: {
+            'User-Agent': 'StayHub Property Listing App'
+          }
+        });
+
+        if (response.data && response.data.length > 0) {
+          const address = response.data[0].address;
+          const postalCode = address.postcode || address.zip;
+          
+          if (postalCode) {
+            onChange({
+              ...data,
+              postalCode,
+              latitude: parseFloat(response.data[0].lat),
+              longitude: parseFloat(response.data[0].lon)
+            });
+
+            // Update map center
+            setMapCenter([
+              parseFloat(response.data[0].lat),
+              parseFloat(response.data[0].lon)
+            ]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching postal code:', error);
+      }
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    onChange({
+    const updatedData = {
       ...data,
       [name]: value
-    });
+    };
+    
+    onChange(updatedData);
+
+    // Trigger postal code fetch after a short delay
+    if (name !== 'postalCode') {
+      setTimeout(fetchPostalCode, 500);
+    }
   };
 
   const handleMapPositionChange = ([lat, lng]) => {
@@ -137,7 +188,7 @@ const LocationForm = ({ data = {}, onChange }) => {
 
           <div>
             <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700">
-              Postal Code
+              Postal Code <span className="text-gray-500 text-sm">(Optional)</span>
             </label>
             <input
               type="text"
@@ -146,7 +197,7 @@ const LocationForm = ({ data = {}, onChange }) => {
               value={data.postalCode || ''}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 focus:ring-primary-500 focus:border-primary-500"
-              required
+              placeholder="Enter postal code if known"
             />
           </div>
         </div>

@@ -5,6 +5,7 @@ import { propertyOwnerService } from '../../services/propertyOwnerService';
 import { Tab } from '@headlessui/react';
 import RoomsList from '../Admin/EditProperty/components/RoomsList';
 import { toast } from 'react-hot-toast';
+import { AnalyticsSection } from '../../components/OwnerDashboard/AnalyticsSection';
 
 const PropertyView = () => {
   const { propertyId } = useParams();
@@ -445,98 +446,7 @@ const PropertyView = () => {
           <Tab.Panel>
             <div className="bg-white rounded-lg shadow-lg overflow-hidden">
               <div className="p-6">
-                <h2 className="text-xl font-semibold mb-6">Analytics Overview</h2>
-                
-                {/* Key Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                  <div className="bg-indigo-50 p-4 rounded-lg">
-                    <p className="text-sm text-indigo-600">Occupancy Rate</p>
-                    <p className="text-2xl font-bold text-indigo-700">
-                      {calculateOccupancyRate()}%
-                    </p>
-                  </div>
-                  <div className="bg-pink-50 p-4 rounded-lg">
-                    <p className="text-sm text-pink-600">Average Length of Stay</p>
-                    <p className="text-2xl font-bold text-pink-700">
-                      {calculateAverageLengthOfStay()} days
-                    </p>
-                  </div>
-                  <div className="bg-amber-50 p-4 rounded-lg">
-                    <p className="text-sm text-amber-600">Booking Conversion Rate</p>
-                    <p className="text-2xl font-bold text-amber-700">
-                      {calculateBookingConversionRate()}%
-                    </p>
-                  </div>
-                  <div className="bg-emerald-50 p-4 rounded-lg">
-                    <p className="text-sm text-emerald-600">Revenue per Room</p>
-                    <p className="text-2xl font-bold text-emerald-700">
-                      ${calculateRevenuePerRoom()}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Booking Distribution */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div className="border rounded-lg p-4">
-                    <h3 className="text-lg font-semibold mb-4">Booking Status Distribution</h3>
-                    <div className="space-y-2">
-                      {calculateBookingDistribution().map(({ status, count, percentage }) => (
-                        <div key={status} className="flex items-center">
-                          <div className="w-32 text-sm text-gray-600">{status}</div>
-                          <div className="flex-1">
-                            <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full ${
-                                  status === 'confirmed' ? 'bg-green-500' :
-                                  status === 'pending' ? 'bg-yellow-500' :
-                                  'bg-red-500'
-                                }`}
-                                style={{ width: `${percentage}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div className="w-20 text-right text-sm text-gray-600">
-                            {count} ({percentage}%)
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="border rounded-lg p-4">
-                    <h3 className="text-lg font-semibold mb-4">Room Type Performance</h3>
-                    <div className="space-y-2">
-                      {calculateRoomTypePerformance().map(({ type, bookings, revenue }) => (
-                        <div key={type} className="flex items-center justify-between">
-                          <div className="text-sm text-gray-600">{type}</div>
-                          <div className="text-sm">
-                            <span className="text-gray-600">{bookings} bookings</span>
-                            <span className="mx-2">•</span>
-                            <span className="text-green-600">${revenue}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Monthly Trends */}
-                <div className="border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold mb-4">Monthly Revenue Trend</h3>
-                  <div className="h-64">
-                    {calculateMonthlyRevenue().map(({ month, revenue }) => (
-                      <div key={month} className="flex items-end h-full">
-                        <div 
-                          className="w-1/12 bg-blue-500 rounded-t"
-                          style={{ height: `${(revenue / calculateMaxMonthlyRevenue()) * 100}%` }}
-                        >
-                          <div className="text-xs text-center mt-2">{month}</div>
-                          <div className="text-xs text-center">${revenue}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <AnalyticsSection selectedProperty={property} />
               </div>
             </div>
           </Tab.Panel>
