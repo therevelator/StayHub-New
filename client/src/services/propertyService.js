@@ -1,7 +1,8 @@
 import api from './api';
+import { uploadMultipleImages } from './imageService';
 
 const propertyService = {
-  create: async (data) => {
+  create: async (data, images) => {
     console.log('PropertyService: Creating property with data:', data);
     
     // Format the data to match the expected structure
@@ -36,6 +37,16 @@ const propertyService = {
       })) || []
     };
 
+    // Upload images
+    const uploadedImages = images.length > 0 ? await uploadMultipleImages(images) : [];
+
+    // Add image URLs to property data
+    propertyData.images = uploadedImages.map(img => ({
+      url: img.url,
+      thumbnail: img.thumbnail,
+      delete_url: img.delete_url
+    }));
+
     console.log('PropertyService: Formatted data:', propertyData);
     
     try {
@@ -46,7 +57,7 @@ const propertyService = {
       throw error;
     }
   },
-  update: async (id, data) => {
+  update: async (id, data, images) => {
     console.log('[PropertyService] Update called with ID:', id);
     console.log('[PropertyService] Raw update data:', data);
     
@@ -97,7 +108,17 @@ const propertyService = {
         );
       }
     }
-    
+
+    // Upload images
+    const uploadedImages = images.length > 0 ? await uploadMultipleImages(images) : [];
+
+    // Add image URLs to property data
+    propertyData.images = uploadedImages.map(img => ({
+      url: img.url,
+      thumbnail: img.thumbnail,
+      delete_url: img.delete_url
+    }));
+
     console.log('[PropertyService] Formatted update data:', propertyData);
     console.log('[PropertyService] Making PUT request to:', `/properties/${id}`);
     
@@ -174,16 +195,29 @@ const propertyService = {
     }
   },
   updateStatus: (id, status) => api.patch(`/properties/${id}/status`, { status }),
-  createRoom: async (propertyId, roomData) => {
+  createRoom: async (propertyId, roomData, images = []) => {
     console.log('[PropertyService] Creating room with data:', roomData);
     try {
-      const formattedData = {
+      // Upload room images if they exist
+      const uploadedImages = images && images.length > 0 ? await uploadMultipleImages(images) : [];
+
+      // Add image URLs to room data and ensure proper JSON stringification
+      const roomWithImages = {
         ...roomData,
         property_id: propertyId,
-        beds: JSON.stringify(roomData.beds || []),
-        amenities: JSON.stringify(roomData.amenities || [])
+        beds: Array.isArray(roomData.beds) ? JSON.stringify(roomData.beds) : '[]',
+        amenities: Array.isArray(roomData.amenities) ? JSON.stringify(roomData.amenities) : '[]',
+        accessibility_features: Array.isArray(roomData.accessibility_features) ? JSON.stringify(roomData.accessibility_features) : '[]',
+        climate: roomData.climate ? JSON.stringify(roomData.climate) : 'null',
+        images: JSON.stringify(uploadedImages.map(img => ({
+          url: img.url,
+          thumbnail: img.thumbnail,
+          delete_url: img.delete_url
+        }))),
+        energy_saving_features: Array.isArray(roomData.energy_saving_features) ? JSON.stringify(roomData.energy_saving_features) : '[]'
       };
-      const response = await api.post(`/properties/${propertyId}/rooms`, formattedData);
+
+      const response = await api.post(`/properties/${propertyId}/rooms`, roomWithImages);
       return response.data;
     } catch (error) {
       console.error('[PropertyService] Error creating room:', error);
@@ -219,7 +253,7 @@ const propertyService = {
       throw error;
     }
   },
-  updateRoom: async (propertyId, roomId, roomData) => {
+  updateRoom: async (propertyId, roomId, roomData, images) => {
     console.log('[PropertyService] Updating room with data:', roomData);
     try {
       // Format the data to match the expected structure
@@ -230,6 +264,16 @@ const propertyService = {
         beds: typeof roomData.beds === 'string' ? roomData.beds : JSON.stringify(roomData.beds || []),
         amenities: typeof roomData.amenities === 'string' ? roomData.amenities : JSON.stringify(roomData.amenities || [])
       };
+
+      // Upload room images
+      const uploadedImages = images.length > 0 ? await uploadMultipleImages(images) : [];
+
+      // Add image URLs to room data
+      formattedData.images = uploadedImages.map(img => ({
+        url: img.url,
+        thumbnail: img.thumbnail,
+        delete_url: img.delete_url
+      }));
 
       console.log('[PropertyService] Sending formatted data:', formattedData);
       const response = await api.put(`/properties/${propertyId}/rooms/${roomId}`, formattedData);
@@ -297,6 +341,38 @@ const propertyService = {
       return response.data;
     } catch (error) {
       console.error('PropertyService: Error updating photo caption:', error);
+      throw error;
+    }
+  },
+  updatePropertyImages: async (propertyId, images) => {
+    try {
+      const uploadedImages = await uploadMultipleImages(images);
+      const response = await api.post(`/properties/${propertyId}/images`, {
+        images: uploadedImages.map(img => ({
+          url: img.url,
+          thumbnail: img.thumbnail,
+          delete_url: img.delete_url
+        }))
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating property images:', error);
+      throw error;
+    }
+  },
+  updateRoomImages: async (propertyId, roomId, images) => {
+    try {
+      const uploadedImages = await uploadMultipleImages(images);
+      const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/images`, {
+        images: uploadedImages.map(img => ({
+          url: img.url,
+          thumbnail: img.thumbnail,
+          delete_url: img.delete_url
+        }))
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating room images:', error);
       throw error;
     }
   }

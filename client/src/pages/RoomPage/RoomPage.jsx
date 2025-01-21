@@ -8,39 +8,46 @@ import 'react-calendar/dist/Calendar.css';
 import { format, addDays } from 'date-fns';
 
 const RoomPage = () => {
-  const { propertyId, roomId } = useParams();
-  const [availableDates, setAvailableDates] = useState([]);
-  const [bookingDates, setBookingDates] = useState([]);
+  const { roomId, propertyId } = useParams();
+  const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [room, setRoom] = useState(null);
-  const [specialRequests, setSpecialRequests] = useState('');
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [availableDates, setAvailableDates] = useState([]);
+  const [bookingDates, setBookingDates] = useState([]);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [checkInDate, setCheckInDate] = useState(null);
   const [checkOutDate, setCheckOutDate] = useState(null);
   const [hoveredDate, setHoveredDate] = useState(null);
+  const [specialRequests, setSpecialRequests] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
     const fetchRoomAndAvailability = async () => {
       try {
         const [roomResponse, availabilityResponse] = await Promise.all([
-          api.get(`/properties/rooms/${roomId}`),
-          api.get(`/properties/rooms/${roomId}/availability`)
+          api.get(`/properties/${propertyId}/rooms/${roomId}`),
+          api.get(`/properties/${propertyId}/rooms/${roomId}/availability`)
         ]);
 
-        setRoom(roomResponse.data.data);
+        if (!roomResponse.data) {
+          throw new Error('Room data not found');
+        }
+
+        setRoom(roomResponse.data);
         setAvailableDates(availabilityResponse.data.availableDates || []);
         setBookingDates(availabilityResponse.data.bookingDates || []);
       } catch (error) {
         console.error('Error fetching data:', error);
-        setError('Failed to fetch room details');
+        setError(error.response?.data?.message || 'Failed to fetch room details');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchRoomAndAvailability();
-  }, [roomId]);
+    if (propertyId && roomId) {
+      fetchRoomAndAvailability();
+    }
+  }, [propertyId, roomId]);
 
   const handleDateChange = (date) => {
     if (!checkInDate || (checkInDate && checkOutDate)) {
@@ -116,7 +123,7 @@ const RoomPage = () => {
         termsAccepted,
       };
 
-      const response = await api.post(`/properties/rooms/${roomId}/book`, bookingData);
+      const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/book`, bookingData);
       alert('Booking successful!');
     } catch (error) {
       console.error('Error booking the room:', error);

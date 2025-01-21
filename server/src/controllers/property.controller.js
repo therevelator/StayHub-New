@@ -257,166 +257,127 @@ const getPropertyDetailsById = async (req, res) => {
 };
 
 const createNewProperty = async (req, res) => {
-  const connection = await db.getConnection();
+  const { userId } = req;
+  const propertyData = req.body;
+
   try {
+    // Start a transaction
+    const connection = await db.getConnection();
     await connection.beginTransaction();
-    
-    console.log('Creating property with data:', req.body); // Debug log
-    const { photos, rooms, ...propertyData } = req.body;
 
-    // Add created_at and updated_at
-    propertyData.created_at = new Date();
-    propertyData.updated_at = new Date();
-    
-    console.log('Property data to insert:', propertyData); // Debug log
-    
-    // Insert property
-    const [result] = await connection.query(
-      'INSERT INTO properties SET ?',
-      [propertyData]
-    );
-    
-    console.log('Property insert result:', result); // Debug log
-    const propertyId = result.insertId;
-
-    // Insert photos if they exist
-    if (photos && photos.length > 0) {
-      console.log('Photos to insert:', photos); // Debug log
-      
-      const photoValues = photos.map(photo => [
-        propertyId,
-        photo.url,
-        photo.caption || null
-      ]);
-
-      console.log('Photo values to insert:', photoValues); // Debug log
-
-      await connection.query(
-        'INSERT INTO property_images (property_id, url, caption) VALUES ?',
-        [photoValues]
-      );
-    }
-
-    // Insert rooms if they exist
-    if (rooms && rooms.length > 0) {
-      console.log('Rooms to insert:', rooms); // Debug log
-
-      for (const room of rooms) {
-        const roomData = {
-          property_id: propertyId,
-          name: room.name,
-          room_type: room.room_type,
-          bed_type: room.bed_type,
-          beds: room.beds,
-          max_occupancy: room.max_occupancy,
-          base_price: room.base_price,
-          cleaning_fee: room.cleaning_fee,
-          service_fee: room.service_fee,
-          tax_rate: room.tax_rate,
-          security_deposit: room.security_deposit,
-          description: room.description,
-          bathroom_type: room.bathroom_type,
-          view_type: room.view_type,
-          has_private_bathroom: room.has_private_bathroom,
-          smoking: room.smoking,
-          accessibility_features: room.accessibility_features,
-          floor_level: room.floor_level,
-          has_balcony: room.has_balcony,
-          has_kitchen: room.has_kitchen,
-          has_minibar: room.has_minibar,
-          climate: room.climate,
-          price_per_night: room.price_per_night,
-          cancellation_policy: room.cancellation_policy,
-          includes_breakfast: room.includes_breakfast,
-          extra_bed_available: room.extra_bed_available,
-          pets_allowed: room.pets_allowed,
-          images: room.images,
-          cleaning_frequency: room.cleaning_frequency,
-          has_toiletries: room.has_toiletries,
-          has_towels_linens: room.has_towels_linens,
-          has_room_service: room.has_room_service,
-          flooring_type: room.flooring_type,
-          energy_saving_features: room.energy_saving_features,
-          status: room.status || 'available',
-          room_size: room.room_size,
-          amenities: room.amenities,
+    try {
+      // Insert property
+      const [propertyResult] = await connection.query(
+        'INSERT INTO properties SET ?',
+        {
+          ...propertyData,
+          host_id: userId,
+          is_active: true,
           created_at: new Date(),
           updated_at: new Date()
-        };
+        }
+      );
 
-        await connection.query('INSERT INTO rooms SET ?', [roomData]);
+      const propertyId = propertyResult.insertId;
+
+      // Insert images if provided
+      if (propertyData.images && propertyData.images.length > 0) {
+        const imageValues = propertyData.images.map(image => [
+          propertyId,
+          image.url,
+          image.thumbnail,
+          image.delete_url
+        ]);
+
+        await connection.query(
+          'INSERT INTO property_images (property_id, url, thumbnail_url, delete_url) VALUES ?',
+          [imageValues]
+        );
       }
+
+      // Commit transaction
+      await connection.commit();
+      
+      res.status(201).json({
+        status: 'success',
+        data: {
+          id: propertyId,
+          ...propertyData
+        }
+      });
+    } catch (error) {
+      // Rollback in case of error
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
-
-    await connection.commit();
-    
-    // Get the created property with photos and rooms
-    const [createdProperty] = await connection.query(
-      `SELECT p.*, 
-        (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', pi.id, 'url', pi.url, 'caption', pi.caption))
-         FROM property_images pi 
-         WHERE pi.property_id = p.id) as photos,
-        (SELECT JSON_ARRAYAGG(
-          JSON_OBJECT(
-            'id', r.id,
-            'name', r.name,
-            'room_type', r.room_type,
-            'bed_type', r.bed_type,
-            'beds', r.beds,
-            'max_occupancy', r.max_occupancy,
-            'base_price', r.base_price,
-            'cleaning_fee', r.cleaning_fee,
-            'service_fee', r.service_fee,
-            'tax_rate', r.tax_rate,
-            'security_deposit', r.security_deposit,
-            'description', r.description,
-            'bathroom_type', r.bathroom_type,
-            'view_type', r.view_type,
-            'has_private_bathroom', r.has_private_bathroom,
-            'smoking', r.smoking,
-            'accessibility_features', r.accessibility_features,
-            'floor_level', r.floor_level,
-            'has_balcony', r.has_balcony,
-            'has_kitchen', r.has_kitchen,
-            'has_minibar', r.has_minibar,
-            'climate', r.climate,
-            'price_per_night', r.price_per_night,
-            'cancellation_policy', r.cancellation_policy,
-            'includes_breakfast', r.includes_breakfast,
-            'extra_bed_available', r.extra_bed_available,
-            'pets_allowed', r.pets_allowed,
-            'images', r.images,
-            'cleaning_frequency', r.cleaning_frequency,
-            'has_toiletries', r.has_toiletries,
-            'has_towels_linens', r.has_towels_linens,
-            'has_room_service', r.has_room_service,
-            'flooring_type', r.flooring_type,
-            'energy_saving_features', r.energy_saving_features,
-            'status', r.status,
-            'room_size', r.room_size,
-            'amenities', r.amenities
-          )
-         ) FROM rooms r 
-         WHERE r.property_id = p.id) as rooms
-       FROM properties p
-       WHERE p.id = ?`,
-      [propertyId]
-    );
-
-    res.status(201).json({
-      status: 'success',
-      data: createdProperty[0]
-    });
   } catch (error) {
-    await connection.rollback();
     console.error('Error creating property:', error);
     res.status(500).json({
       status: 'error',
-      message: error.message,
-      details: error.stack // Include stack trace for debugging
+      message: 'Failed to create property'
     });
-  } finally {
-    connection.release();
+  }
+};
+
+const addPropertyImages = async (req, res) => {
+  const { propertyId } = req.params;
+  const { images } = req.body;
+
+  try {
+    const imageValues = images.map(image => [
+      propertyId,
+      image.url,
+      image.thumbnail,
+      image.delete_url
+    ]);
+
+    await db.query(
+      'INSERT INTO property_images (property_id, url, thumbnail_url, delete_url) VALUES ?',
+      [imageValues]
+    );
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Images added successfully'
+    });
+  } catch (error) {
+    console.error('Error adding property images:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to add images'
+    });
+  }
+};
+
+const addRoomImages = async (req, res) => {
+  const { propertyId, roomId } = req.params;
+  const { images } = req.body;
+
+  try {
+    const imageValues = images.map(image => [
+      roomId,
+      image.url,
+      image.thumbnail,
+      image.delete_url
+    ]);
+
+    await db.query(
+      'INSERT INTO room_images (room_id, url, thumbnail_url, delete_url) VALUES ?',
+      [imageValues]
+    );
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Images added successfully'
+    });
+  } catch (error) {
+    console.error('Error adding room images:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to add images'
+    });
   }
 };
 
@@ -821,11 +782,12 @@ export const updateProperty = async (req, res) => {
         const photoValues = photos.map(photo => [
           propertyId,
           photo.url,
-          photo.caption || null
+          photo.thumbnail,
+          photo.delete_url
         ]);
 
         await connection.query(
-          'INSERT INTO property_images (property_id, url, caption) VALUES ?',
+          'INSERT INTO property_images (property_id, url, thumbnail_url, delete_url) VALUES ?',
           [photoValues]
         );
       }
@@ -1107,5 +1069,7 @@ export {
   createNewProperty,
   createRoom,
   updateRoom,
-  deleteRoom
+  deleteRoom,
+  addPropertyImages,
+  addRoomImages
 };

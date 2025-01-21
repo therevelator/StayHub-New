@@ -116,12 +116,12 @@ export const createRoom = async (propertyId, roomData) => {
     // Parse JSON fields in the response
     const formattedRoom = {
       ...createdRoom[0],
-      beds: JSON.parse(createdRoom[0].beds || '[]'),
-      amenities: JSON.parse(createdRoom[0].amenities || '[]'),
-      accessibility_features: JSON.parse(createdRoom[0].accessibility_features || '[]'),
-      climate: JSON.parse(createdRoom[0].climate || 'null'),
-      images: JSON.parse(createdRoom[0].images || '[]'),
-      energy_saving_features: JSON.parse(createdRoom[0].energy_saving_features || '[]')
+      beds: createdRoom[0].beds ? JSON.parse(createdRoom[0].beds) : [],
+      amenities: createdRoom[0].amenities ? JSON.parse(createdRoom[0].amenities) : [],
+      accessibility_features: createdRoom[0].accessibility_features ? JSON.parse(createdRoom[0].accessibility_features) : [],
+      climate: createdRoom[0].climate ? JSON.parse(createdRoom[0].climate) : null,
+      images: createdRoom[0].images ? JSON.parse(createdRoom[0].images) : [],
+      energy_saving_features: createdRoom[0].energy_saving_features ? JSON.parse(createdRoom[0].energy_saving_features) : []
     };
 
     return formattedRoom;
@@ -253,12 +253,12 @@ export const updateRoom = async (roomId, roomData) => {
     // Parse JSON fields in the response
     const formattedRoom = {
       ...updatedRoom[0],
-      beds: JSON.parse(updatedRoom[0].beds || '[]'),
-      amenities: JSON.parse(updatedRoom[0].amenities || '[]'),
-      accessibility_features: JSON.parse(updatedRoom[0].accessibility_features || '[]'),
-      climate: JSON.parse(updatedRoom[0].climate || 'null'),
-      images: JSON.parse(updatedRoom[0].images || '[]'),
-      energy_saving_features: JSON.parse(updatedRoom[0].energy_saving_features || '[]')
+      beds: updatedRoom[0].beds ? JSON.parse(updatedRoom[0].beds) : [],
+      amenities: updatedRoom[0].amenities ? JSON.parse(updatedRoom[0].amenities) : [],
+      accessibility_features: updatedRoom[0].accessibility_features ? JSON.parse(updatedRoom[0].accessibility_features) : [],
+      climate: updatedRoom[0].climate ? JSON.parse(updatedRoom[0].climate) : null,
+      images: updatedRoom[0].images ? JSON.parse(updatedRoom[0].images) : [],
+      energy_saving_features: updatedRoom[0].energy_saving_features ? JSON.parse(updatedRoom[0].energy_saving_features) : []
     };
 
     return formattedRoom;
