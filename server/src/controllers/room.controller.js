@@ -2,6 +2,7 @@ import db from '../db/index.js';
 import * as propertyModel from '../models/property.model.js';
 import * as roomModel from '../models/room.model.js';
 import { v4 as uuidv4 } from 'uuid';
+import { format } from 'date-fns';
 
 export const createRoom = async (req, res) => {
   try {
@@ -157,87 +158,55 @@ export const getRoom = async (req, res) => {
 
 export const getRoomAvailability = async (req, res) => {
   try {
-    const { roomId } = req.params;
+    const { propertyId, roomId } = req.params;
     console.log('Checking availability for roomId:', roomId);
     
-    const room = await getRoomHelper(roomId);
-    if (!room) {
+    // Get room details including default price
+    const [rooms] = await db.query(
+      'SELECT id, price_per_night FROM rooms WHERE id = ? AND property_id = ?',
+      [roomId, propertyId]
+    );
+
+    if (rooms.length === 0) {
       console.log('Room not found:', roomId);
       return res.status(404).json({
         status: 'error',
-        message: 'Room not found'
+        message: 'Room not found or does not belong to this property'
       });
     }
+
+    const defaultPrice = rooms[0].price_per_night;
     
-    // Get all confirmed bookings for this room
-    const [bookings] = await db.query(`
+    // Get all availability records for this room
+    const [availability] = await db.query(`
       SELECT 
-        DATE(check_in_date) as check_in_date, 
-        DATE(check_out_date) as check_out_date,
-        status 
-      FROM bookings 
+        DATE(date) as date,
+        status,
+        price
+      FROM room_availability 
       WHERE room_id = ? 
-      AND status = 'confirmed'
-      AND check_out_date >= CURDATE()
+      AND date >= CURDATE()
     `, [roomId]);
 
-    console.log('Found bookings:', bookings);
+    console.log('Found availability records:', availability);
 
-    const bookingDates = new Set();
-
-    // Mark all dates between check-in and check-out as booked
-    bookings.forEach(booking => {
-      // Create new Date objects from the database dates
-      const checkInDate = new Date(booking.check_in_date);
-      const checkOutDate = new Date(booking.check_out_date);
-
-      console.log('Processing booking:', {
-        checkIn: checkInDate.toISOString().split('T')[0],
-        checkOut: checkOutDate.toISOString().split('T')[0]
-      });
-
-      // Add dates from check-in up to (but not including) check-out
-      let currentDate = new Date(checkInDate);
-      while (currentDate < checkOutDate) {
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        const dateString = `${year}-${month}-${day}`;
-        
-        bookingDates.add(dateString);
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
+    // Convert to object with dates as keys
+    const availabilityMap = {};
+    availability.forEach(record => {
+      const dateStr = format(new Date(record.date), 'yyyy-MM-dd');
+      availabilityMap[dateStr] = {
+        is_available: record.status === 'available',
+        price: parseFloat(record.price) || defaultPrice
+      };
     });
 
-    const bookedDates = Array.from(bookingDates).sort();
-    console.log('Booked dates:', bookedDates);
-
-    // Generate available dates (next 90 days)
-    const availableDates = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    for (let i = 0; i < 90; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const dateString = `${year}-${month}-${day}`;
-      
-      if (!bookingDates.has(dateString)) {
-        availableDates.push(dateString);
-      }
-    }
-
-    const response = {
+    res.json({
       status: 'success',
-      availableDates,
-      bookingDates: bookedDates
-    };
-
-    console.log('Sending response:', response);
-    res.json(response);
+      data: {
+        default_price: defaultPrice,
+        availability: availabilityMap
+      }
+    });
 
   } catch (error) {
     console.error('Error getting room availability:', error);
@@ -438,10 +407,10 @@ export const createBooking = async (req, res) => {
     }
     
     const userId = req.user.id;
-    console.log('Creating booking for user:', userId); // Debug log
+    console.log('Creating booking for user:', userId);
 
-    // Get room details to calculate total price
-    const [rooms] = await db.query('SELECT base_price FROM rooms WHERE id = ?', [roomId]);
+    // Get room details to get default price
+    const [rooms] = await db.query('SELECT id, price_per_night FROM rooms WHERE id = ?', [roomId]);
     if (rooms.length === 0) {
       return res.status(404).json({
         status: 'error',
@@ -450,14 +419,45 @@ export const createBooking = async (req, res) => {
     }
 
     const room = rooms[0];
+    const defaultPrice = room.price_per_night;
     
     // Calculate number of nights
     const startDate = new Date(checkInDate);
     const endDate = new Date(checkOutDate);
     const numberOfNights = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+
+    // Get custom prices for the date range
+    const [customPrices] = await db.query(`
+      SELECT date, price 
+      FROM room_availability 
+      WHERE room_id = ? 
+      AND date >= ? 
+      AND date < ?
+      AND status = 'available'
+    `, [roomId, checkInDate, checkOutDate]);
+
+    // Create a map of custom prices by date
+    const customPriceMap = {};
+    customPrices.forEach(record => {
+      const dateStr = format(new Date(record.date), 'yyyy-MM-dd');
+      customPriceMap[dateStr] = parseFloat(record.price);
+    });
+
+    // Calculate total price using custom prices where available
+    let totalPrice = 0;
+    const priceBreakdown = {};
     
-    // Calculate total price
-    const totalPrice = room.base_price * numberOfNights;
+    for (let i = 0; i < numberOfNights; i++) {
+      const currentDate = new Date(startDate);
+      currentDate.setDate(currentDate.getDate() + i);
+      const dateStr = format(currentDate, 'yyyy-MM-dd');
+      const dayPrice = parseFloat(customPriceMap[dateStr] || defaultPrice);
+      priceBreakdown[dateStr] = dayPrice;
+      totalPrice += dayPrice;
+    }
+
+    console.log('Price breakdown:', priceBreakdown);
+    console.log('Total price:', totalPrice);
 
     // Check if dates are available
     const [existingBookings] = await db.query(`
@@ -512,7 +512,7 @@ export const createBooking = async (req, res) => {
       userId,
       checkInDate,
       checkOutDate,
-      totalPrice,
+      totalPrice.toFixed(2), // Ensure we have a properly formatted decimal
       numberOfGuests || 1,
       specialRequests || null,
       bookingReference,
@@ -529,7 +529,8 @@ export const createBooking = async (req, res) => {
         totalPrice,
         numberOfNights,
         checkInDate,
-        checkOutDate
+        checkOutDate,
+        priceBreakdown
       }
     });
   } catch (error) {
@@ -537,6 +538,128 @@ export const createBooking = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Internal server error'
+    });
+  }
+};
+
+export const getRoomReservations = async (req, res) => {
+  try {
+    const { propertyId, roomId } = req.params;
+    
+    // First verify that the room exists and belongs to the property
+    const [rooms] = await db.query(
+      'SELECT id FROM rooms WHERE id = ? AND property_id = ?',
+      [roomId, propertyId]
+    );
+
+    if (rooms.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Room not found or does not belong to this property'
+      });
+    }
+
+    // Get all reservations for this room
+    const [reservations] = await db.query(`
+      SELECT 
+        b.id,
+        b.user_id,
+        b.check_in_date,
+        b.check_out_date,
+        b.status,
+        b.total_price,
+        b.number_of_guests,
+        b.special_requests,
+        b.booking_reference,
+        b.contact_email,
+        b.payment_status,
+        b.created_at,
+        b.updated_at,
+        u.first_name,
+        u.last_name,
+        u.email
+      FROM bookings b
+      LEFT JOIN users u ON b.user_id = u.id
+      WHERE b.room_id = ?
+      AND b.status != 'cancelled'
+      ORDER BY b.check_in_date DESC
+    `, [roomId]);
+
+    res.json({
+      status: 'success',
+      data: reservations
+    });
+  } catch (error) {
+    console.error('Error fetching room reservations:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch room reservations'
+    });
+  }
+};
+
+export const updateRoomAvailability = async (req, res) => {
+  try {
+    const { propertyId, roomId } = req.params;
+    const { date, price, is_available } = req.body;
+
+    // First verify that the room exists and belongs to the property
+    const [rooms] = await db.query(
+      'SELECT id, price_per_night FROM rooms WHERE id = ? AND property_id = ?',
+      [roomId, propertyId]
+    );
+
+    if (rooms.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Room not found or does not belong to this property'
+      });
+    }
+
+    // Convert is_available boolean to status enum
+    const status = is_available ? 'available' : 'blocked';
+
+    // Ensure price is a valid number
+    const finalPrice = parseFloat(price) || rooms[0].price_per_night;
+
+    // Check if there's an existing availability record for this date
+    const [existingAvailability] = await db.query(
+      'SELECT id FROM room_availability WHERE room_id = ? AND date = ?',
+      [roomId, date]
+    );
+
+    if (existingAvailability.length > 0) {
+      // Update existing record
+      await db.query(
+        `UPDATE room_availability 
+         SET price = ?, status = ?, updated_at = NOW()
+         WHERE room_id = ? AND date = ?`,
+        [finalPrice, status, roomId, date]
+      );
+    } else {
+      // Create new record
+      await db.query(
+        `INSERT INTO room_availability 
+         (room_id, date, price, status)
+         VALUES (?, ?, ?, ?)`,
+        [roomId, date, finalPrice, status]
+      );
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Room availability updated successfully',
+      data: {
+        date,
+        price: finalPrice,
+        status
+      }
+    });
+  } catch (error) {
+    console.error('Error updating room availability:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to update room availability'
     });
   }
 };

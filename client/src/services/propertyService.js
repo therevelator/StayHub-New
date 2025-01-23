@@ -375,6 +375,33 @@ const propertyService = {
       console.error('Error updating room images:', error);
       throw error;
     }
+  },
+  getRoomAvailability: async (propertyId, roomId) => {
+    try {
+      const response = await api.get(`/properties/${propertyId}/rooms/${roomId}/availability`);
+      return response.data;
+    } catch (error) {
+      console.error('[PropertyService] Error getting room availability:', error);
+      throw error;
+    }
+  },
+  updateRoomAvailability: async (propertyId, roomId, data) => {
+    try {
+      const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/availability`, data);
+      return response.data;
+    } catch (error) {
+      console.error('[PropertyService] Error updating room availability:', error);
+      throw error;
+    }
+  },
+  getRoomReservations: async (propertyId, roomId) => {
+    try {
+      const response = await api.get(`/properties/${propertyId}/rooms/${roomId}/reservations`);
+      return response.data;
+    } catch (error) {
+      console.error('[PropertyService] Error getting room reservations:', error);
+      throw error;
+    }
   }
 };
 

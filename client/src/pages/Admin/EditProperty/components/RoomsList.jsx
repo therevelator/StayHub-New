@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CalendarIcon } from '@heroicons/react/24/outline';
 import RoomForm from '../../../../components/Room/RoomForm';
+import RoomCalendar from '../../../../components/Room/RoomCalendar';
 import propertyService from '../../../../services/propertyService';
 
 const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
+  const [selectedRoom, setSelectedRoom] = useState(null);
 
   const handleAddRoom = () => {
     setEditingRoom(null);
@@ -28,6 +31,16 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
       console.error('[RoomsList] Error fetching room data:', error);
       // TODO: Show error notification to user
     }
+  };
+
+  const handleOpenCalendar = (room) => {
+    setSelectedRoom(room);
+    setIsCalendarOpen(true);
+  };
+
+  const handleCloseCalendar = () => {
+    setSelectedRoom(null);
+    setIsCalendarOpen(false);
   };
 
   const handleSubmit = async (roomData) => {
@@ -104,6 +117,15 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
                   <div className="flex items-center space-x-4">
                     <button
                       type="button"
+                      onClick={() => handleOpenCalendar(room)}
+                      disabled={disabled}
+                      className="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    >
+                      <CalendarIcon className="h-4 w-4" />
+                      <span className="sr-only">Room calendar</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleEditRoom(room)}
                       disabled={disabled}
                       className="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -140,6 +162,14 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
           room={editingRoom}
           onSubmit={handleSubmit}
           onClose={handleClose}
+        />
+      )}
+
+      {isCalendarOpen && selectedRoom && (
+        <RoomCalendar
+          propertyId={propertyId}
+          room={selectedRoom}
+          onClose={handleCloseCalendar}
         />
       )}
     </div>

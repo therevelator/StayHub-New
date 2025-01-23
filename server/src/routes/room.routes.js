@@ -8,6 +8,7 @@ const router = express.Router();
 // Public endpoints
 router.get('/:propertyId/rooms/:roomId', roomController.getRoom);
 router.get('/:propertyId/rooms/:roomId/availability', roomController.getRoomAvailability);
+router.get('/:propertyId/rooms/:roomId/reservations', roomController.getRoomReservations);
 router.get('/:propertyId/rooms', roomController.getRooms);
 
 // Protected endpoints
@@ -32,6 +33,13 @@ router.delete('/:propertyId/rooms/:roomId',
 router.post('/:propertyId/rooms/:roomId/book', 
   authenticateToken, 
   roomController.createBooking
+);
+
+// Add room availability endpoint
+router.post('/:propertyId/rooms/:roomId/availability',
+  authenticateToken,
+  checkPropertyOwnership,
+  roomController.updateRoomAvailability
 );
 
 export default router;
