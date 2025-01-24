@@ -159,7 +159,16 @@ export const getRoom = async (req, res) => {
 export const getRoomAvailability = async (req, res) => {
   try {
     const { propertyId, roomId } = req.params;
-    console.log('Checking availability for roomId:', roomId);
+    const { startDate, endDate } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Start date and end date are required'
+      });
+    }
+
+    console.log('Checking availability for roomId:', roomId, 'from:', startDate, 'to:', endDate);
     
     // Get room details including default price
     const [rooms] = await db.query(
@@ -177,27 +186,101 @@ export const getRoomAvailability = async (req, res) => {
 
     const defaultPrice = rooms[0].price_per_night;
     
+    // First, get all dates in the range
+    const [dates] = await db.query(`
+      WITH RECURSIVE date_range AS (
+        SELECT ? as date
+        UNION ALL
+        SELECT DATE_ADD(date, INTERVAL 1 DAY)
+        FROM date_range
+        WHERE date < ?
+      )
+      SELECT DATE(date) as date
+      FROM date_range
+    `, [startDate, endDate]);
+
     // Get all availability records for this room
     const [availability] = await db.query(`
       SELECT 
-        DATE(date) as date,
-        status,
-        price
-      FROM room_availability 
-      WHERE room_id = ? 
-      AND date >= CURDATE()
-    `, [roomId]);
+        DATE(ra.date) as date,
+        ra.status,
+        ra.price,
+        ra.booking_id,
+        ra.notes
+      FROM room_availability ra
+      WHERE ra.room_id = ? 
+        AND ra.date >= ?
+        AND ra.date <= ?
+        AND ra.status IN ('maintenance', 'blocked')
+    `, [roomId, startDate, endDate]);
 
+    // Get all bookings for this room in the date range
+    const [bookings] = await db.query(`
+      SELECT 
+        id,
+        DATE(check_in_date) as check_in_date,
+        DATE(check_out_date) as check_out_date
+      FROM bookings 
+      WHERE room_id = ? 
+        AND status = 'confirmed'
+        AND (
+          (check_in_date BETWEEN ? AND ?) OR
+          (check_out_date BETWEEN ? AND ?) OR
+          (check_in_date <= ? AND check_out_date >= ?)
+        )
+    `, [roomId, startDate, endDate, startDate, endDate, startDate, endDate]);
+
+    console.log('Found bookings:', bookings);
     console.log('Found availability records:', availability);
 
-    // Convert to object with dates as keys
-    const availabilityMap = {};
+    // Create a map of booked dates
+    const bookedDates = new Set();
+    bookings.forEach(booking => {
+      let currentDate = new Date(booking.check_in_date);
+      const endDate = new Date(booking.check_out_date);
+      
+      while (currentDate <= endDate) {
+        bookedDates.add(format(currentDate, 'yyyy-MM-dd'));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    });
+
+    // Create a map of existing availability records
+    const existingAvailability = {};
     availability.forEach(record => {
       const dateStr = format(new Date(record.date), 'yyyy-MM-dd');
-      availabilityMap[dateStr] = {
-        is_available: record.status === 'available',
-        price: parseFloat(record.price) || defaultPrice
-      };
+      existingAvailability[dateStr] = record;
+    });
+
+    // Convert to object with dates as keys, including all dates in range
+    const availabilityMap = {};
+    dates.forEach(({ date }) => {
+      const dateStr = format(new Date(date), 'yyyy-MM-dd');
+      const existing = existingAvailability[dateStr];
+      
+      if (bookedDates.has(dateStr)) {
+        availabilityMap[dateStr] = {
+          status: 'occupied',
+          price: parseFloat(defaultPrice),
+          booking_id: null,
+          notes: null
+        };
+      } else if (existing) {
+        // Use the existing record's status (maintenance or blocked)
+        availabilityMap[dateStr] = {
+          status: existing.status,
+          price: parseFloat(existing.price) || defaultPrice,
+          booking_id: existing.booking_id,
+          notes: existing.notes
+        };
+      } else {
+        availabilityMap[dateStr] = {
+          status: 'available',
+          price: parseFloat(defaultPrice),
+          booking_id: null,
+          notes: null
+        };
+      }
     });
 
     res.json({
@@ -207,7 +290,6 @@ export const getRoomAvailability = async (req, res) => {
         availability: availabilityMap
       }
     });
-
   } catch (error) {
     console.error('Error getting room availability:', error);
     res.status(500).json({
@@ -431,7 +513,7 @@ export const createBooking = async (req, res) => {
       SELECT date, price 
       FROM room_availability 
       WHERE room_id = ? 
-      AND date >= ? 
+      AND date >= ?
       AND date < ?
       AND status = 'available'
     `, [roomId, checkInDate, checkOutDate]);
@@ -601,7 +683,7 @@ export const getRoomReservations = async (req, res) => {
 export const updateRoomAvailability = async (req, res) => {
   try {
     const { propertyId, roomId } = req.params;
-    const { date, price, is_available } = req.body;
+    const { date, price, status, updates } = req.body;
 
     // First verify that the room exists and belongs to the property
     const [rooms] = await db.query(
@@ -616,50 +698,263 @@ export const updateRoomAvailability = async (req, res) => {
       });
     }
 
-    // Convert is_available boolean to status enum
-    const status = is_available ? 'available' : 'blocked';
+    const defaultPrice = rooms[0].price_per_night;
 
-    // Ensure price is a valid number
-    const finalPrice = parseFloat(price) || rooms[0].price_per_night;
+    if (updates && Array.isArray(updates)) {
+      // Bulk update
+      for (const update of updates) {
+        const finalPrice = parseFloat(update.price) || defaultPrice;
+        const finalStatus = update.status || 'available';
 
-    // Check if there's an existing availability record for this date
-    const [existingAvailability] = await db.query(
-      'SELECT id FROM room_availability WHERE room_id = ? AND date = ?',
-      [roomId, date]
-    );
+        // Check if there's an existing availability record for this date
+        const [existingAvailability] = await db.query(
+          'SELECT id FROM room_availability WHERE room_id = ? AND date = ?',
+          [roomId, update.date]
+        );
 
-    if (existingAvailability.length > 0) {
-      // Update existing record
-      await db.query(
-        `UPDATE room_availability 
-         SET price = ?, status = ?, updated_at = NOW()
-         WHERE room_id = ? AND date = ?`,
-        [finalPrice, status, roomId, date]
-      );
-    } else {
-      // Create new record
-      await db.query(
-        `INSERT INTO room_availability 
-         (room_id, date, price, status)
-         VALUES (?, ?, ?, ?)`,
-        [roomId, date, finalPrice, status]
-      );
-    }
-
-    res.json({
-      status: 'success',
-      message: 'Room availability updated successfully',
-      data: {
-        date,
-        price: finalPrice,
-        status
+        if (existingAvailability.length > 0) {
+          // Update existing record
+          await db.query(
+            `UPDATE room_availability 
+             SET price = ?, status = ?, updated_at = NOW()
+             WHERE room_id = ? AND date = ?`,
+            [finalPrice, finalStatus, roomId, update.date]
+          );
+        } else {
+          // Create new record
+          await db.query(
+            `INSERT INTO room_availability 
+             (room_id, date, price, status)
+             VALUES (?, ?, ?, ?)`,
+            [roomId, update.date, finalPrice, finalStatus]
+          );
+        }
       }
-    });
+
+      res.json({
+        status: 'success',
+        message: 'Room availability updated successfully',
+        data: {
+          status: updates[0].status,
+          price: updates[0].price
+        }
+      });
+    } else {
+      // Single update
+      const finalPrice = parseFloat(price) || defaultPrice;
+      const finalStatus = status || 'available';
+
+      // Check if there's an existing availability record for this date
+      const [existingAvailability] = await db.query(
+        'SELECT id FROM room_availability WHERE room_id = ? AND date = ?',
+        [roomId, date]
+      );
+
+      if (existingAvailability.length > 0) {
+        // Update existing record
+        await db.query(
+          `UPDATE room_availability 
+           SET price = ?, status = ?, updated_at = NOW()
+           WHERE room_id = ? AND date = ?`,
+          [finalPrice, finalStatus, roomId, date]
+        );
+      } else {
+        // Create new record
+        await db.query(
+          `INSERT INTO room_availability 
+           (room_id, date, price, status)
+           VALUES (?, ?, ?, ?)`,
+          [roomId, date, finalPrice, finalStatus]
+        );
+      }
+
+      res.json({
+        status: 'success',
+        message: 'Room availability updated successfully',
+        data: {
+          date,
+          price: finalPrice,
+          status: finalStatus
+        }
+      });
+    }
   } catch (error) {
     console.error('Error updating room availability:', error);
     res.status(500).json({
       status: 'error',
       message: 'Failed to update room availability'
+    });
+  }
+};
+
+export const updateBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { checkInDate, checkOutDate, numberOfGuests, specialRequests } = req.body;
+
+    // First get the current booking details
+    const [bookings] = await db.query(
+      'SELECT room_id, status FROM bookings WHERE id = ?',
+      [bookingId]
+    );
+
+    if (bookings.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Booking not found'
+      });
+    }
+
+    const booking = bookings[0];
+    const roomId = booking.room_id;
+
+    // Don't allow editing cancelled bookings
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Cannot edit a cancelled booking'
+      });
+    }
+
+    // Calculate number of nights
+    const startDate = new Date(checkInDate);
+    const endDate = new Date(checkOutDate);
+    const numberOfNights = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+
+    // Check for overlapping bookings (excluding the current booking)
+    const [existingBookings] = await db.query(`
+      SELECT id FROM bookings 
+      WHERE room_id = ? 
+      AND id != ?
+      AND status IN ('confirmed', 'pending')
+      AND (
+        (check_in_date < ? AND check_out_date > ?) OR
+        (check_in_date <= ? AND check_out_date > ?) OR
+        (check_in_date >= ? AND check_out_date <= ?)
+      )
+    `, [roomId, bookingId, checkOutDate, checkInDate, checkOutDate, checkInDate, checkInDate, checkOutDate]);
+
+    if (existingBookings.length > 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Selected dates overlap with another booking'
+      });
+    }
+
+    // Get room details and calculate new total price
+    const [rooms] = await db.query('SELECT price_per_night FROM rooms WHERE id = ?', [roomId]);
+    const defaultPrice = rooms[0].price_per_night;
+
+    // Get custom prices for the date range
+    const [customPrices] = await db.query(`
+      SELECT date, price 
+      FROM room_availability 
+      WHERE room_id = ? 
+      AND date >= ? 
+      AND date < ?
+      AND status = 'available'
+    `, [roomId, checkInDate, checkOutDate]);
+
+    // Create a map of custom prices by date
+    const customPriceMap = {};
+    customPrices.forEach(record => {
+      const dateStr = format(new Date(record.date), 'yyyy-MM-dd');
+      customPriceMap[dateStr] = parseFloat(record.price);
+    });
+
+    // Calculate new total price
+    let totalPrice = 0;
+    const priceBreakdown = {};
+    
+    for (let i = 0; i < numberOfNights; i++) {
+      const currentDate = new Date(startDate);
+      currentDate.setDate(currentDate.getDate() + i);
+      const dateStr = format(currentDate, 'yyyy-MM-dd');
+      const dayPrice = parseFloat(customPriceMap[dateStr] || defaultPrice);
+      priceBreakdown[dateStr] = dayPrice;
+      totalPrice += dayPrice;
+    }
+
+    // Update the booking
+    await db.query(`
+      UPDATE bookings 
+      SET 
+        check_in_date = ?,
+        check_out_date = ?,
+        total_price = ?,
+        number_of_guests = ?,
+        special_requests = ?,
+        updated_at = NOW()
+      WHERE id = ?
+    `, [
+      checkInDate,
+      checkOutDate,
+      totalPrice.toFixed(2),
+      numberOfGuests || 1,
+      specialRequests || null,
+      bookingId
+    ]);
+
+    res.json({
+      status: 'success',
+      message: 'Booking updated successfully',
+      data: {
+        bookingId,
+        totalPrice,
+        numberOfNights,
+        checkInDate,
+        checkOutDate,
+        priceBreakdown
+      }
+    });
+  } catch (error) {
+    console.error('Error updating booking:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to update booking'
+    });
+  }
+};
+
+export const cancelBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    // Check if booking exists and is not already cancelled
+    const [bookings] = await db.query(
+      'SELECT status FROM bookings WHERE id = ?',
+      [bookingId]
+    );
+
+    if (bookings.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Booking not found'
+      });
+    }
+
+    if (bookings[0].status === 'cancelled') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Booking is already cancelled'
+      });
+    }
+
+    // Cancel the booking
+    await db.query(
+      'UPDATE bookings SET status = "cancelled", updated_at = NOW() WHERE id = ?',
+      [bookingId]
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Booking cancelled successfully'
+    });
+  } catch (error) {
+    console.error('Error cancelling booking:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to cancel booking'
     });
   }
 };

@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../../services/api';
-import Calendar from 'react-calendar';
+import { Calendar } from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { format, addDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 
 const RoomPage = () => {
   const { roomId, propertyId } = useParams();
@@ -14,28 +15,90 @@ const RoomPage = () => {
   const [error, setError] = useState(null);
   const [availableDates, setAvailableDates] = useState([]);
   const [bookingDates, setBookingDates] = useState([]);
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [checkInDate, setCheckInDate] = useState(null);
   const [checkOutDate, setCheckOutDate] = useState(null);
-  const [hoveredDate, setHoveredDate] = useState(null);
+  const [totalNights, setTotalNights] = useState(0);
+  const [totalPrice, setTotalPrice] = useState(0);
   const [specialRequests, setSpecialRequests] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [availabilityMap, setAvailabilityMap] = useState({});
+  const [activeStartDate, setActiveStartDate] = useState(new Date());
+
+  const fetchAvailability = async (date) => {
+    try {
+      // Get first and last day of the displayed month
+      const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+      const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      
+      const startDateStr = format(firstDay, 'yyyy-MM-dd');
+      const endDateStr = format(lastDay, 'yyyy-MM-dd');
+      
+      console.log('Fetching availability:', { startDateStr, endDateStr });
+      
+      const availabilityResponse = await api.get(`/properties/${propertyId}/rooms/${roomId}/availability`, {
+        params: {
+          startDate: startDateStr,
+          endDate: endDateStr
+        }
+      });
+
+      console.log('Raw availability response:', availabilityResponse.data);
+      
+      // Process availability data
+      const available = [];
+      const occupied = [];
+      const maintenance = [];
+      const blocked = [];
+      const availabilityData = {};
+      
+      if (availabilityResponse.data?.data?.availability) {
+        Object.entries(availabilityResponse.data.data.availability).forEach(([date, info]) => {
+          console.log('Processing date:', date, 'info:', info);
+          availabilityData[date] = info;
+          
+          switch(info.status) {
+            case 'available':
+              available.push(date);
+              break;
+            case 'occupied':
+              occupied.push(date);
+              break;
+            case 'maintenance':
+              maintenance.push(date);
+              break;
+            case 'blocked':
+              blocked.push(date);
+              break;
+          }
+        });
+      }
+      
+      console.log('Processed availability:', { available, occupied, maintenance, blocked });
+      setAvailabilityMap(availabilityData);
+      setAvailableDates(available);
+      setBookingDates([...occupied, ...maintenance, ...blocked]);
+    } catch (error) {
+      console.error('Error fetching availability:', error);
+      setError(error.response?.data?.message || 'Failed to fetch availability');
+    }
+  };
 
   useEffect(() => {
-    const fetchRoomAndAvailability = async () => {
+    const fetchData = async () => {
       try {
-        const [roomResponse, availabilityResponse] = await Promise.all([
-          api.get(`/properties/${propertyId}/rooms/${roomId}`),
-          api.get(`/properties/${propertyId}/rooms/${roomId}/availability`)
-        ]);
-
-        if (!roomResponse.data) {
+        setLoading(true);
+        // First get the room details
+        const roomResponse = await api.get(`/properties/${propertyId}/rooms/${roomId}`);
+        if (!roomResponse.data?.data) {
           throw new Error('Room data not found');
         }
-
-        setRoom(roomResponse.data);
-        setAvailableDates(availabilityResponse.data.availableDates || []);
-        setBookingDates(availabilityResponse.data.bookingDates || []);
+        
+        const roomData = roomResponse.data.data;
+        console.log('Room data:', roomData);
+        setRoom(roomData);
+        
+        // Then get availability for current month
+        await fetchAvailability(activeStartDate);
       } catch (error) {
         console.error('Error fetching data:', error);
         setError(error.response?.data?.message || 'Failed to fetch room details');
@@ -45,63 +108,133 @@ const RoomPage = () => {
     };
 
     if (propertyId && roomId) {
-      fetchRoomAndAvailability();
+      fetchData();
     }
-  }, [propertyId, roomId]);
+  }, [propertyId, roomId, activeStartDate]);
 
-  const handleDateChange = (date) => {
+  useEffect(() => {
+    if (checkInDate && checkOutDate && room?.price_per_night) {
+      const nights = differenceInDays(checkOutDate, checkInDate);
+      const price = parseFloat(room.price_per_night);
+      if (nights > 0 && !isNaN(price)) {
+        setTotalNights(nights);
+        setTotalPrice(nights * price);
+      } else {
+        setTotalNights(0);
+        setTotalPrice(0);
+      }
+    } else {
+      setTotalNights(0);
+      setTotalPrice(0);
+    }
+  }, [checkInDate, checkOutDate, room]);
+
+  const getStatusStyles = (status) => {
+    switch(status) {
+      case 'occupied':
+        return 'bg-red-100 text-red-800 hover:bg-red-100 cursor-not-allowed';
+      case 'maintenance':
+        return 'bg-orange-100 text-orange-800 hover:bg-orange-100 cursor-not-allowed';
+      case 'blocked':
+        return 'bg-gray-100 text-gray-800 hover:bg-gray-100 cursor-not-allowed';
+      case 'available':
+        return 'bg-green-100 text-green-800 hover:bg-green-200';
+      default:
+        return 'hover:bg-gray-100';
+    }
+  };
+
+  const getStatusTitle = (status, info) => {
+    if (!info) return '';
+    
+    const price = info.price ? `$${parseFloat(info.price).toFixed(2)}` : 'N/A';
+    const notes = info.notes ? ` - ${info.notes}` : '';
+    
+    switch(status) {
+      case 'occupied':
+        return `Booked by another guest${notes}`;
+      case 'maintenance':
+        return `Under maintenance${notes}`;
+      case 'blocked':
+        return `Not available for booking${notes}`;
+      case 'available':
+        return `Available - ${price}/night${notes}`;
+      default:
+        return notes || '';
+    }
+  };
+
+  const handleDateClick = (value) => {
+    if (!value) return;
+    
+    const dateStr = format(value, 'yyyy-MM-dd');
+    const dateInfo = availabilityMap[dateStr];
+    
+    // Don't allow selecting unavailable dates
+    if (dateInfo && (dateInfo.status === 'occupied' || dateInfo.status === 'maintenance' || dateInfo.status === 'blocked')) {
+      return;
+    }
+
     if (!checkInDate || (checkInDate && checkOutDate)) {
-      setCheckInDate(date);
+      // Start new selection
+      setCheckInDate(value);
       setCheckOutDate(null);
     } else {
-      setCheckOutDate(date);
+      // Complete the selection
+      if (value < checkInDate) {
+        setCheckInDate(value);
+        setCheckOutDate(checkInDate);
+      } else {
+        setCheckOutDate(value);
+      }
+    }
+  };
+
+  const handleMonthChange = ({ activeStartDate, view }) => {
+    console.log('Calendar view changed:', { activeStartDate, view });
+    if (view === 'month') {
+      setActiveStartDate(activeStartDate);
     }
   };
 
   const tileClassName = ({ date }) => {
     const dateString = format(date, 'yyyy-MM-dd');
+    const dateInfo = availabilityMap[dateString];
+    
     const isCheckIn = checkInDate && dateString === format(checkInDate, 'yyyy-MM-dd');
     const isCheckOut = checkOutDate && dateString === format(checkOutDate, 'yyyy-MM-dd');
-    
-    // Check if the date is between check-in and check-out
     const isBetween = checkInDate && checkOutDate && 
       date > checkInDate && 
       date < checkOutDate;
 
-    // First priority: Check if it's a check-in date (should be red/blocked)
-    if (isCheckIn) {
-      return 'bg-red-100 text-red-800';
+    let classes = ['rounded-lg'];
+
+    // Selection styles take precedence
+    if (isCheckIn || isCheckOut) {
+      classes.push('bg-amber-100 text-amber-800 hover:bg-amber-200');
+    } else if (isBetween) {
+      classes.push('bg-amber-50 text-amber-800 hover:bg-amber-100');
+    } else if (dateInfo) {
+      classes.push(getStatusStyles(dateInfo.status));
+    } else {
+      classes.push('hover:bg-gray-100');
     }
 
-    // Second priority: Check if it's a check-out date (should be green/available)
-    if (isCheckOut) {
-      return 'bg-green-100 text-green-800';
-    }
-
-    // Third priority: Check if it's a date between check-in and check-out
-    if (isBetween) {
-      return 'bg-red-100 text-red-800';
-    }
-
-    // Fourth priority: Check existing bookings
-    if (Array.isArray(bookingDates) && bookingDates.includes(dateString)) {
-      return 'bg-red-100 text-red-800';
-    }
-
-    // Fifth priority: Check available dates
-    if (Array.isArray(availableDates) && availableDates.includes(dateString)) {
-      return 'bg-green-100 text-green-800';
-    }
-
-    return '';
+    return classes.join(' ');
   };
 
-  const handleMouseEnter = (date) => {
-    setHoveredDate(date);
-  };
-
-  const handleMouseLeave = () => {
-    setHoveredDate(null);
+  const tileContent = ({ date }) => {
+    const dateString = format(date, 'yyyy-MM-dd');
+    const dateInfo = availabilityMap[dateString];
+    
+    if (!dateInfo) return null;
+    
+    return (
+      <div 
+        title={getStatusTitle(dateInfo.status, dateInfo)}
+        className="w-full h-full"
+      />
+    );
   };
 
   const handleBooking = async () => {
@@ -143,66 +276,108 @@ const RoomPage = () => {
             <p className="text-gray-600 mb-4">{room.description}</p>
             
             {/* Calendar Section */}
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold mb-4">Availability Calendar</h2>
-              <div className="calendar-container">
-                <Calendar
-                  tileClassName={tileClassName}
-                  minDate={new Date()}
-                  onChange={handleDateChange}
-                  value={checkInDate || checkOutDate ? [checkInDate, checkOutDate] : null}
-                  className="rounded-lg border p-4 w-full"
-                  onMouseOver={handleMouseEnter}
-                  onMouseLeave={handleMouseLeave}
-                />
-              </div>
-              <div className="flex gap-4 mt-4">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-green-100 rounded mr-2"></div>
-                  <span>Available</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-red-100 rounded mr-2"></div>
-                  <span>Booked</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-blue-100 rounded mr-2"></div>
-                  <span>Check-in Date</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-blue-200 rounded mr-2"></div>
-                  <span>Check-out Date</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-blue-50 rounded mr-2"></div>
-                  <span>Selected Interval</span>
-                </div>
-              </div>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Calendar */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Book Your Stay</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Calendar
+                    onChange={handleDateClick}
+                    onActiveStartDateChange={handleMonthChange}
+                    activeStartDate={activeStartDate}
+                    value={checkInDate || checkOutDate ? [checkInDate, checkOutDate].filter(Boolean) : null}
+                    tileClassName={tileClassName}
+                    tileContent={tileContent}
+                    minDate={new Date()}
+                    className="w-full border rounded-lg p-4"
+                  />
+                  <div className="flex flex-wrap gap-4 mt-4">
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-green-100 rounded mr-2"></div>
+                      <span className="text-sm">Available</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-red-100 rounded mr-2"></div>
+                      <span className="text-sm">Booked</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-orange-100 rounded mr-2"></div>
+                      <span className="text-sm">Maintenance</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-gray-100 rounded mr-2"></div>
+                      <span className="text-sm">Blocked</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-amber-100 rounded mr-2"></div>
+                      <span className="text-sm">Selected Dates</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Selected Dates Display */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-2">Selected Dates</h3>
-              <p>Check-in: {checkInDate ? format(checkInDate, 'yyyy-MM-dd') : 'Not selected'}</p>
-              <p>Check-out: {checkOutDate ? format(checkOutDate, 'yyyy-MM-dd') : 'Not selected'}</p>
-            </div>
+              {/* Booking Details */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Booking Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Check-in Date</p>
+                        <p className="text-lg">{checkInDate ? format(checkInDate, 'MMM d, yyyy') : 'Not selected'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Check-out Date</p>
+                        <p className="text-lg">{checkOutDate ? format(checkOutDate, 'MMM d, yyyy') : 'Not selected'}</p>
+                      </div>
+                    </div>
 
-            {/* Special Requests */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Special Requests
-              </label>
-              <textarea
-                value={specialRequests}
-                onChange={(e) => setSpecialRequests(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
-                rows="4"
-                placeholder="Any special requests or requirements?"
-              ></textarea>
+                    {room.price_per_night && (
+                      <div className="border-t pt-4">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-600">Price per night</span>
+                            <span className="font-medium">${parseFloat(room.price_per_night).toFixed(2)}</span>
+                          </div>
+                          {totalNights > 0 && (
+                            <>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600">Number of nights</span>
+                                <span>{totalNights}</span>
+                              </div>
+                              <div className="flex justify-between items-center font-medium text-lg pt-2 border-t">
+                                <span>Total price</span>
+                                <span>${totalPrice.toFixed(2)}</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="border-t pt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Special Requests
+                      </label>
+                      <textarea
+                        value={specialRequests}
+                        onChange={(e) => setSpecialRequests(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
+                        rows="4"
+                        placeholder="Any special requests or requirements?"
+                      ></textarea>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Terms and Conditions */}
-            <div className="mb-6">
+            <div className="mt-6">
               <h3 className="text-lg font-semibold mb-2">Terms and Conditions</h3>
               <div className="bg-gray-50 p-4 rounded-md text-sm text-gray-600 mb-4 h-40 overflow-y-auto">
                 <h4 className="font-semibold mb-2">1. Booking and Payment</h4>
@@ -239,9 +414,9 @@ const RoomPage = () => {
             {/* Book Now Button */}
             <button
               onClick={handleBooking}
-              disabled={!termsAccepted}
-              className={`w-full py-3 px-4 rounded-lg transition-colors mt-4 ${
-                termsAccepted
+              disabled={!termsAccepted || !checkInDate || !checkOutDate}
+              className={`w-full py-3 px-4 rounded-lg transition-colors ${
+                termsAccepted && checkInDate && checkOutDate
                   ? 'bg-primary-600 text-white hover:bg-primary-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
@@ -255,4 +430,4 @@ const RoomPage = () => {
   );
 };
 
-export default RoomPage; 
+export default RoomPage;

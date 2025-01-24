@@ -61,9 +61,9 @@ export const CalendarSection = ({ selectedProperty }) => {
       blockedDate.getMonth() === date.getMonth() &&
       blockedDate.getDate() === date.getDate()
     )) {
-      return 'bg-red-100 text-red-800';
+      return 'bg-amber-100 text-amber-800';
     }
-    return '';
+    return 'hover:bg-green-100';
   };
 
   return (

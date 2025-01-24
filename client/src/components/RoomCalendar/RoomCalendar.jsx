@@ -6,9 +6,9 @@ import api from '../../services/api';
 
 const STATUS_COLORS = {
   available: 'bg-green-100 hover:bg-green-200',
-  occupied: 'bg-red-100 cursor-not-allowed',
-  maintenance: 'bg-yellow-100 cursor-not-allowed',
-  blocked: 'bg-gray-100 cursor-not-allowed'
+  occupied: 'bg-red-100',
+  maintenance: 'bg-amber-100',
+  blocked: 'bg-red-100'
 };
 
 const STATUS_LABELS = {
@@ -140,13 +140,9 @@ const RoomCalendar = ({
             {Object.entries(availability).map(([date, status]) => (
               <div 
                 key={date} 
-                className={`text-sm ${
-                  status.status === 'available' 
-                    ? 'text-green-600' 
-                    : 'text-red-600'
-                }`}
+                className={`text-sm p-2 rounded ${STATUS_COLORS[status.status] || 'bg-gray-100'}`}
               >
-                {format(new Date(date), 'MMM d, yyyy')}: {status.status}
+                {format(new Date(date), 'MMM d, yyyy')}: {STATUS_LABELS[status.status] || status.status}
               </div>
             ))}
           </div>

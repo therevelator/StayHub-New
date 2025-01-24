@@ -36,7 +36,7 @@ router.post('/:propertyId/rooms/:roomId/book',
 );
 
 // Add room availability endpoint
-router.post('/:propertyId/rooms/:roomId/availability',
+router.put('/:propertyId/rooms/:roomId/availability',
   authenticateToken,
   checkPropertyOwnership,
   roomController.updateRoomAvailability

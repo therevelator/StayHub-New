@@ -1061,6 +1061,111 @@ const deleteRoom = async (req, res) => {
   }
 };
 
+export const updateBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { checkInDate, checkOutDate, numberOfGuests, specialRequests } = req.body;
+    const userId = req.user.id;
+
+    // Verify ownership
+    const [booking] = await db.query(
+      `SELECT b.*, p.host_id 
+       FROM bookings b
+       JOIN rooms r ON b.room_id = r.id
+       JOIN properties p ON r.property_id = p.id
+       WHERE b.id = ?`,
+      [bookingId]
+    );
+
+    if (booking.length === 0 || booking[0].host_id !== userId) {
+      return res.status(403).json({ message: 'Not authorized to update this booking' });
+    }
+
+    // Check if booking is already cancelled
+    if (booking[0].status === 'cancelled') {
+      return res.status(400).json({ message: 'Cannot update a cancelled booking' });
+    }
+
+    // Check for overlapping bookings
+    const [overlappingBookings] = await db.query(
+      `SELECT id FROM bookings 
+       WHERE room_id = ? 
+       AND id != ?
+       AND status IN ('confirmed', 'pending')
+       AND (
+         (check_in_date < ? AND check_out_date > ?) OR
+         (check_in_date <= ? AND check_out_date > ?) OR
+         (check_in_date >= ? AND check_out_date <= ?)
+       )`,
+      [booking[0].room_id, bookingId, checkOutDate, checkInDate, checkOutDate, checkInDate, checkInDate, checkOutDate]
+    );
+
+    if (overlappingBookings.length > 0) {
+      return res.status(400).json({ message: 'Selected dates overlap with another booking' });
+    }
+
+    // Update the booking
+    await db.query(
+      `UPDATE bookings 
+       SET check_in_date = ?,
+           check_out_date = ?,
+           number_of_guests = ?,
+           special_requests = ?,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [checkInDate, checkOutDate, numberOfGuests, specialRequests, bookingId]
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Booking updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating booking:', error);
+    res.status(500).json({ message: 'Failed to update booking' });
+  }
+};
+
+export const cancelBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const userId = req.user.id;
+
+    // Verify ownership
+    const [booking] = await db.query(
+      `SELECT b.*, p.host_id 
+       FROM bookings b
+       JOIN rooms r ON b.room_id = r.id
+       JOIN properties p ON r.property_id = p.id
+       WHERE b.id = ?`,
+      [bookingId]
+    );
+
+    if (booking.length === 0 || booking[0].host_id !== userId) {
+      return res.status(403).json({ message: 'Not authorized to cancel this booking' });
+    }
+
+    // Check if booking is already cancelled
+    if (booking[0].status === 'cancelled') {
+      return res.status(400).json({ message: 'Booking is already cancelled' });
+    }
+
+    // Cancel the booking
+    await db.query(
+      'UPDATE bookings SET status = "cancelled", updated_at = NOW() WHERE id = ?',
+      [bookingId]
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Booking cancelled successfully'
+    });
+  } catch (error) {
+    console.error('Error cancelling booking:', error);
+    res.status(500).json({ message: 'Failed to cancel booking' });
+  }
+};
+
 export { 
   searchProperties, 
   getPropertyDetailsById, 

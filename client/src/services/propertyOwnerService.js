@@ -121,6 +121,16 @@ class PropertyOwnerService {
     const response = await api.get(`/owner/properties/${propertyId}/analytics/occupancy?period=${period}`);
     return response.data;
   }
+
+  async updateBooking(bookingId, data) {
+    const response = await api.put(`/owner/bookings/${bookingId}`, data);
+    return response.data;
+  }
+
+  async cancelBooking(bookingId) {
+    const response = await api.post(`/owner/bookings/${bookingId}/cancel`);
+    return response.data;
+  }
 }
 
 export const propertyOwnerService = new PropertyOwnerService();

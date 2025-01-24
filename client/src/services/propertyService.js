@@ -376,9 +376,14 @@ const propertyService = {
       throw error;
     }
   },
-  getRoomAvailability: async (propertyId, roomId) => {
+  getRoomAvailability: async (propertyId, roomId, startDate, endDate) => {
     try {
-      const response = await api.get(`/properties/${propertyId}/rooms/${roomId}/availability`);
+      const response = await api.get(`/properties/${propertyId}/rooms/${roomId}/availability`, {
+        params: {
+          startDate,
+          endDate
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('[PropertyService] Error getting room availability:', error);
@@ -387,10 +392,28 @@ const propertyService = {
   },
   updateRoomAvailability: async (propertyId, roomId, data) => {
     try {
-      const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/availability`, data);
+      const response = await api.put(`/properties/${propertyId}/rooms/${roomId}/availability`, data);
+      return response;
+    } catch (error) {
+      console.error('Error updating room availability:', error);
+      throw error;
+    }
+  },
+  updateBooking: async (bookingId, data) => {
+    try {
+      const response = await api.put(`/bookings/${bookingId}`, data);
       return response.data;
     } catch (error) {
-      console.error('[PropertyService] Error updating room availability:', error);
+      console.error('[PropertyService] Error updating booking:', error);
+      throw error;
+    }
+  },
+  cancelBooking: async (bookingId) => {
+    try {
+      const response = await api.post(`/bookings/${bookingId}/cancel`);
+      return response.data;
+    } catch (error) {
+      console.error('[PropertyService] Error cancelling booking:', error);
       throw error;
     }
   },
