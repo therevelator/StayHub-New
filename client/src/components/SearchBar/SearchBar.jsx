@@ -13,6 +13,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
+import Swal from 'sweetalert2';
 
 const SearchBar = ({ 
   onSearchResults, 
@@ -82,7 +83,7 @@ const SearchBar = ({
       }
     } catch (error) {
       console.error('Search error:', error);
-      alert(error.message || 'Error performing search. Please try again.');
+      Swal.fire(error.message || 'Error performing search. Please try again.');
     } finally {
       setLoading(false);
     }

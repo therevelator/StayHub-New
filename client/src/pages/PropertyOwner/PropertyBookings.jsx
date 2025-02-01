@@ -4,12 +4,15 @@ import { format } from 'date-fns';
 import { propertyOwnerService } from '../../services/propertyOwnerService';
 import { toast } from 'react-hot-toast';
 import EditBookingModal from '../../components/Booking/EditBookingModal';
+import ViewBookingModal from '../../components/Booking/ViewBookingModal';
 
 const PropertyBookings = () => {
   const { propertyId } = useParams();
+  if (!propertyId) return <div className="p-4">No property ID provided</div>;
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [viewingBooking, setViewingBooking] = useState(null);
 
   useEffect(() => {
     fetchBookings();
@@ -32,6 +35,11 @@ const PropertyBookings = () => {
   const handleEditClick = (booking) => {
     console.log('Editing booking:', booking);
     setSelectedBooking(booking);
+    setViewingBooking(null); // Close view modal if open
+  };
+
+  const handleViewClick = (booking) => {
+    setViewingBooking(booking);
   };
 
   const handleDeleteClick = async (booking) => {
@@ -51,6 +59,7 @@ const PropertyBookings = () => {
 
   const handleCloseModal = () => {
     setSelectedBooking(null);
+    setViewingBooking(null);
   };
 
   const handleBookingUpdated = () => {
@@ -112,7 +121,11 @@ const PropertyBookings = () => {
             </thead>
             <tbody>
               {bookings.map((booking) => (
-                <tr key={booking.id} className="border-b last:border-b-0">
+                <tr 
+                  key={booking.id} 
+                  className="border-b last:border-b-0 hover:bg-gray-50 cursor-pointer" 
+                  onClick={() => handleViewClick(booking)}
+                >
                   <td className="py-4 px-4">
                     {booking.first_name} {booking.last_name}
                   </td>
@@ -161,6 +174,15 @@ const PropertyBookings = () => {
           booking={selectedBooking}
           onClose={handleCloseModal}
           onSuccess={handleBookingUpdated}
+        />
+      )}
+
+      {viewingBooking && (
+        <ViewBookingModal
+          booking={viewingBooking}
+          onClose={handleCloseModal}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
         />
       )}
     </div>

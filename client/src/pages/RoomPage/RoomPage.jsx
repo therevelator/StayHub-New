@@ -7,6 +7,7 @@ import { Calendar } from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { format, differenceInDays } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import Swal from 'sweetalert2';
 
 const RoomPage = () => {
   const { roomId, propertyId } = useParams();
@@ -94,6 +95,20 @@ const RoomPage = () => {
         }
         
         const roomData = roomResponse.data.data;
+        
+        // Parse amenities if they're a string
+        if (roomData.amenities && typeof roomData.amenities === 'string') {
+          try {
+            const parsedAmenities = JSON.parse(roomData.amenities);
+            if (Array.isArray(parsedAmenities)) {
+              roomData.amenities = parsedAmenities;
+            }
+          } catch (e) {
+            console.log('Error parsing room amenities:', e);
+            // If parsing fails, keep the original string
+          }
+        }
+        
         console.log('Room data:', roomData);
         setRoom(roomData);
         
@@ -239,11 +254,11 @@ const RoomPage = () => {
 
   const handleBooking = async () => {
     if (!checkInDate || !checkOutDate) {
-      alert('Please select both check-in and check-out dates.');
+      Swal.fire('Please select both check-in and check-out dates.');
       return;
     }
     if (!termsAccepted) {
-      alert('You must accept the terms and conditions to proceed.');
+      Swal.fire('You must accept the terms and conditions to proceed.');
       return;
     }
 
@@ -257,10 +272,53 @@ const RoomPage = () => {
       };
 
       const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/book`, bookingData);
-      alert('Booking successful!');
+      
+      // Debug logging
+      console.log('Room data for booking:', {
+        room,
+        amenities: room.amenities,
+        type: room.amenities ? typeof room.amenities : 'undefined'
+      });
+      
+      // Get amenities from the room.amenities array
+      const amenitiesStr = Array.isArray(room.amenities) ? 
+        room.amenities.filter(amenity => amenity !== null).join(', ') : 
+        '';
+      
+      Swal.fire({
+        title: '<span style="color: #2563eb">Booking Successful! 🎉</span>',
+        html: `
+          <div style='text-align: left; padding: 20px; background: #f8fafc; border-radius: 8px;'>
+            <h3 style='color: #2563eb; margin-bottom: 15px; font-size: 1.2em;'>Booking Details</h3>
+            <div style='background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+              <p style='margin: 10px 0; font-size: 1.1em;'><strong style='color: #475569;'>Booking Reference:</strong> <span style='color: #2563eb; font-weight: 500;'>${response.data.data.bookingReference}</span></p>
+              <p style='margin: 10px 0;'><strong style='color: #475569;'>Room:</strong> ${room.name}</p>
+              <p style='margin: 10px 0;'><strong style='color: #475569;'>Check-In:</strong> ${format(checkInDate, 'EEEE, MMMM d, yyyy')}</p>
+              <p style='margin: 10px 0;'><strong style='color: #475569;'>Check-Out:</strong> ${format(checkOutDate, 'EEEE, MMMM d, yyyy')}</p>
+              <p style='margin: 10px 0;'><strong style='color: #475569;'>Total Nights:</strong> ${totalNights}</p>
+              <p style='margin: 10px 0;'><strong style='color: #475569;'>Total Price:</strong> $${totalPrice.toFixed(2)}</p>
+              ${amenitiesStr ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Room Amenities:</strong> ${amenitiesStr}</p>` : ''}
+              ${specialRequests ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Special Requests:</strong> ${specialRequests}</p>` : ''}
+            </div>
+            ${room.images?.[0] ? `<img src='${room.images[0]}' alt='Room Image' style='width: 100%; border-radius: 8px; margin-top: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);' />` : ''}
+          </div>
+        `,
+        icon: 'success',
+        confirmButtonText: 'Done',
+        confirmButtonColor: '#2563eb',
+        width: '600px',
+        showCloseButton: true,
+        allowOutsideClick: false
+      });
     } catch (error) {
       console.error('Error booking the room:', error);
-      alert('Failed to book the room. Please try again later.');
+      Swal.fire({
+        title: 'Booking Failed',
+        text: error.response?.data?.message || 'Unable to complete your booking. Please try again.',
+        icon: 'error',
+        confirmButtonText: 'Try Again',
+        confirmButtonColor: '#2563eb'
+      });
     }
   };
 

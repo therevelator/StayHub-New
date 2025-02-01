@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { PlusIcon, MinusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import Swal from 'sweetalert2';
 
 const RoomsForm = ({ onSubmit, initialValues = {} }) => {
   const formik = useFormik({
@@ -56,7 +57,7 @@ const RoomsForm = ({ onSubmit, initialValues = {} }) => {
     
     const currentAmenities = formik.values.rooms[roomIndex].amenities;
     if (currentAmenities.includes(newAmenity.trim())) {
-      alert('This amenity already exists!');
+      Swal.fire('This amenity already exists!');
       return;
     }
 

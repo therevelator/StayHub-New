@@ -101,34 +101,58 @@ const PropertyDetails = () => {
             </div>
 
             {/* Property Images */}
-            <div className="mb-8">
-              <div className="aspect-w-16 aspect-h-9 mb-4">
+            <div className="mb-8 max-w-4xl mx-auto">
+              {/* Main Image */}
+              <div className="relative aspect-[16/10] mb-4 overflow-hidden rounded-xl shadow-lg">
                 {property.photos && property.photos.length > 0 ? (
                   <img
                     src={property.photos[selectedImage].url}
                     alt={`${property.basicInfo?.name} - View ${selectedImage + 1}`}
-                    className="object-cover w-full h-full rounded-lg"
+                    className="object-cover w-full h-full transform transition-transform duration-500 hover:scale-105"
                   />
                 ) : (
-                  <div className="w-full h-full bg-gray-200 rounded-lg flex items-center justify-center">
-                    <HomeIcon className="h-20 w-20 text-gray-400" />
+                  <div className="w-full h-full bg-gray-100 rounded-xl flex items-center justify-center">
+                    <HomeIcon className="h-20 w-20 text-gray-300" />
                   </div>
+                )}
+                {/* Navigation Arrows */}
+                {property.photos && property.photos.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setSelectedImage((prev) => (prev === 0 ? property.photos.length - 1 : prev - 1))}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow-md transition-all duration-200"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setSelectedImage((prev) => (prev === property.photos.length - 1 ? 0 : prev + 1))}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow-md transition-all duration-200"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </>
                 )}
               </div>
               {/* Thumbnails */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-5 gap-2 max-h-20 overflow-x-auto">
                 {property.photos?.map((photo, index) => (
                   <button
                     key={index}
                     onClick={() => setSelectedImage(index)}
-                    className={`aspect-w-16 aspect-h-9 ${
-                      selectedImage === index ? 'ring-2 ring-primary-500' : ''
+                    className={`relative aspect-[16/10] overflow-hidden rounded-lg transition-all duration-200 ${
+                      selectedImage === index 
+                        ? 'ring-2 ring-primary-500 ring-offset-2' 
+                        : 'hover:opacity-80'
                     }`}
                   >
                     <img
                       src={photo.url}
                       alt={`${property.basicInfo?.name} - Thumbnail ${index + 1}`}
-                      className="object-cover w-full h-full rounded-lg"
+                      className="object-cover w-full h-full"
                     />
                   </button>
                 ))}

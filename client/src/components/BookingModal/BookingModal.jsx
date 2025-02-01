@@ -4,6 +4,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import Swal from 'sweetalert2';
 
 const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, specialRequests, termsAccepted }) => {
   const [checkInDate, setCheckInDate] = useState(null);
@@ -26,14 +27,14 @@ const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, spec
   const handleSubmit = async () => {
     try {
       if (!user) {
-        alert('Please log in to book a room');
+        Swal.fire('Please log in to book a room');
         onClose();
         navigate('/login');
         return;
       }
 
       if (!termsAccepted) {
-        alert('Please accept the terms and conditions');
+        Swal.fire('Please accept the terms and conditions');
         return;
       }
 
@@ -52,7 +53,30 @@ const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, spec
       });
 
       if (response.data.status === 'success') {
-        alert(`Booking successful! Your booking reference is: ${response.data.data.bookingReference}`);
+        Swal.fire({
+          title: '<span style="color: #2563eb">Booking Successful! 🎉</span>',
+          html: `
+            <div style='text-align: left; padding: 20px; background: #f8fafc; border-radius: 8px;'>
+              <h3 style='color: #2563eb; margin-bottom: 15px; font-size: 1.2em;'>Booking Details</h3>
+              <div style='background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+                <p style='margin: 10px 0; font-size: 1.1em;'><strong style='color: #475569;'>Booking Reference:</strong> <span style='color: #2563eb; font-weight: 500;'>${response.data.data.bookingReference}</span></p>
+                <p style='margin: 10px 0;'><strong style='color: #475569;'>Check-In:</strong> ${new Date(checkInDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p style='margin: 10px 0;'><strong style='color: #475569;'>Check-Out:</strong> ${new Date(checkOutDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                ${response.data.data.propertyName ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Property:</strong> ${response.data.data.propertyName}</p>` : ''}
+                ${response.data.data.roomType ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Room Type:</strong> ${response.data.data.roomType}</p>` : ''}
+                ${response.data.data.roomAmenities?.length ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Amenities:</strong> ${response.data.data.roomAmenities.join(', ')}</p>` : ''}
+                ${specialRequests ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Special Requests:</strong> ${specialRequests}</p>` : ''}
+              </div>
+              ${response.data.data.roomImage ? `<img src='${response.data.data.roomImage}' alt='Room Image' style='width: 100%; border-radius: 8px; margin-top: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);' />` : ''}
+            </div>
+          `,
+          icon: 'success',
+          confirmButtonText: 'Done',
+          confirmButtonColor: '#2563eb',
+          width: '600px',
+          showCloseButton: true,
+          allowOutsideClick: false
+        });
         onSuccess?.();
         onClose();
       }
@@ -64,11 +88,11 @@ const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, spec
         config: error.config
       });
       if (error.response?.status === 401 || error.response?.status === 403) {
-        alert('Please log in to book a room');
+        Swal.fire('Please log in to book a room');
         onClose();
         navigate('/login');
       } else {
-        alert(error.response?.data?.message || 'Failed to create booking');
+        Swal.fire(error.response?.data?.message || 'Failed to create booking');
       }
     }
   };
