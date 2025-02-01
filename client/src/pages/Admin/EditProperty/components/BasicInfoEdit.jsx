@@ -63,27 +63,28 @@ const BasicInfoEdit = ({ property, onUpdate, disabled }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Format the data before sending
-    const formattedData = {
-      name: formData.name.trim(),
-      description: formData.description.trim(),
-      property_type: formData.property_type,
-      guests: parseInt(formData.guests) || 1,
-      bedrooms: parseInt(formData.bedrooms) || 1,
-      beds: parseInt(formData.beds) || 1,
-      bathrooms: parseFloat(formData.bathrooms) || 1,
-      star_rating: parseFloat(formData.star_rating) || 0
-    };
+    // Create a clean object with only valid fields
+    const updateData = {};
+    
+    if (formData.name) updateData.name = formData.name.trim();
+    if (formData.description) updateData.description = formData.description.trim();
+    if (formData.property_type) updateData.property_type = formData.property_type;
+    if (formData.guests) updateData.guests = parseInt(formData.guests);
+    if (formData.bedrooms) updateData.bedrooms = parseInt(formData.bedrooms);
+    if (formData.beds) updateData.beds = parseInt(formData.beds);
+    if (formData.bathrooms) updateData.bathrooms = parseFloat(formData.bathrooms);
+    if (formData.star_rating) updateData.star_rating = parseFloat(formData.star_rating);
     
     console.log('[BasicInfoEdit] Form submitted');
     console.log('[BasicInfoEdit] Original form data:', formData);
-    console.log('[BasicInfoEdit] Formatted data to send:', formattedData);
+    console.log('[BasicInfoEdit] Cleaned data to send:', updateData);
     
     try {
-      await onUpdate(formattedData);
+      await onUpdate(updateData);
       console.log('[BasicInfoEdit] Update completed successfully');
     } catch (error) {
       console.error('[BasicInfoEdit] Error during update:', error);
+      throw error;
     }
   };
 

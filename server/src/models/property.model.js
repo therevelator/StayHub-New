@@ -55,6 +55,9 @@ const createPropertiesTable = async () => {
       cancellation_policy VARCHAR(50),
       pet_policy VARCHAR(255),
       event_policy VARCHAR(255),
+      min_stay INT DEFAULT 1,
+      max_stay INT DEFAULT 30,
+      house_rules TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (host_id) REFERENCES users(id)
@@ -328,14 +331,7 @@ const getPropertyById = async (id) => {
         ),
         '[]'
       ) as amenities,
-      COALESCE(
-        (
-          SELECT JSON_ARRAYAGG(rule)
-          FROM property_rules pr
-          WHERE pr.property_id = p.id
-        ),
-        '[]'
-      ) as house_rules,
+      p.house_rules,
       COALESCE(
         (
           SELECT JSON_ARRAYAGG(
@@ -375,9 +371,11 @@ const getPropertyById = async (id) => {
     // Parse JSON fields
     property.rooms = safeJSONParse(property.rooms, []);
     property.amenities = safeJSONParse(property.amenities, []);
-    property.house_rules = safeJSONParse(property.house_rules, []);
     property.photos = safeJSONParse(property.photos, []);
     property.languages_spoken = safeJSONParse(property.languages_spoken, []);
+    
+    // house_rules is stored as TEXT, no need to parse
+    property.house_rules = property.house_rules || '';
 
     return property;
   } catch (error) {
@@ -513,6 +511,7 @@ const createProperty = async (propertyData) => {
 
 // Update a property
 const updateProperty = async (propertyId, propertyData) => {
+  console.log('[PropertyModel] Starting update with data:', JSON.stringify(propertyData, null, 2));
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
@@ -522,49 +521,82 @@ const updateProperty = async (propertyId, propertyData) => {
     console.log('[PropertyModel] Raw update data:', JSON.stringify(propertyData, null, 2));
 
     // Get current property data
-    const [currentProperty] = await connection.query(
+    const [rows] = await connection.query(
       'SELECT * FROM properties WHERE id = ?',
       [propertyId]
     );
 
-    if (!currentProperty || currentProperty.length === 0) {
+    if (!rows || rows.length === 0) {
       throw new Error('Property not found');
     }
+    
+    const currentProperty = rows[0];
 
-    // Only update the fields that are provided in the request
+    // Format the update data
     const updateData = {};
-    if (propertyData.name !== undefined) updateData.name = propertyData.name.trim();
-    if (propertyData.description !== undefined) updateData.description = propertyData.description.trim();
-    if (propertyData.property_type !== undefined) updateData.property_type = propertyData.property_type;
-    if (propertyData.guests !== undefined) updateData.guests = parseInt(propertyData.guests);
-    if (propertyData.bedrooms !== undefined) updateData.bedrooms = parseInt(propertyData.bedrooms);
-    if (propertyData.beds !== undefined) updateData.beds = parseInt(propertyData.beds);
-    if (propertyData.bathrooms !== undefined) updateData.bathrooms = parseFloat(propertyData.bathrooms);
-    if (propertyData.star_rating !== undefined) updateData.star_rating = parseFloat(propertyData.star_rating);
+
+    // Process each field
+    for (const [key, value] of Object.entries(propertyData)) {
+      if (value === undefined || value === null) continue;
+      
+      switch (key) {
+        case 'name':
+        case 'description':
+        case 'house_rules':
+        case 'pet_policy':
+        case 'event_policy':
+        case 'cancellation_policy':
+          // Ensure we store string values for text fields
+          updateData[key] = typeof value === 'string' ? value.trim() : 
+            Array.isArray(value) ? value.join('\n') : String(value || '');
+          break;
+        case 'guests':
+        case 'bedrooms':
+        case 'beds':
+        case 'min_stay':
+        case 'max_stay':
+          updateData[key] = parseInt(value) || 0;
+          break;
+        case 'bathrooms':
+        case 'star_rating':
+          updateData[key] = parseFloat(value) || 0;
+          break;
+        case 'check_in_time':
+        case 'check_out_time':
+          updateData[key] = value ? formatTime(value) : null;
+          break;
+        default:
+          updateData[key] = value;
+      }
+    }
 
     console.log('[PropertyModel] Formatted update data:', JSON.stringify(updateData, null, 2));
     
     if (Object.keys(updateData).length === 0) {
       console.log('[PropertyModel] No fields to update');
-      return { status: 'success', message: 'No fields to update' };
+      throw new Error('No fields to update');
     }
 
-    // Generate and log the SQL query
+    // Execute the update
     const query = 'UPDATE properties SET ? WHERE id = ?';
     const sqlQuery = connection.format(query, [updateData, propertyId]);
     console.log('[PropertyModel] SQL Query:', sqlQuery);
-    
+
     const [result] = await connection.query(query, [updateData, propertyId]);
-    console.log('[PropertyModel] Update result:', result);
-    console.log('[PropertyModel] ====== UPDATE PROPERTY END ======\n');
+    if (!result.affectedRows) {
+      throw new Error('Failed to update property');
+    }
 
     await connection.commit();
+    console.log('[PropertyModel] Update successful');
     
-    return {
-      status: 'success',
-      message: 'Property updated successfully',
-      affectedRows: result.affectedRows
-    };
+    // Return the updated property
+    const [updatedProperty] = await connection.query(
+      'SELECT * FROM properties WHERE id = ?',
+      [propertyId]
+    );
+    
+    return updatedProperty[0];
   } catch (error) {
     await connection.rollback();
     console.error('[PropertyModel] Error updating property:', error);

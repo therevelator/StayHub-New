@@ -81,7 +81,7 @@ const LocationEdit = ({ property, onUpdate, disabled }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await onUpdate(formData);
+      await onUpdate('Location', formData);
       toast.success('Location updated successfully');
       // No need to update form data since we want to keep the current values
       // and the parent component will update the property prop if needed

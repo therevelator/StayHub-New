@@ -51,34 +51,35 @@ const EditPropertyPage = () => {
     }
   };
 
-  const handleUpdate = async (section, data) => {
-    console.log(`[EditPropertyPage] Starting update for section: ${section}`);
+  const handleUpdate = async (data) => {
+    console.log('[EditPropertyPage] Starting update');
+    console.log('[EditPropertyPage] Current property state:', property);
+    console.log('[EditPropertyPage] Received update data:', data);
     
     try {
       setSaving(true);
-      console.log('[EditPropertyPage] Received update data:', data);
       
-      // Send only the data for the current section being updated
+      // Send update to server
       console.log('[EditPropertyPage] Sending update with data:', data);
+      const updatedProperty = await propertyService.update(id, data);
+      console.log('[EditPropertyPage] Update response received:', updatedProperty);
       
-      const response = await propertyService.update(id, data);
-      console.log('[EditPropertyPage] Update response received:', response);
+      // Update local state with the response data
+      setProperty(updatedProperty);
       
-      if (response.status === 'success') {
-        console.log('[EditPropertyPage] Update successful, reloading property...');
-        await loadProperty();
-        toast.success(`${section} updated successfully`);
-      } else {
-        console.error('[EditPropertyPage] Update failed with response:', response);
-        throw new Error(response.message || 'Failed to update property');
-      }
+      // Confirm update with toast
+      toast.success('Changes saved successfully');
     } catch (error) {
       console.error('[EditPropertyPage] Error in handleUpdate:', error);
-      const errorMessage = error.response?.data?.message || error.message || `Failed to update ${section.toLowerCase()}`;
-      toast.error(errorMessage);
+      console.error('[EditPropertyPage] Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      toast.error('Failed to save changes. Please try again.');
     } finally {
       setSaving(false);
-      console.log(`[EditPropertyPage] Update process completed for section: ${section}`);
+      console.log('[EditPropertyPage] Update process completed');
     }
   };
 
@@ -186,7 +187,8 @@ const EditPropertyPage = () => {
         </button>
       </div>
 
-      <Tab.Group>
+      <Tab.Group manual>
+        {/* manual prop prevents auto-switching */}
         <Tab.List className="flex space-x-1 rounded-xl bg-primary-900/20 p-1">
           {['Basic Info', 'Location', 'Policies', 'Rooms', 'Photos', 'Status'].map((category) => (
             <Tab
@@ -208,7 +210,7 @@ const EditPropertyPage = () => {
           <Tab.Panel>
             <BasicInfoEdit
               property={property}
-              onUpdate={(data) => handleUpdate('Basic Info', data)}
+              onUpdate={handleUpdate}
               disabled={saving}
             />
           </Tab.Panel>
@@ -216,7 +218,7 @@ const EditPropertyPage = () => {
           <Tab.Panel>
             <LocationEdit
               property={property}
-              onUpdate={(data) => handleUpdate('Location', data)}
+              onUpdate={handleUpdate}
               disabled={saving}
             />
           </Tab.Panel>
@@ -224,7 +226,7 @@ const EditPropertyPage = () => {
           <Tab.Panel>
             <PoliciesEdit
               property={property}
-              onUpdate={(data) => handleUpdate('Policies', data)}
+              onUpdate={handleUpdate}
               disabled={saving}
             />
           </Tab.Panel>

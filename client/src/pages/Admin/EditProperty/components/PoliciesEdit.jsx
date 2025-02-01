@@ -32,8 +32,9 @@ const PoliciesEdit = ({ property, onUpdate, disabled }) => {
   });
 
   useEffect(() => {
+    console.log('[PoliciesEdit] Property received:', property);
     if (property) {
-      setFormData({
+      const newFormData = {
         check_in_time: property.check_in_time || '15:00',
         check_out_time: property.check_out_time || '11:00',
         cancellation_policy: property.cancellation_policy || CANCELLATION_POLICIES[0].value,
@@ -42,21 +43,51 @@ const PoliciesEdit = ({ property, onUpdate, disabled }) => {
         house_rules: property.house_rules || '',
         min_stay: property.min_stay || 1,
         max_stay: property.max_stay || 30
-      });
+      };
+      console.log('[PoliciesEdit] Setting initial form data:', newFormData);
+      setFormData(newFormData);
     }
-  }, [property]);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'number' ? parseInt(value, 10) || 0 : value
-    }));
+    console.log(`[PoliciesEdit] Field changed: ${name} = ${value}`);
+    const newValue = type === 'number' ? parseInt(value, 10) || 0 : value;
+
+    setFormData(prev => {
+      const newData = {
+        ...prev,
+        [name]: newValue,
+        isInitialized: true // Keep the initialization flag
+      };
+      console.log('[PoliciesEdit] Updated form data:', newData);
+      return newData;
+    });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onUpdate(formData);
+    console.log('[PoliciesEdit] Form submitted with data:', formData);
+    try {
+      // Create a clean object with only the policy fields
+      const updatedData = {
+        check_in_time: formData.check_in_time || '15:00',
+        check_out_time: formData.check_out_time || '11:00',
+        cancellation_policy: formData.cancellation_policy || 'flexible',
+        pet_policy: formData.pet_policy || 'not_allowed',
+        event_policy: formData.event_policy || 'not_allowed',
+        house_rules: formData.house_rules || '', // Always send house_rules, even if empty
+        min_stay: parseInt(formData.min_stay) || 1,
+        max_stay: parseInt(formData.max_stay) || 30
+      };
+
+      console.log('[PoliciesEdit] Sending update with data:', updatedData);
+      await onUpdate(updatedData);
+      console.log('[PoliciesEdit] Update completed');
+    } catch (error) {
+      console.error('[PoliciesEdit] Error updating policies:', error);
+      throw error;
+    }
   };
 
   return (

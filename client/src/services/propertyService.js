@@ -57,78 +57,75 @@ const propertyService = {
       throw error;
     }
   },
-  update: async (id, data, images) => {
+  update: async (id, data, images = []) => {
     console.log('[PropertyService] Update called with ID:', id);
     console.log('[PropertyService] Raw update data:', data);
     
-    // Initialize propertyData with only the fields that are present in the input data
-    const propertyData = {};
-
-    // Handle basic info fields
-    if ('name' in data) {
-      propertyData.name = data.name?.trim() || '';
-      propertyData.description = data.description?.trim() || '';
-      propertyData.property_type = data.property_type;
-      propertyData.guests = parseInt(data.guests) || 0;
-      propertyData.bedrooms = parseInt(data.bedrooms) || 0;
-      propertyData.beds = parseInt(data.beds) || 0;
-      propertyData.bathrooms = parseFloat(data.bathrooms) || 0;
-      propertyData.star_rating = parseFloat(data.star_rating) || 0;
-    }
-
-    // Handle location fields
-    if ('street' in data) {
-      propertyData.street = data.street?.trim() || '';
-      propertyData.city = data.city?.trim() || '';
-      propertyData.state = data.state?.trim() || '';
-      propertyData.country = data.country?.trim() || '';
-      propertyData.postal_code = data.postal_code?.trim() || '';
-      propertyData.latitude = data.latitude || '0';
-      propertyData.longitude = data.longitude || '0';
-    }
-
-    // Handle policies fields
-    if ('check_in_time' in data) {
-      propertyData.check_in_time = data.check_in_time;
-      propertyData.check_out_time = data.check_out_time;
-      propertyData.cancellation_policy = data.cancellation_policy;
-      propertyData.pet_policy = data.pet_policy?.trim();
-      propertyData.event_policy = data.event_policy?.trim();
-      propertyData.house_rules = data.house_rules?.trim();
-      propertyData.min_stay = parseInt(data.min_stay) || 1;
-      propertyData.max_stay = parseInt(data.max_stay) || 30;
-    }
-
-    // Handle status fields
+    // Create a clean object with only valid fields
+    const updateData = {};
+    
+    // Basic info fields
+    if (data.name) updateData.name = data.name.trim();
+    if (data.description) updateData.description = data.description.trim();
+    if (data.property_type) updateData.property_type = data.property_type;
+    if (data.guests) updateData.guests = parseInt(data.guests);
+    if (data.bedrooms) updateData.bedrooms = parseInt(data.bedrooms);
+    if (data.beds) updateData.beds = parseInt(data.beds);
+    if (data.bathrooms) updateData.bathrooms = parseFloat(data.bathrooms);
+    if (data.star_rating) updateData.star_rating = parseFloat(data.star_rating);
+    
+    // Location fields
+    if (data.street) updateData.street = data.street.trim();
+    if (data.city) updateData.city = data.city.trim();
+    if (data.state) updateData.state = data.state.trim();
+    if (data.country) updateData.country = data.country.trim();
+    if (data.postal_code) updateData.postal_code = data.postal_code.trim();
+    if (data.latitude) updateData.latitude = parseFloat(data.latitude);
+    if (data.longitude) updateData.longitude = parseFloat(data.longitude);
+    
+    // Policy fields
+    if (data.check_in_time) updateData.check_in_time = data.check_in_time;
+    if (data.check_out_time) updateData.check_out_time = data.check_out_time;
+    if (data.cancellation_policy) updateData.cancellation_policy = data.cancellation_policy;
+    if (data.pet_policy) updateData.pet_policy = data.pet_policy;
+    if (data.event_policy) updateData.event_policy = data.event_policy;
+    if (data.house_rules) updateData.house_rules = data.house_rules;
+    if (data.min_stay) updateData.min_stay = parseInt(data.min_stay);
+    if (data.max_stay) updateData.max_stay = parseInt(data.max_stay);
+    
+    // Status fields
     if ('is_active' in data) {
-      propertyData.is_active = data.is_active ? 1 : 0;
-      if (data.languages_spoken) {
-        propertyData.languages_spoken = JSON.stringify(
-          Array.isArray(data.languages_spoken) ? data.languages_spoken : []
-        );
-      }
+      updateData.is_active = data.is_active ? 1 : 0;
     }
-
-    // Upload images
-    const uploadedImages = images.length > 0 ? await uploadMultipleImages(images) : [];
-
-    // Add image URLs to property data
-    propertyData.images = uploadedImages.map(img => ({
-      url: img.url,
-      thumbnail: img.thumbnail,
-      delete_url: img.delete_url
-    }));
-
-    console.log('[PropertyService] Formatted update data:', propertyData);
-    console.log('[PropertyService] Making PUT request to:', `/properties/${id}`);
+    if (data.languages_spoken) {
+      updateData.languages_spoken = JSON.stringify(
+        Array.isArray(data.languages_spoken) ? data.languages_spoken : []
+      );
+    }
+    
+    // Upload images if any
+    if (images.length > 0) {
+      const uploadedImages = await uploadMultipleImages(images);
+      updateData.images = uploadedImages.map(img => ({
+        url: img.url,
+        thumbnail: img.thumbnail,
+        delete_url: img.delete_url
+      }));
+    }
+    
+    console.log('[PropertyService] Cleaned update data:', updateData);
     
     try {
-      console.log('[PropertyService] Sending request...');
-      const response = await api.put(`/properties/${id}`, propertyData);
-      console.log('[PropertyService] Response received:', response);
-      return response.data;
+      const response = await api.put(`/properties/${id}`, updateData);
+      console.log('[PropertyService] Response:', response.data);
+      
+      if (response.data?.status !== 'success') {
+        throw new Error(response.data?.message || 'Failed to update property');
+      }
+      
+      return response.data.data;
     } catch (error) {
-      console.error('[PropertyService] Error in update:', error);
+      console.error('[PropertyService] Error updating property:', error);
       console.error('[PropertyService] Error details:', {
         message: error.message,
         response: error.response?.data,
@@ -170,6 +167,11 @@ const propertyService = {
           images: typeof room.images === 'string' ? JSON.parse(room.images) : room.images
         }));
       }
+
+      // Handle house_rules - ensure it's always a string
+      propertyData.house_rules = Array.isArray(propertyData.house_rules) ? 
+        propertyData.house_rules.join('\n') : 
+        (propertyData.house_rules || '');
       
       console.log('[PropertyService] Parsed property data:', propertyData);
       return propertyData;

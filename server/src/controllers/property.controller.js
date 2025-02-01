@@ -412,20 +412,30 @@ const updatePropertyById = async (req, res) => {
       });
     }
 
-    // Only update the fields that are provided in the request
+    // Process update fields
     const updateFields = {};
-    const allowedFields = ['name', 'description', 'property_type', 'guests', 'bedrooms', 'beds', 'bathrooms', 'star_rating'];
     
-    for (const field of allowedFields) {
-      if (req.body[field] !== undefined) {
-        updateFields[field] = req.body[field];
+    // Only include fields that are actually provided
+    Object.keys(req.body).forEach(key => {
+      if (req.body[key] !== undefined && req.body[key] !== null) {
+        updateFields[key] = req.body[key];
       }
-    }
+    });
 
     console.log('[PropertyController] Fields to update:', updateFields);
 
-    const updatedProperty = await update(id, updateFields);
-    console.log('[PropertyController] Update result:', updatedProperty);
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No fields to update'
+      });
+    }
+
+    await update(id, updateFields);
+    
+    // Fetch the updated property
+    const updatedProperty = await getProperty(id);
+    console.log('[PropertyController] Updated property:', updatedProperty);
     console.log('[PropertyController] ====== UPDATE PROPERTY END ======\n');
 
     return res.json({

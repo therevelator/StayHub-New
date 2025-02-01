@@ -106,11 +106,19 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
                     </p>
                     {room.beds && (
                       <p className="mt-1 text-sm text-gray-500">
-                        Beds: {Array.isArray(room.beds) 
-                          ? room.beds.map(bed => `${bed.count} ${bed.type}`).join(', ')
-                          : typeof room.beds === 'string'
-                            ? JSON.parse(room.beds).map(bed => `${bed.count} ${bed.type}`).join(', ')
-                            : 'No bed information'}
+                        Beds: {(() => {
+                          try {
+                            const beds = Array.isArray(room.beds) 
+                              ? room.beds 
+                              : typeof room.beds === 'string' 
+                                ? JSON.parse(room.beds) 
+                                : [];
+                            return beds.map(bed => `${bed.count} ${bed.type}`).join(', ') || 'No bed information';
+                          } catch (error) {
+                            console.error('Error parsing beds:', error);
+                            return 'No bed information';
+                          }
+                        })()} 
                       </p>
                     )}
                   </div>
