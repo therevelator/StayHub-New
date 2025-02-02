@@ -2,59 +2,71 @@ import api from './api';
 import { uploadMultipleImages } from './imageService';
 
 const propertyService = {
-  create: async (data, images) => {
+  create: async (data, images = []) => {
     console.log('PropertyService: Creating property with data:', data);
     
-    // Format the data to match the expected structure
-    const propertyData = {
-      name: data.name?.trim(),
-      description: data.description?.trim(),
-      latitude: data.latitude || 0,
-      longitude: data.longitude || 0,
-      street: data.street?.trim(),
-      city: data.city?.trim(),
-      state: data.state?.trim(),
-      country: data.country?.trim(),
-      postal_code: data.postal_code?.trim(),
-      host_id: data.host_id,
-      guests: parseInt(data.guests) || 1,
-      bedrooms: parseInt(data.bedrooms) || 1,
-      beds: parseInt(data.beds) || 1,
-      bathrooms: parseFloat(data.bathrooms) || 1,
-      property_type: data.property_type,
-      check_in_time: data.check_in_time || '14:00:00',
-      check_out_time: data.check_out_time || '11:00:00',
-      cancellation_policy: data.cancellation_policy || 'flexible',
-      pet_policy: data.pet_policy?.trim(),
-      event_policy: data.event_policy?.trim(),
-      star_rating: parseInt(data.star_rating) || 0,
-      languages_spoken: JSON.stringify(Array.isArray(data.languages_spoken) ? data.languages_spoken : []),
-      is_active: data.is_active ? 1 : 0,
-      rooms: data.rooms || [],
-      photos: data.photos?.map(photo => ({
-        url: photo.url,
-        caption: photo.caption || null
-      })) || []
-    };
-
-    // Upload images
-    const uploadedImages = images.length > 0 ? await uploadMultipleImages(images) : [];
-
-    // Add image URLs to property data
-    propertyData.images = uploadedImages.map(img => ({
-      url: img.url,
-      thumbnail: img.thumbnail,
-      delete_url: img.delete_url
-    }));
-
-    console.log('PropertyService: Formatted data:', propertyData);
-    
     try {
-      const response = await api.post('/properties', propertyData);
-      return response.data;
+      // Format the main property data
+      const propertyData = {
+        name: data.name?.trim(),
+        description: data.description?.trim(),
+        latitude: data.latitude || 0,
+        longitude: data.longitude || 0,
+        street: data.street?.trim(),
+        city: data.city?.trim(),
+        state: data.state?.trim(),
+        country: data.country?.trim(),
+        postal_code: data.postal_code?.trim(),
+        host_id: data.host_id,
+        guests: parseInt(data.guests) || 1,
+        bedrooms: parseInt(data.bedrooms) || 1,
+        beds: parseInt(data.beds) || 1,
+        bathrooms: parseFloat(data.bathrooms) || 1,
+        property_type: data.property_type,
+        check_in_time: data.check_in_time || '14:00:00',
+        check_out_time: data.check_out_time || '11:00:00',
+        cancellation_policy: data.cancellation_policy || 'flexible',
+        pet_policy: data.pet_policy?.trim() || '',
+        event_policy: data.event_policy?.trim() || '',
+        star_rating: parseInt(data.star_rating) || 0,
+        languages_spoken: data.languages_spoken || [],
+        is_active: data.is_active ? 1 : 0,
+        house_rules: data.house_rules?.trim() || '',
+        min_stay: parseInt(data.min_stay) || 1,
+        max_stay: parseInt(data.max_stay) || 30,
+        rooms: data.rooms || [],
+        created_at: data.created_at || new Date().toISOString(),
+        updated_at: data.updated_at || new Date().toISOString()
+      };
+
+      // Upload images if any
+      if (images.length > 0) {
+        const uploadedImages = await uploadMultipleImages(images);
+        propertyData.images = uploadedImages.map(img => ({
+          url: img.url,
+          thumbnail: img.thumbnail,
+          delete_url: img.delete_url
+        }));
+      }
+
+      console.log('PropertyService: Sending formatted data to server:', propertyData);
+      
+      // Create the property
+      const propertyResponse = await api.post('/properties', propertyData);
+      console.log('PropertyService: Property creation response:', propertyResponse.data);
+      
+      if (!propertyResponse.data) {
+        throw new Error('No data received from server');
+      }
+
+      // Return success with the created property data
+      return {
+        status: 'success',
+        data: propertyResponse.data
+      };
     } catch (error) {
       console.error('PropertyService: Error creating property:', error);
-      throw error;
+      throw error; // Let the component handle the error
     }
   },
   update: async (id, data, images = []) => {
@@ -155,7 +167,7 @@ const propertyService = {
       
       // Parse the rooms data
       const propertyData = response.data.data;
-      if (propertyData.rooms) {
+      if (propertyData.rooms && Array.isArray(propertyData.rooms)) {
         propertyData.rooms = propertyData.rooms.map(room => ({
           ...room,
           beds: typeof room.beds === 'string' ? JSON.parse(room.beds) : room.beds,
@@ -166,6 +178,8 @@ const propertyService = {
             JSON.parse(room.energy_saving_features) : room.energy_saving_features,
           images: typeof room.images === 'string' ? JSON.parse(room.images) : room.images
         }));
+      } else {
+        propertyData.rooms = [];
       }
 
       // Handle house_rules - ensure it's always a string
@@ -255,52 +269,61 @@ const propertyService = {
       throw error;
     }
   },
-  updateRoom: async (propertyId, roomId, roomData, images) => {
+  updateRoom: async (propertyId, roomId, roomData, images = []) => {
     console.log('[PropertyService] Updating room with data:', roomData);
     try {
       // Format the data to match the expected structure
       const formattedData = {
         ...roomData,
-        property_id: propertyId,
-        // Ensure arrays are stringified
-        beds: typeof roomData.beds === 'string' ? roomData.beds : JSON.stringify(roomData.beds || []),
-        amenities: typeof roomData.amenities === 'string' ? roomData.amenities : JSON.stringify(roomData.amenities || [])
+        property_id: propertyId
       };
 
-      // Upload room images
-      const uploadedImages = images.length > 0 ? await uploadMultipleImages(images) : [];
-
-      // Add image URLs to room data
-      formattedData.images = uploadedImages.map(img => ({
-        url: img.url,
-        thumbnail: img.thumbnail,
-        delete_url: img.delete_url
-      }));
+      // Upload room images if provided
+      if (images.length > 0) {
+        const uploadedImages = await uploadMultipleImages(images);
+        formattedData.images = uploadedImages.map(img => ({
+          url: img.url,
+          thumbnail: img.thumbnail,
+          delete_url: img.delete_url
+        }));
+      }
 
       console.log('[PropertyService] Sending formatted data:', formattedData);
       const response = await api.put(`/properties/${propertyId}/rooms/${roomId}`, formattedData);
       console.log('[PropertyService] Received response:', response.data);
       
-      // Ensure we have the data property
-      if (!response.data || !response.data.data) {
+      // Handle both success response formats
+      const responseData = response.data?.data || response.data;
+      if (!responseData) {
         console.error('[PropertyService] Invalid response format:', response);
         throw new Error('Invalid response format from server');
       }
       
+      // Safely parse JSON fields
+      const safeParseJson = (str, defaultValue = []) => {
+        if (!str) return defaultValue;
+        if (typeof str !== 'string') return str;
+        try {
+          return JSON.parse(str);
+        } catch (e) {
+          console.warn(`[PropertyService] Failed to parse JSON:`, e);
+          return defaultValue;
+        }
+      };
+
       // Parse the stringified fields in the response
       const parsedData = {
-        ...response.data.data,
-        beds: typeof response.data.data.beds === 'string' ? JSON.parse(response.data.data.beds) : response.data.data.beds,
-        amenities: typeof response.data.data.amenities === 'string' ? JSON.parse(response.data.data.amenities) : response.data.data.amenities,
-        accessibility_features: typeof response.data.data.accessibility_features === 'string' ? 
-          JSON.parse(response.data.data.accessibility_features) : response.data.data.accessibility_features,
-        energy_saving_features: typeof response.data.data.energy_saving_features === 'string' ? 
-          JSON.parse(response.data.data.energy_saving_features) : response.data.data.energy_saving_features,
-        images: typeof response.data.data.images === 'string' ? JSON.parse(response.data.data.images) : response.data.data.images
+        ...responseData,
+        beds: safeParseJson(responseData.beds),
+        amenities: safeParseJson(responseData.amenities),
+        accessibility_features: safeParseJson(responseData.accessibility_features),
+        energy_saving_features: safeParseJson(responseData.energy_saving_features),
+        images: safeParseJson(responseData.images),
+        climate: safeParseJson(responseData.climate, { type: 'ac', available: true })
       };
       
       console.log('[PropertyService] Returning parsed data:', parsedData);
-      return { ...response.data, data: parsedData };
+      return parsedData;
     } catch (error) {
       console.error('[PropertyService] Error updating room:', error);
       throw error;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
+import Swal from 'sweetalert2';
 import propertyService from '../../../services/propertyService';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 
@@ -55,21 +56,39 @@ const AdminProperties = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this property?')) {
-      return;
-    }
-
     try {
-      setDeleting(true);
-      console.log('Component: Deleting property:', id);
-      await propertyService.delete(id);
-      console.log('Component: Property deleted successfully');
-      toast.success('Property deleted successfully');
-      loadProperties();
+      const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: 'You won\'t be able to revert this!',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete it!'
+      });
+
+      if (result.isConfirmed) {
+        setDeleting(true);
+        console.log('Component: Deleting property:', id);
+        await propertyService.delete(id);
+        console.log('Component: Property deleted successfully');
+        
+        await Swal.fire(
+          'Deleted!',
+          'Property has been deleted.',
+          'success'
+        );
+        
+        loadProperties();
+      }
     } catch (error) {
       console.error('Component: Error deleting property:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete property';
-      toast.error(errorMessage);
+      console.error('Delete error details:', error.response || error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Cannot Delete Property',
+        text: 'Failed to delete property. Please try again.'
+      });
     } finally {
       setDeleting(false);
     }

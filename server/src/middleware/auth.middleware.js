@@ -4,18 +4,36 @@ import db from '../db/index.js';
 export const authenticateToken = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
+    console.log('Auth header:', authHeader); // Debug log
+    
     const token = authHeader && authHeader.split(' ')[1];
+    console.log('Token:', token); // Debug log
 
     if (!token) {
-      return res.status(401).json({ message: 'Authentication token required' });
+      return res.status(401).json({ 
+        message: 'Authentication token required',
+        details: 'No token found in Authorization header'
+      });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('Decoded token:', decoded); // Debug log
+      req.user = decoded;
+      next();
+    } catch (jwtError) {
+      console.error('JWT verification error:', jwtError);
+      return res.status(401).json({ 
+        message: 'Invalid or expired token',
+        details: jwtError.message
+      });
+    }
   } catch (error) {
     console.error('Authentication error:', error);
-    return res.status(401).json({ message: 'Invalid or expired token' });
+    return res.status(401).json({ 
+      message: 'Authentication failed',
+      details: error.message
+    });
   }
 };
 

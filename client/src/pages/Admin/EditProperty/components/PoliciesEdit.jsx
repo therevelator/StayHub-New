@@ -47,7 +47,7 @@ const PoliciesEdit = ({ property, onUpdate, disabled }) => {
       console.log('[PoliciesEdit] Setting initial form data:', newFormData);
       setFormData(newFormData);
     }
-  }, []);
+  }, [property]);
 
   const handleChange = (e) => {
     const { name, value, type } = e.target;
@@ -57,8 +57,7 @@ const PoliciesEdit = ({ property, onUpdate, disabled }) => {
     setFormData(prev => {
       const newData = {
         ...prev,
-        [name]: newValue,
-        isInitialized: true // Keep the initialization flag
+        [name]: newValue
       };
       console.log('[PoliciesEdit] Updated form data:', newData);
       return newData;
@@ -82,7 +81,7 @@ const PoliciesEdit = ({ property, onUpdate, disabled }) => {
       };
 
       console.log('[PoliciesEdit] Sending update with data:', updatedData);
-      await onUpdate(updatedData);
+      await onUpdate('policies', updatedData);
       console.log('[PoliciesEdit] Update completed');
     } catch (error) {
       console.error('[PoliciesEdit] Error updating policies:', error);

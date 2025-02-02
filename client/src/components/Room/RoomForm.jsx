@@ -41,54 +41,91 @@ const RoomForm = ({ room, onSubmit, onClose }) => {
     floor_level: '',
     status: 'available',
     view_type: 'No View',
-    flooring_type: 'Carpet'
+    flooring_type: 'Carpet',
+    base_price: '',
+    has_private_bathroom: true,
+    smoking: false,
+    has_balcony: false,
+    has_kitchen: false,
+    has_minibar: false,
+    includes_breakfast: false,
+    extra_bed_available: false,
+    pets_allowed: false,
+    has_toiletries: true,
+    has_towels_linens: true,
+    has_room_service: false,
+    cleaning_frequency: 'daily',
+    cancellation_policy: 'flexible'
   });
 
   useEffect(() => {
     if (room) {
       console.log('[RoomForm] Setting form data with room:', room);
       
-      // Ensure all fields are properly initialized
+      // Parse JSON strings if needed
+      const parseBeds = (beds) => {
+        console.log('[RoomForm] Parsing beds:', beds);
+        if (!beds) return [{ type: 'Single Bed', count: 1 }];
+        try {
+          if (Array.isArray(beds)) return beds;
+          const parsed = JSON.parse(beds);
+          return Array.isArray(parsed) && parsed.length > 0 ? parsed : [{ type: 'Single Bed', count: 1 }];
+        } catch (e) {
+          console.error('[RoomForm] Error parsing beds:', e);
+          return [{ type: 'Single Bed', count: 1 }];
+        }
+      };
+
+      const parseArray = (value) => {
+        console.log('[RoomForm] Parsing array:', value);
+        if (!value) return [];
+        try {
+          if (Array.isArray(value)) return value;
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          console.error('[RoomForm] Error parsing array:', e);
+          return [];
+        }
+      };
+
+      // Initialize form data with room data
       const initialData = {
+        id: room.id,
+        property_id: room.property_id,
         name: room.name || '',
-        room_type: room.room_type || '',
+        room_type: room.room_type || 'Standard Room',
         price_per_night: room.price_per_night || '',
-        max_occupancy: room.max_occupancy || '',
+        base_price: room.base_price || '',
+        max_occupancy: room.max_occupancy || 2,
         description: room.description || '',
         bathroom_type: room.bathroom_type || 'private',
         room_size: room.room_size || '',
-        floor_level: room.floor_level || '',
+        floor_level: room.floor_level || 1,
         status: room.status || 'available',
         view_type: room.view_type || 'No View',
         flooring_type: room.flooring_type || 'Carpet',
         cleaning_frequency: room.cleaning_frequency || 'daily',
         cancellation_policy: room.cancellation_policy || 'flexible',
-        accessibility_features: Array.isArray(room.accessibility_features) 
-          ? room.accessibility_features 
-          : typeof room.accessibility_features === 'string' 
-            ? JSON.parse(room.accessibility_features) 
-            : [],
-        energy_saving_features: Array.isArray(room.energy_saving_features) 
-          ? room.energy_saving_features 
-          : typeof room.energy_saving_features === 'string' 
-            ? JSON.parse(room.energy_saving_features) 
-            : [],
-        beds: Array.isArray(room.beds) 
-          ? room.beds 
-          : typeof room.beds === 'string' 
-            ? JSON.parse(room.beds) 
-            : [{ type: 'Single Bed', count: 1 }],
-        amenities: Array.isArray(room.amenities) 
-          ? room.amenities 
-          : typeof room.amenities === 'string' 
-            ? JSON.parse(room.amenities) 
-            : [],
-        images: Array.isArray(room.images) 
-          ? room.images 
-          : typeof room.images === 'string' 
-            ? JSON.parse(room.images) 
-            : []
+        has_private_bathroom: Boolean(room.has_private_bathroom),
+        smoking: Boolean(room.smoking),
+        has_balcony: Boolean(room.has_balcony),
+        has_kitchen: Boolean(room.has_kitchen),
+        has_minibar: Boolean(room.has_minibar),
+        includes_breakfast: Boolean(room.includes_breakfast),
+        extra_bed_available: Boolean(room.extra_bed_available),
+        pets_allowed: Boolean(room.pets_allowed),
+        has_toiletries: room.has_toiletries !== false,
+        has_towels_linens: room.has_towels_linens !== false,
+        has_room_service: Boolean(room.has_room_service),
+        beds: parseBeds(room.beds),
+        amenities: parseArray(room.amenities),
+        accessibility_features: parseArray(room.accessibility_features),
+        energy_saving_features: parseArray(room.energy_saving_features),
+        images: parseArray(room.images)
       };
+      
+      console.log('[RoomForm] Parsed form data:', initialData);
 
       console.log('[RoomForm] Initialized form data:', initialData);
       setFormData(initialData);
@@ -160,16 +197,52 @@ const RoomForm = ({ room, onSubmit, onClose }) => {
     const submissionData = {
       ...formData,
       // Ensure numeric values
-      price_per_night: Number(formData.price_per_night),
-      room_size: Number(formData.room_size),
-      floor_level: Number(formData.floor_level),
-      max_occupancy: Number(formData.max_occupancy),
+      price_per_night: Number(formData.price_per_night) || 0,
+      base_price: Number(formData.base_price) || 0,
+      room_size: Number(formData.room_size) || 0,
+      floor_level: Number(formData.floor_level) || 1,
+      max_occupancy: Number(formData.max_occupancy) || 2,
       // Ensure arrays are properly formatted
-      beds: Array.isArray(formData.beds) ? formData.beds : [],
-      amenities: Array.isArray(formData.amenities) ? formData.amenities : []
+      beds: formData.beds || [{ type: 'Single Bed', count: 1 }],
+      amenities: formData.amenities || [],
+      accessibility_features: formData.accessibility_features || [],
+      energy_saving_features: formData.energy_saving_features || [],
+      images: formData.images || [],
+      // Ensure boolean values
+      has_private_bathroom: Boolean(formData.has_private_bathroom),
+      smoking: Boolean(formData.smoking),
+      has_balcony: Boolean(formData.has_balcony),
+      has_kitchen: Boolean(formData.has_kitchen),
+      has_minibar: Boolean(formData.has_minibar),
+      includes_breakfast: Boolean(formData.includes_breakfast),
+      extra_bed_available: Boolean(formData.extra_bed_available),
+      pets_allowed: Boolean(formData.pets_allowed),
+      has_toiletries: Boolean(formData.has_toiletries),
+      has_towels_linens: Boolean(formData.has_towels_linens),
+      has_room_service: Boolean(formData.has_room_service)
     };
-    console.log('Submitting form data:', submissionData); // Debug log
-    onSubmit(submissionData);
+    // Prepare data for submission by ensuring proper format of complex fields
+    const preparedData = {
+      ...submissionData,
+      // Ensure arrays are properly formatted
+      beds: Array.isArray(submissionData.beds) ? submissionData.beds : parseBeds(submissionData.beds),
+      amenities: Array.isArray(submissionData.amenities) ? submissionData.amenities : parseArray(submissionData.amenities),
+      accessibility_features: Array.isArray(submissionData.accessibility_features) ? submissionData.accessibility_features : [],
+      energy_saving_features: Array.isArray(submissionData.energy_saving_features) ? submissionData.energy_saving_features : [],
+      images: Array.isArray(submissionData.images) ? submissionData.images : [],
+      climate: submissionData.climate || { type: 'ac', available: true },
+      // Ensure required fields have default values
+      room_type: submissionData.room_type || 'Standard Room',
+      bathroom_type: submissionData.bathroom_type || 'private',
+      status: submissionData.status || 'available',
+      view_type: submissionData.view_type || 'No View',
+      flooring_type: submissionData.flooring_type || 'Carpet',
+      cleaning_frequency: submissionData.cleaning_frequency || 'daily',
+      cancellation_policy: submissionData.cancellation_policy || 'flexible'
+    };
+
+    console.log('[RoomForm] Submitting prepared data:', preparedData);
+    onSubmit(preparedData);
   };
 
   return (

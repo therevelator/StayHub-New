@@ -269,52 +269,64 @@ const formatTimeString = (timeStr) => {
 // Get property by id including amenities and images
 const getPropertyById = async (id) => {
   const query = `
+    WITH RoomDetails AS (
+      SELECT r.*, 
+             COALESCE(
+               (SELECT JSON_ARRAYAGG(amenity)
+                FROM (SELECT DISTINCT amenity 
+                      FROM room_amenities 
+                      WHERE room_id = r.id) t
+               ),
+               '[]'
+             ) as room_amenities
+      FROM rooms r
+      WHERE r.property_id = ?
+    )
     SELECT 
       p.*,
       COALESCE(
-        (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
-              'id', r.id,
-              'name', r.name,
-              'room_type', r.room_type,
-              'beds', COALESCE(r.beds, '[]'),
-              'max_occupancy', r.max_occupancy,
-              'base_price', r.base_price,
-              'cleaning_fee', r.cleaning_fee,
-              'service_fee', r.service_fee,
-              'tax_rate', r.tax_rate,
-              'security_deposit', r.security_deposit,
-              'description', r.description,
-              'bathroom_type', r.bathroom_type,
-              'view_type', r.view_type,
-              'has_private_bathroom', r.has_private_bathroom,
-              'smoking', r.smoking,
-              'accessibility_features', COALESCE(r.accessibility_features, '[]'),
-              'floor_level', r.floor_level,
-              'has_balcony', r.has_balcony,
-              'has_kitchen', r.has_kitchen,
-              'has_minibar', r.has_minibar,
-              'climate', COALESCE(r.climate, 'null'),
-              'price_per_night', r.price_per_night,
-              'cancellation_policy', r.cancellation_policy,
-              'includes_breakfast', r.includes_breakfast,
-              'extra_bed_available', r.extra_bed_available,
-              'pets_allowed', r.pets_allowed,
-              'images', COALESCE(r.images, '[]'),
-              'cleaning_frequency', r.cleaning_frequency,
-              'has_toiletries', r.has_toiletries,
-              'has_towels_linens', r.has_towels_linens,
-              'has_room_service', r.has_room_service,
-              'flooring_type', r.flooring_type,
-              'energy_saving_features', COALESCE(r.energy_saving_features, '[]'),
-              'status', r.status,
-              'room_size', r.room_size,
-              'amenities', COALESCE(r.amenities, '[]')
-            )
+        JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'id', rd.id,
+            'property_id', rd.property_id,
+            'name', rd.name,
+            'room_type', rd.room_type,
+            'beds', rd.beds,
+            'max_occupancy', rd.max_occupancy,
+            'base_price', rd.base_price,
+            'cleaning_fee', rd.cleaning_fee,
+            'service_fee', rd.service_fee,
+            'tax_rate', rd.tax_rate,
+            'security_deposit', rd.security_deposit,
+            'description', rd.description,
+            'bathroom_type', rd.bathroom_type,
+            'view_type', rd.view_type,
+            'has_private_bathroom', rd.has_private_bathroom,
+            'smoking', rd.smoking,
+            'accessibility_features', rd.accessibility_features,
+            'floor_level', rd.floor_level,
+            'has_balcony', rd.has_balcony,
+            'has_kitchen', rd.has_kitchen,
+            'has_minibar', rd.has_minibar,
+            'climate', rd.climate,
+            'price_per_night', rd.price_per_night,
+            'cancellation_policy', rd.cancellation_policy,
+            'includes_breakfast', rd.includes_breakfast,
+            'extra_bed_available', rd.extra_bed_available,
+            'pets_allowed', rd.pets_allowed,
+            'images', rd.images,
+            'cleaning_frequency', rd.cleaning_frequency,
+            'has_toiletries', rd.has_toiletries,
+            'has_towels_linens', rd.has_towels_linens,
+            'has_room_service', rd.has_room_service,
+            'flooring_type', rd.flooring_type,
+            'energy_saving_features', rd.energy_saving_features,
+            'status', rd.status,
+            'room_size', rd.room_size,
+            'amenities', COALESCE(rd.room_amenities, '[]'),
+            'created_at', rd.created_at,
+            'updated_at', rd.updated_at
           )
-          FROM rooms r
-          WHERE r.property_id = p.id
         ),
         '[]'
       ) as rooms,
@@ -347,11 +359,13 @@ const getPropertyById = async (id) => {
         '[]'
       ) as photos
     FROM properties p
+    LEFT JOIN RoomDetails rd ON p.id = rd.property_id
     WHERE p.id = ?
+    GROUP BY p.id
   `;
 
   try {
-    const [result] = await db.query(query, [id]);
+    const [result] = await db.query(query, [id, id]);
     const property = result[0];
     
     if (!property) return null;
@@ -403,32 +417,35 @@ const createProperty = async (propertyData) => {
         postal_code, host_id, guests, bedrooms, beds, bathrooms,
         property_type, check_in_time, check_out_time, cancellation_policy,
         pet_policy, event_policy, star_rating, languages_spoken, is_active,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        house_rules, min_stay, max_stay, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
       [
-        propertyData.name,
-        propertyData.description,
+        propertyData.name?.trim(),
+        propertyData.description?.trim(),
         propertyData.latitude || 0,
         propertyData.longitude || 0,
-        propertyData.street,
-        propertyData.city,
-        propertyData.state,
-        propertyData.country,
-        propertyData.postal_code,
-        propertyData.host_id, // This should now be guaranteed to exist
-        propertyData.guests || 1,
-        propertyData.bedrooms || 1,
-        propertyData.beds || 1,
-        propertyData.bathrooms || 1,
+        propertyData.street?.trim(),
+        propertyData.city?.trim(),
+        propertyData.state?.trim(),
+        propertyData.country?.trim(),
+        propertyData.postal_code?.trim(),
+        propertyData.host_id,
+        parseInt(propertyData.guests) || 1,
+        parseInt(propertyData.bedrooms) || 1,
+        parseInt(propertyData.beds) || 1,
+        parseFloat(propertyData.bathrooms) || 1,
         propertyData.property_type,
         propertyData.check_in_time || '14:00:00',
         propertyData.check_out_time || '11:00:00',
         propertyData.cancellation_policy || 'flexible',
-        propertyData.pet_policy || '',
-        propertyData.event_policy || '',
-        propertyData.star_rating || 0,
-        JSON.stringify(propertyData.languages_spoken || []),
-        propertyData.is_active ? 1 : 0
+        propertyData.pet_policy?.trim(),
+        propertyData.event_policy?.trim(),
+        parseInt(propertyData.star_rating) || 0,
+        JSON.stringify(Array.isArray(propertyData.languages_spoken) ? propertyData.languages_spoken : []),
+        1,
+        propertyData.house_rules?.trim(),
+        parseInt(propertyData.min_stay) || 1,
+        parseInt(propertyData.max_stay) || 30
       ]
     );
 
@@ -441,59 +458,52 @@ const createProperty = async (propertyData) => {
           property_id, name, room_type, bed_type, beds, max_occupancy, 
           base_price, cleaning_fee, service_fee, tax_rate, security_deposit,
           description, bathroom_type, view_type, has_private_bathroom,
-          smoking, accessibility_features, floor_level, has_balcony,
-          has_kitchen, has_minibar, climate, price_per_night,
-          cancellation_policy, includes_breakfast, extra_bed_available,
-          pets_allowed, images, cleaning_frequency, has_toiletries,
-          has_towels_linens, has_room_service, flooring_type,
-          energy_saving_features, status, room_size, amenities,
-          created_at, updated_at
+          smoking, floor_level, has_balcony, has_kitchen, has_minibar, 
+          climate, price_per_night, includes_breakfast, extra_bed_available,
+          pets_allowed, has_toiletries, has_towels_linens, has_room_service, 
+          flooring_type, status, room_size, amenities, created_at, updated_at
         ) VALUES ?
       `;
 
       const roomValues = propertyData.rooms.map(room => [
         propertyId,
-        room.name,
-        room.room_type,
-        room.bed_type,
-        room.beds,
-        room.max_occupancy,
-        room.base_price,
-        room.cleaning_fee,
-        room.service_fee,
-        room.tax_rate,
-        room.security_deposit,
-        room.description,
-        room.bathroom_type,
-        room.view_type,
-        room.has_private_bathroom,
-        room.smoking,
-        room.accessibility_features,
-        room.floor_level,
-        room.has_balcony,
-        room.has_kitchen,
-        room.has_minibar,
-        room.climate,
-        room.price_per_night,
-        room.cancellation_policy,
-        room.includes_breakfast,
-        room.extra_bed_available,
-        room.pets_allowed,
-        room.images,
-        room.cleaning_frequency,
-        room.has_toiletries,
-        room.has_towels_linens,
-        room.has_room_service,
-        room.flooring_type,
-        room.energy_saving_features,
-        room.status,
-        room.room_size,
-        room.amenities,
+        room.name || '',
+        room.room_type || 'standard',
+        room.bed_type || 'single',
+        room.beds || '[]',
+        room.max_occupancy || 2,
+        room.base_price || 0,
+        room.cleaning_fee || 0,
+        room.service_fee || 0,
+        room.tax_rate || 0,
+        room.security_deposit || 0,
+        room.description || '',
+        room.bathroom_type || 'private',
+        room.view_type || 'standard',
+        room.has_private_bathroom ? 1 : 0,
+        room.smoking ? 1 : 0,
+        room.floor_level || 1,
+        room.has_balcony ? 1 : 0,
+        room.has_kitchen ? 1 : 0,
+        room.has_minibar ? 1 : 0,
+        room.climate || 'ac',
+        room.price_per_night || room.base_price || 0,
+        room.includes_breakfast ? 1 : 0,
+        room.extra_bed_available ? 1 : 0,
+        room.pets_allowed ? 1 : 0,
+        room.has_toiletries ? 1 : 0,
+        room.has_towels_linens ? 1 : 0,
+        room.has_room_service ? 1 : 0,
+        room.flooring_type || 'carpet',
+        room.status || 'available',
+        room.room_size || 0,
+        room.amenities || '[]',
         new Date(),
         new Date()
       ]);
 
       if (roomValues.length > 0) {
+        console.log('[createProperty] Inserting rooms:', roomValues);
         await connection.query(roomInsertQuery, [roomValues]);
       }
     }

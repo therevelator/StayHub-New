@@ -257,7 +257,11 @@ const getPropertyDetailsById = async (req, res) => {
 };
 
 const createNewProperty = async (req, res) => {
-  const { userId } = req;
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  
   const propertyData = req.body;
 
   try {
@@ -266,23 +270,105 @@ const createNewProperty = async (req, res) => {
     await connection.beginTransaction();
 
     try {
+      // Extract rooms and images for separate insertion
+      const { rooms = [], images = [], ...propertyFields } = propertyData;
+
       // Insert property
       const [propertyResult] = await connection.query(
-        'INSERT INTO properties SET ?',
-        {
-          ...propertyData,
-          host_id: userId,
-          is_active: true,
-          created_at: new Date(),
-          updated_at: new Date()
-        }
+        `INSERT INTO properties (
+          name, description, latitude, longitude, street, city, state, country,
+          postal_code, host_id, guests, bedrooms, beds, bathrooms,
+          property_type, check_in_time, check_out_time, cancellation_policy,
+          pet_policy, event_policy, star_rating, languages_spoken, is_active,
+          house_rules, min_stay, max_stay, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          propertyFields.name?.trim(),
+          propertyFields.description?.trim(),
+          propertyFields.latitude || 0,
+          propertyFields.longitude || 0,
+          propertyFields.street?.trim(),
+          propertyFields.city?.trim(),
+          propertyFields.state?.trim(),
+          propertyFields.country?.trim(),
+          propertyFields.postal_code?.trim(),
+          userId,
+          parseInt(propertyFields.guests) || 1,
+          parseInt(propertyFields.bedrooms) || 1,
+          parseInt(propertyFields.beds) || 1,
+          parseFloat(propertyFields.bathrooms) || 1,
+          propertyFields.property_type,
+          propertyFields.check_in_time || '14:00:00',
+          propertyFields.check_out_time || '11:00:00',
+          propertyFields.cancellation_policy || 'flexible',
+          propertyFields.pet_policy?.trim(),
+          propertyFields.event_policy?.trim(),
+          parseInt(propertyFields.star_rating) || 0,
+          JSON.stringify(Array.isArray(propertyFields.languages_spoken) ? propertyFields.languages_spoken : []),
+          1,
+          propertyFields.house_rules?.trim(),
+          parseInt(propertyFields.min_stay) || 1,
+          parseInt(propertyFields.max_stay) || 30
+        ]
       );
 
       const propertyId = propertyResult.insertId;
 
+      // Insert rooms if provided using the room model
+      if (rooms.length > 0) {
+        for (const room of rooms) {
+          await createRoomModel(propertyId, {
+            ...room,
+            property_id: propertyId,
+            room_type: room.room_type || 'standard',
+            bathroom_type: room.bathroom_type || 'private',
+            beds: room.beds || [],
+            room_size: room.room_size || 0,
+            max_occupancy: room.max_occupancy || 2,
+            view_type: room.view_type || 'standard',
+            has_private_bathroom: room.has_private_bathroom || true,
+            amenities: room.amenities || [],
+            smoking: room.smoking || false,
+            accessibility_features: room.accessibility_features || [],
+            floor_level: room.floor_level || 1,
+            has_balcony: room.has_balcony || false,
+            has_kitchen: room.has_kitchen || false,
+            has_minibar: room.has_minibar || false,
+            climate: room.climate || 'ac',
+            price_per_night: room.price_per_night || room.base_price || 0,
+            cancellation_policy: room.cancellation_policy || 'flexible',
+            includes_breakfast: room.includes_breakfast || false,
+            extra_bed_available: room.extra_bed_available || false,
+            pets_allowed: room.pets_allowed || false,
+            cleaning_frequency: room.cleaning_frequency || 'daily',
+            has_toiletries: room.has_toiletries || true,
+            has_towels_linens: room.has_towels_linens || true,
+            has_room_service: room.has_room_service || false,
+            flooring_type: room.flooring_type || 'carpet',
+            energy_saving_features: room.energy_saving_features || [],
+            status: room.status || 'available',
+            created_at: new Date(),
+            updated_at: new Date()
+          });
+        }
+
+        await connection.query(
+          `INSERT INTO rooms (
+            property_id, name, room_type, bed_type, beds, max_occupancy,
+            base_price, cleaning_fee, service_fee, tax_rate, security_deposit,
+            description, bathroom_type, view_type, has_private_bathroom,
+            smoking, floor_level, has_balcony, has_kitchen, has_minibar,
+            climate, price_per_night, includes_breakfast, extra_bed_available,
+            pets_allowed, has_toiletries, has_towels_linens, has_room_service,
+            flooring_type, status, room_size, amenities, created_at, updated_at
+          ) VALUES ?`,
+          [roomValues]
+        );
+      }
+
       // Insert images if provided
-      if (propertyData.images && propertyData.images.length > 0) {
-        const imageValues = propertyData.images.map(image => [
+      if (images.length > 0) {
+        const imageValues = images.map(image => [
           propertyId,
           image.url,
           image.thumbnail,
@@ -668,9 +754,42 @@ export const getPropertyById = async (req, res) => {
             JSON_OBJECT(
               'id', r.id,
               'name', r.name,
+              'room_type', r.room_type,
+              'bathroom_type', r.bathroom_type,
+              'beds', r.beds,
+              'room_size', r.room_size,
+              'max_occupancy', r.max_occupancy,
               'base_price', r.base_price,
+              'cleaning_fee', r.cleaning_fee,
+              'service_fee', r.service_fee,
+              'tax_rate', r.tax_rate,
+              'security_deposit', r.security_deposit,
               'description', r.description,
-              'max_guests', r.max_guests
+              'view_type', r.view_type,
+              'has_private_bathroom', r.has_private_bathroom,
+              'amenities', r.amenities,
+              'smoking', r.smoking,
+              'accessibility_features', r.accessibility_features,
+              'floor_level', r.floor_level,
+              'has_balcony', r.has_balcony,
+              'has_kitchen', r.has_kitchen,
+              'has_minibar', r.has_minibar,
+              'climate', r.climate,
+              'price_per_night', r.price_per_night,
+              'cancellation_policy', r.cancellation_policy,
+              'includes_breakfast', r.includes_breakfast,
+              'extra_bed_available', r.extra_bed_available,
+              'pets_allowed', r.pets_allowed,
+              'images', r.images,
+              'cleaning_frequency', r.cleaning_frequency,
+              'has_toiletries', r.has_toiletries,
+              'has_towels_linens', r.has_towels_linens,
+              'has_room_service', r.has_room_service,
+              'flooring_type', r.flooring_type,
+              'energy_saving_features', r.energy_saving_features,
+              'status', r.status,
+              'created_at', r.created_at,
+              'updated_at', r.updated_at
             )
           )
           FROM rooms r
@@ -745,7 +864,26 @@ export const getPropertyById = async (req, res) => {
     const property = properties[0];
     const formattedProperty = {
       ...property,
-      rooms: property.rooms ? JSON.parse(property.rooms) : [],
+      rooms: property.rooms ? JSON.parse(property.rooms).map(room => ({
+        ...room,
+        beds: JSON.parse(room.beds || '[]'),
+        amenities: JSON.parse(room.amenities || '[]'),
+        accessibility_features: JSON.parse(room.accessibility_features || '[]'),
+        climate: JSON.parse(room.climate || 'null'),
+        images: JSON.parse(room.images || '[]'),
+        energy_saving_features: JSON.parse(room.energy_saving_features || '[]'),
+        has_private_bathroom: !!room.has_private_bathroom,
+        smoking: !!room.smoking,
+        has_balcony: !!room.has_balcony,
+        has_kitchen: !!room.has_kitchen,
+        has_minibar: !!room.has_minibar,
+        includes_breakfast: !!room.includes_breakfast,
+        extra_bed_available: !!room.extra_bed_available,
+        pets_allowed: !!room.pets_allowed,
+        has_toiletries: !!room.has_toiletries,
+        has_towels_linens: !!room.has_towels_linens,
+        has_room_service: !!room.has_room_service
+      })) : [],
       recent_bookings: property.recent_bookings ? JSON.parse(property.recent_bookings) : [],
       maintenance_tasks: property.maintenance_tasks ? JSON.parse(property.maintenance_tasks) : [],
       recent_transactions: property.recent_transactions ? JSON.parse(property.recent_transactions) : []

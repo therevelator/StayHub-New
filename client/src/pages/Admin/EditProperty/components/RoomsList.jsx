@@ -4,6 +4,7 @@ import { PlusIcon, PencilIcon, TrashIcon, CalendarIcon } from '@heroicons/react/
 import RoomForm from '../../../../components/Room/RoomForm';
 import RoomCalendar from '../../../../components/Room/RoomCalendar';
 import propertyService from '../../../../services/propertyService';
+import { toast } from 'react-hot-toast';
 
 const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -18,22 +19,31 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
 
   const handleEditRoom = async (room) => {
     try {
-      console.log('[RoomsList] Fetching room data for editing:', room);
+      console.log('[RoomsList] Editing room:', room);
       
-      // Fetch fresh room data from the server
-      const roomData = await propertyService.getRoom(propertyId, room.id);
-      console.log('[RoomsList] Fetched room data:', roomData);
+      // If we have a propertyId, fetch fresh data from server
+      if (propertyId) {
+        const roomData = await propertyService.getRoom(propertyId, room.id);
+        console.log('[RoomsList] Fetched room data:', roomData);
+        setEditingRoom(roomData);
+      } else {
+        // For new properties, use the local room data
+        console.log('[RoomsList] Using local room data for new property');
+        setEditingRoom(room);
+      }
       
-      // Set the editing room with the fresh data
-      setEditingRoom(roomData);
       setIsDialogOpen(true);
     } catch (error) {
-      console.error('[RoomsList] Error fetching room data:', error);
-      // TODO: Show error notification to user
+      console.error('[RoomsList] Error preparing room for edit:', error);
+      toast.error('Failed to load room data');
     }
   };
 
   const handleOpenCalendar = (room) => {
+    if (!propertyId) {
+      toast.error('Please save the property first to manage room availability');
+      return;
+    }
     setSelectedRoom(room);
     setIsCalendarOpen(true);
   };
@@ -49,10 +59,7 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
       const dataToSubmit = {
         ...roomData,
         // Ensure the ID is included if editing
-        ...(editingRoom && { id: editingRoom.id }),
-        // Convert to strings for API
-        beds: JSON.stringify(roomData.beds),
-        amenities: JSON.stringify(roomData.amenities)
+        ...(editingRoom && { id: editingRoom.id })
       };
       console.log('[RoomsList] Formatted data for submission:', dataToSubmit);
       
@@ -92,7 +99,7 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
             {rooms.map((room) => (
-              <li key={room.id}>
+              <li key={room.id || `temp-${rooms.indexOf(room)}`}>
                 <div className="px-4 py-4 flex items-center justify-between sm:px-6">
                   <div className="flex-1 min-w-0">
                     <h3 className="text-lg font-medium text-gray-900 truncate">
@@ -185,7 +192,7 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
 };
 
 RoomsList.propTypes = {
-  propertyId: PropTypes.string.isRequired,
+  propertyId: PropTypes.string, // Make propertyId optional for new properties
   rooms: PropTypes.array,
   onRoomSubmit: PropTypes.func.isRequired,
   onRoomDelete: PropTypes.func.isRequired,

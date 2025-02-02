@@ -97,7 +97,8 @@ const EditPropertyPage = () => {
         console.log('[Client] Create response:', response);
       }
       
-      if (!response || !response.data) {
+      // Don't check for response.data since we changed the API response format
+      if (!response) {
         throw new Error(`Failed to ${roomData.id ? 'update' : 'create'} room`);
       }
 

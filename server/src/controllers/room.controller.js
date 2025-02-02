@@ -320,19 +320,36 @@ export const updateRoom = async (req, res) => {
       });
     }
 
+    console.log('[Server] Raw request body:', req.body);
+    console.log('[Server] Beds data type:', typeof req.body.beds);
+    console.log('[Server] Beds data:', req.body.beds);
+    
+    console.log('[Server] Raw request body:', JSON.stringify(req.body, null, 2));
+    
     // Format the room data
     const roomData = {
-      ...req.body,
+      name: req.body.name,
+      room_type: req.body.room_type,
+      bathroom_type: req.body.bathroom_type,
+      beds: Array.isArray(req.body.beds) ? JSON.stringify(req.body.beds) : req.body.beds,
+      room_size: req.body.room_size || 0,
+      max_occupancy: req.body.max_occupancy || 2,
+      base_price: req.body.base_price || 0,
+      price_per_night: req.body.price_per_night || 0,
+      view_type: req.body.view_type,
+      amenities: Array.isArray(req.body.amenities) ? JSON.stringify(req.body.amenities) : req.body.amenities,
+      accessibility_features: Array.isArray(req.body.accessibility_features) ? JSON.stringify(req.body.accessibility_features) : '[]',
+      energy_saving_features: Array.isArray(req.body.energy_saving_features) ? JSON.stringify(req.body.energy_saving_features) : '[]',
+      floor_level: req.body.floor_level || 1,
+      climate: typeof req.body.climate === 'object' ? JSON.stringify(req.body.climate) : req.body.climate,
+      cancellation_policy: req.body.cancellation_policy || 'flexible',
+      cleaning_frequency: req.body.cleaning_frequency || 'daily',
+      description: req.body.description,
+      flooring_type: req.body.flooring_type || 'carpet',
+      status: req.body.status || 'available',
+      images: Array.isArray(req.body.images) ? JSON.stringify(req.body.images) : '[]',
       property_id: propertyId,
-      beds: Array.isArray(req.body.beds) 
-        ? JSON.stringify(req.body.beds)
-        : typeof req.body.beds === 'string'
-          ? req.body.beds
-          : JSON.stringify([]),
-      amenities: JSON.stringify(req.body.amenities || []),
-      accessibility_features: JSON.stringify(req.body.accessibility_features || []),
-      energy_saving_features: JSON.stringify(req.body.energy_saving_features || []),
-      images: JSON.stringify(req.body.images || []),
+      // Convert booleans to 1/0 for MySQL
       has_private_bathroom: req.body.has_private_bathroom ? 1 : 0,
       smoking: req.body.smoking ? 1 : 0,
       has_balcony: req.body.has_balcony ? 1 : 0,
@@ -347,37 +364,60 @@ export const updateRoom = async (req, res) => {
       updated_at: new Date()
     };
 
+    console.log('[Server] Formatted room data:', JSON.stringify(roomData, null, 2));
+
     console.log('[Server] Formatted room data:', roomData);
 
     const result = await roomModel.updateRoom(roomId, roomData);
     console.log('[Server] Update result:', result);
     
-    if (result.affectedRows > 0) {
-      // Get the updated room data
-      const [updatedRoom] = await db.query(
-        'SELECT * FROM rooms WHERE id = ?',
-        [roomId]
-      );
-      
-      if (updatedRoom.length > 0) {
+    // Get the updated room data
+    const [updatedRoom] = await db.query(
+      'SELECT * FROM rooms WHERE id = ?',
+      [roomId]
+    );
+    
+    if (updatedRoom.length > 0) {
+      try {
+        const safeParseJson = (str, defaultValue) => {
+          if (!str) return defaultValue;
+          try {
+            return JSON.parse(str);
+          } catch (e) {
+            console.warn(`[Server] Failed to parse JSON for field:`, e);
+            return defaultValue;
+          }
+        };
+
         // Parse the stringified fields for the response
         const responseData = {
           ...updatedRoom[0],
-          beds: JSON.parse(updatedRoom[0].beds),
-          amenities: JSON.parse(updatedRoom[0].amenities),
-          accessibility_features: JSON.parse(updatedRoom[0].accessibility_features),
-          energy_saving_features: JSON.parse(updatedRoom[0].energy_saving_features),
-          images: JSON.parse(updatedRoom[0].images)
+          beds: safeParseJson(updatedRoom[0].beds, [{ type: 'Single Bed', count: 1 }]),
+          amenities: safeParseJson(updatedRoom[0].amenities, []),
+          accessibility_features: safeParseJson(updatedRoom[0].accessibility_features, []),
+          energy_saving_features: safeParseJson(updatedRoom[0].energy_saving_features, []),
+          images: safeParseJson(updatedRoom[0].images, []),
+          climate: safeParseJson(updatedRoom[0].climate, { type: 'ac', available: true }),
+          // Convert numeric 0/1 to boolean
+          has_private_bathroom: Boolean(updatedRoom[0].has_private_bathroom),
+          smoking: Boolean(updatedRoom[0].smoking),
+          has_balcony: Boolean(updatedRoom[0].has_balcony),
+          has_kitchen: Boolean(updatedRoom[0].has_kitchen),
+          has_minibar: Boolean(updatedRoom[0].has_minibar),
+          includes_breakfast: Boolean(updatedRoom[0].includes_breakfast),
+          extra_bed_available: Boolean(updatedRoom[0].extra_bed_available),
+          pets_allowed: Boolean(updatedRoom[0].pets_allowed),
+          has_toiletries: Boolean(updatedRoom[0].has_toiletries),
+          has_towels_linens: Boolean(updatedRoom[0].has_towels_linens),
+          has_room_service: Boolean(updatedRoom[0].has_room_service)
         };
 
         console.log('[Server] Sending response:', responseData);
-        res.json({
-          status: 'success',
-          message: 'Room updated successfully',
-          data: responseData
-        });
-      } else {
-        throw new Error('Failed to fetch updated room data');
+        return res.json(responseData);
+      } catch (error) {
+        console.error('[Server] Error formatting response:', error);
+        // If we can't format the response, send the raw data
+        return res.json(updatedRoom[0]);
       }
     } else {
       res.status(404).json({

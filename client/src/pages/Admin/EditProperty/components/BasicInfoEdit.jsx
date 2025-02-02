@@ -66,21 +66,22 @@ const BasicInfoEdit = ({ property, onUpdate, disabled }) => {
     // Create a clean object with only valid fields
     const updateData = {};
     
-    if (formData.name) updateData.name = formData.name.trim();
-    if (formData.description) updateData.description = formData.description.trim();
-    if (formData.property_type) updateData.property_type = formData.property_type;
-    if (formData.guests) updateData.guests = parseInt(formData.guests);
-    if (formData.bedrooms) updateData.bedrooms = parseInt(formData.bedrooms);
-    if (formData.beds) updateData.beds = parseInt(formData.beds);
-    if (formData.bathrooms) updateData.bathrooms = parseFloat(formData.bathrooms);
-    if (formData.star_rating) updateData.star_rating = parseFloat(formData.star_rating);
+    // Always include all fields to ensure proper state update
+    updateData.name = formData.name.trim();
+    updateData.description = formData.description.trim();
+    updateData.property_type = formData.property_type;
+    updateData.guests = parseInt(formData.guests);
+    updateData.bedrooms = parseInt(formData.bedrooms);
+    updateData.beds = parseInt(formData.beds);
+    updateData.bathrooms = parseFloat(formData.bathrooms);
+    updateData.star_rating = parseFloat(formData.star_rating);
     
     console.log('[BasicInfoEdit] Form submitted');
     console.log('[BasicInfoEdit] Original form data:', formData);
     console.log('[BasicInfoEdit] Cleaned data to send:', updateData);
     
     try {
-      await onUpdate(updateData);
+      await onUpdate('basic', updateData);
       console.log('[BasicInfoEdit] Update completed successfully');
     } catch (error) {
       console.error('[BasicInfoEdit] Error during update:', error);

@@ -101,7 +101,7 @@ const Navigation = () => {
               {user && (
                 <MenuItem
                   component={RouterLink}
-                  to="/list-property"
+                  to="/admin/properties/add"
                   onClick={handleCloseNavMenu}
                 >
                   List Property
@@ -133,7 +133,7 @@ const Navigation = () => {
             {user && (
               <Button
                 component={RouterLink}
-                to="/list-property"
+                to="/admin/properties/add"
                 startIcon={<AddBusinessIcon />}
                 sx={{ my: 2, color: 'white', display: 'flex' }}
               >

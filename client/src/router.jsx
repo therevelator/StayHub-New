@@ -6,9 +6,10 @@ import Home from './pages/Home/Home';
 import Login from './pages/Login/Login';
 import Register from './pages/Register/Register';
 import AdminDashboard from './pages/Admin/Dashboard';
-import AdminProperties from './pages/AdminProperties/AdminProperties';
+import AdminProperties from './pages/Admin/Properties';
 import EditPropertyPage from './pages/Admin/EditProperty/EditPropertyPage';
-import ListProperty from './pages/ListProperty/ListProperty';
+import AddPropertyPage from './pages/Admin/AddProperty/AddPropertyPage';
+
 import PropertyDetails from './pages/PropertyDetails/PropertyDetails';
 import SearchResults from './pages/SearchResults/SearchResults';
 import EditRooms from './pages/EditRooms/EditRooms';
@@ -50,13 +51,17 @@ export const router = createBrowserRouter([
           { index: true, element: <Home /> },
           { path: 'login', element: <Login /> },
           { path: 'register', element: <Register /> },
-          { path: 'list-property', element: <ListProperty /> },
+
           { path: 'property/:propertyId', element: <PropertyDetails /> },
           { path: 'property/:propertyId/room/:roomId', element: <RoomPage /> },
           { path: 'search', element: <SearchResults /> },
           { 
             path: 'admin/properties',
             element: <AdminRoute><AdminProperties /></AdminRoute>
+          },
+          { 
+            path: 'admin/properties/add',
+            element: <AdminRoute><AddPropertyPage /></AdminRoute>
           },
           { 
             path: 'admin/properties/:id/edit',
