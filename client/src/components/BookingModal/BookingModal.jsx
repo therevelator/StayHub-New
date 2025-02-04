@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
-import api from '../../services/api';
+import roomService from '../../services/roomService';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Swal from 'sweetalert2';
@@ -47,13 +47,7 @@ const BookingModal = ({ isOpen, onClose, onSuccess, propertyId, roomId, availabl
         return;
       }
 
-      const endpoint = `/properties/rooms/${roomId}/book`;
-      console.log('Room ID:', roomId);
-      console.log('API endpoint:', endpoint);
-      console.log('API base URL:', api.defaults.baseURL);
-      console.log('Full URL:', `${api.defaults.baseURL}${endpoint}`);
-      
-      const response = await api.post(endpoint, {
+      const response = await roomService.bookRoom(propertyId, roomId, {
         checkInDate: checkInDate.toISOString().split('T')[0],
         checkOutDate: checkOutDate.toISOString().split('T')[0],
         numberOfGuests,

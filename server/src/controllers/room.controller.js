@@ -1,7 +1,7 @@
 import db from '../db/index.js';
 import * as propertyModel from '../models/property.model.js';
 import * as roomModel from '../models/room.model.js';
-import { v4 as uuidv4 } from 'uuid';
+// Removed uuid import as we're using custom booking reference
 import { format, eachDayOfInterval, parseISO } from 'date-fns';
 
 export const createRoom = async (req, res) => {
@@ -461,8 +461,8 @@ export const createBooking = async (req, res) => {
       });
     }
 
-    // Generate a unique booking reference
-    const bookingReference = uuidv4();
+    // Generate a unique booking reference in format BK-XXXXXXXX
+    const bookingReference = generateBookingReference();
 
     // Create the booking
     const [result] = await db.query(`
@@ -498,6 +498,7 @@ export const createBooking = async (req, res) => {
       message: 'Booking created successfully',
       data: {
         bookingId: result.insertId,
+        bookingReference,
         totalPrice,
         numberOfNights,
         checkInDate,
@@ -568,6 +569,15 @@ export const getRoomReservations = async (req, res) => {
       message: 'Failed to fetch room reservations'
     });
   }
+};
+
+const generateBookingReference = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let reference = 'BK-';
+  for (let i = 0; i < 8; i++) {
+    reference += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return reference;
 };
 
 export const updateRoomAvailability = async (req, res) => {

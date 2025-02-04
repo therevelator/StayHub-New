@@ -82,9 +82,9 @@ const PropertyDetails = () => {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 py-8">
         {/* Property Details */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-8">
           {/* Left Column - Property Info */}
-          <div className="md:col-span-2">
+          <div className="lg:col-span-2">
             <h1 className="text-3xl font-bold mb-4">{property.basicInfo?.name}</h1>
             
             {/* Location and Rating */}
@@ -138,7 +138,7 @@ const PropertyDetails = () => {
                 )}
               </div>
               {/* Thumbnails */}
-              <div className="grid grid-cols-5 gap-2 max-h-20 overflow-x-auto">
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-20 overflow-x-auto">
                 {property.photos?.map((photo, index) => (
                   <button
                     key={index}
@@ -168,7 +168,7 @@ const PropertyDetails = () => {
             {/* Property Amenities */}
             <div className="mb-8">
               <h2 className="text-2xl font-semibold mb-4">Property Amenities</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {property.amenities ? (
                   typeof property.amenities === 'object' && !Array.isArray(property.amenities) ? (
                     // Handle object format with categories
@@ -202,13 +202,13 @@ const PropertyDetails = () => {
           </div>
 
           {/* Right Column - Available Rooms */}
-          <div className="md:col-span-1">
+          <div className="lg:col-span-1 space-y-4">
             <h2 className="text-2xl font-semibold mb-4">Available Rooms</h2>
             {property.rooms?.map((room) => {
               const totalPrice = calculateRoomTotalPrice(room);
               
               return (
-                <div key={room.id} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow mb-4">
+                <div key={room.id} className="bg-white rounded-lg shadow-sm p-4 sm:p-6 hover:shadow-md transition-shadow">
                   <h3 className="text-xl font-bold mb-2">{room.name}</h3>
                   <p className="text-gray-600 mb-4">{room.room_type} • Max Occupancy: {room.max_occupancy}</p>
                   
@@ -227,7 +227,7 @@ const PropertyDetails = () => {
                   {/* Room Amenities */}
                   <div className="mt-4">
                     <h4 className="font-semibold mb-2">Room Amenities:</h4>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                       {/* Boolean amenities */}
                       {room.has_private_bathroom === 1 && (
                         <div className="flex items-center text-gray-600">
@@ -333,7 +333,7 @@ const PropertyDetails = () => {
                   </div>
 
                   {/* Price Breakdown */}
-                  <div className="mt-4 space-y-2">
+                  <div className="mt-4 space-y-2 text-sm sm:text-base">
                     <div className="flex justify-between text-gray-600">
                       <span>Base price</span>
                       <span>${Number(room.base_price).toFixed(2)}</span>
