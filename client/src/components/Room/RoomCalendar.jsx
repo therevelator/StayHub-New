@@ -9,15 +9,16 @@ const DAYS_OF_WEEK = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const ROOM_STATUSES = {
   AVAILABLE: 'available',
   MAINTENANCE: 'maintenance',
-  BLOCKED: 'blocked'
+  BLOCKED: 'blocked',
+  OCCUPIED: 'occupied'
 };
 
 const STATUS_COLORS = {
   [ROOM_STATUSES.AVAILABLE]: 'bg-green-100',
   [ROOM_STATUSES.MAINTENANCE]: 'bg-orange-100',
-  [ROOM_STATUSES.BLOCKED]: 'bg-gray-100',
-  RESERVED: 'bg-red-100',
-  CUSTOM_PRICE: 'bg-green-100'
+  [ROOM_STATUSES.BLOCKED]: 'bg-gray-50',  // Lighter gray for unconfigured dates
+  [ROOM_STATUSES.OCCUPIED]: 'bg-red-100',
+  CUSTOM_PRICE: 'bg-green-200'
 };
 
 const RoomCalendar = ({ propertyId, room, onClose }) => {
@@ -90,19 +91,32 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
       return;
     }
 
-    if (!selectedStartDate || (selectedStartDate && selectedEndDate)) {
-      setSelectedStartDate(date);
-      setSelectedEndDate(null);
-    } else {
-      if (date < selectedStartDate) {
-        setSelectedStartDate(date);
-        setSelectedEndDate(selectedStartDate);
-      } else {
-        setSelectedEndDate(date);
-      }
+    const dateKey = format(date, 'yyyy-MM-dd');
+    const dateStatus = availability[dateKey]?.status || ROOM_STATUSES.BLOCKED;
+
+    // If the date is blocked and we're not selecting it as a checkout date, prevent selection
+    if (dateStatus === ROOM_STATUSES.BLOCKED && !selectedStartDate) {
+      toast.error('Cannot start a booking on a blocked date');
+      return;
     }
 
-    const dateKey = format(date, 'yyyy-MM-dd');
+    if (!selectedStartDate || (selectedStartDate && selectedEndDate)) {
+      // Starting a new selection - date must be available
+      if (dateStatus === ROOM_STATUSES.AVAILABLE) {
+        setSelectedStartDate(date);
+        setSelectedEndDate(null);
+      }
+    } else {
+      // Selecting end date - can be either available or blocked
+      if (date <= selectedStartDate) {
+        // Don't allow selecting same date or earlier date for checkout
+        toast.error('Check-out date must be after check-in date');
+        return;
+      }
+      setSelectedEndDate(date);
+    }
+
+    // Update price and status based on availability
     if (availability[dateKey]) {
       setPrice(availability[dateKey].price);
       setRoomStatus(availability[dateKey].status || ROOM_STATUSES.AVAILABLE);
@@ -182,8 +196,8 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
     
     if (!isCurrentMonth) {
       classes += ' text-gray-400';
-    } else if (isReserved) {
-      classes += ` ${STATUS_COLORS.RESERVED} text-red-800`;
+    } else if (dayAvailability?.status === ROOM_STATUSES.OCCUPIED || isReserved) {
+      classes += ` ${STATUS_COLORS[ROOM_STATUSES.OCCUPIED]} text-red-800`;
     } else if (dayAvailability?.status === ROOM_STATUSES.MAINTENANCE) {
       classes += ` ${STATUS_COLORS[ROOM_STATUSES.MAINTENANCE]} text-orange-800`;
     } else if (dayAvailability?.status === ROOM_STATUSES.BLOCKED) {
@@ -194,6 +208,9 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
       } else {
         classes += ` ${STATUS_COLORS[ROOM_STATUSES.AVAILABLE]} text-green-800`;
       }
+    } else {
+      // Default state when no availability is set
+      classes += ` ${STATUS_COLORS[ROOM_STATUSES.BLOCKED]} text-gray-600`;
     }
 
     if (isSelected) {

@@ -143,11 +143,11 @@ const RoomPage = () => {
           const dateStr = format(currentDate, 'yyyy-MM-dd');
           
           // Use custom price if available, otherwise use default room price
-          const dayPrice = availabilityMap[dateStr]?.price || defaultPrice;
+          const dayPrice = parseFloat(availabilityMap[dateStr]?.price || defaultPrice);
           calculatedPrice += dayPrice;
         }
         
-        setTotalPrice(calculatedPrice);
+        setTotalPrice(parseFloat(calculatedPrice));
       } else {
         setTotalNights(0);
         setTotalPrice(0);
@@ -199,8 +199,39 @@ const RoomPage = () => {
     const dateStr = format(value, 'yyyy-MM-dd');
     const dateInfo = availabilityMap[dateStr];
     
-    // Don't allow selecting unavailable dates
+    // Only allow selecting the first blocked date after an available date as checkout
     if (dateInfo && (dateInfo.status === 'occupied' || dateInfo.status === 'maintenance' || dateInfo.status === 'blocked')) {
+      // If we have a check-in date and this is after it, check if it's the first blocked date
+      if (checkInDate && value > checkInDate && !checkOutDate) {
+        // Check if all dates between check-in and this date are available
+        const daysBetween = differenceInDays(value, checkInDate);
+        let isFirstBlockedDate = true;
+        
+        for (let i = 1; i < daysBetween; i++) {
+          const currentDate = new Date(checkInDate);
+          currentDate.setDate(currentDate.getDate() + i);
+          const currentDateStr = format(currentDate, 'yyyy-MM-dd');
+          const currentDateInfo = availabilityMap[currentDateStr];
+          
+          if (currentDateInfo && (currentDateInfo.status === 'occupied' || currentDateInfo.status === 'maintenance' || currentDateInfo.status === 'blocked')) {
+            isFirstBlockedDate = false;
+            break;
+          }
+        }
+        
+        if (isFirstBlockedDate) {
+          setCheckOutDate(value);
+          return;
+        }
+      }
+      // Otherwise, don't allow selection
+      Swal.fire('You can only select the first blocked date after your check-in date');
+      return;
+    }
+
+    // If clicking the same check-in date, cancel the selection
+    if (checkInDate && format(value, 'yyyy-MM-dd') === format(checkInDate, 'yyyy-MM-dd') && !checkOutDate) {
+      setCheckInDate(null);
       return;
     }
 
@@ -210,12 +241,12 @@ const RoomPage = () => {
       setCheckOutDate(null);
     } else {
       // Complete the selection
-      if (value < checkInDate) {
-        setCheckInDate(value);
-        setCheckOutDate(checkInDate);
-      } else {
-        setCheckOutDate(value);
+      if (value <= checkInDate) {
+        // Prevent selecting same day or earlier day for checkout
+        Swal.fire('Check-out date must be after check-in date');
+        return;
       }
+      setCheckOutDate(value);
     }
   };
 

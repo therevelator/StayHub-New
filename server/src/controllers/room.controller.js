@@ -2,7 +2,7 @@ import db from '../db/index.js';
 import * as propertyModel from '../models/property.model.js';
 import * as roomModel from '../models/room.model.js';
 import { v4 as uuidv4 } from 'uuid';
-import { format } from 'date-fns';
+import { format, eachDayOfInterval, parseISO } from 'date-fns';
 
 export const createRoom = async (req, res) => {
   try {
@@ -141,7 +141,7 @@ export const getRoomAvailability = async (req, res) => {
 
     const defaultPrice = rooms[0].price_per_night;
     
-    // Get availability records for the specified date range
+    // Get both availability records and bookings for the specified date range
     const [availability] = await db.query(`
       SELECT 
         DATE(date) as date,
@@ -156,10 +156,47 @@ export const getRoomAvailability = async (req, res) => {
       AND date <= ?
     `, [roomId, startDate || new Date(), endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)]);
 
+    // Get bookings that overlap with the date range
+    const [bookings] = await db.query(`
+      SELECT 
+        id,
+        DATE_FORMAT(check_in_date, '%Y-%m-%d') as check_in_date,
+        DATE_FORMAT(check_out_date, '%Y-%m-%d') as check_out_date
+      FROM bookings
+      WHERE room_id = ?
+      AND status != 'cancelled'
+      AND (
+        (check_in_date BETWEEN ? AND ?)
+        OR (check_out_date BETWEEN ? AND ?)
+        OR (check_in_date <= ? AND check_out_date >= ?)
+      )
+    `, [roomId, startDate, endDate, startDate, endDate, startDate, endDate]);
+    
+    console.log('Found bookings:', bookings);
+
     console.log('Found availability records:', availability);
 
     // Convert to object with dates as keys
+    // First, map all availability records
+    // Initialize all dates in range with NOT_AVAILABLE status
     const availabilityMap = {};
+    const dateRange = eachDayOfInterval({ 
+      start: new Date(startDate), 
+      end: new Date(endDate) 
+    });
+    
+    dateRange.forEach(date => {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      availabilityMap[dateStr] = {
+        status: 'blocked',
+        reason: 'not configured yet',
+        price: defaultPrice,
+        notes: null,
+        booking_id: null
+      };
+    });
+
+    // Overlay availability records
     availability.forEach(record => {
       const dateStr = format(new Date(record.date), 'yyyy-MM-dd');
       availabilityMap[dateStr] = {
@@ -169,12 +206,28 @@ export const getRoomAvailability = async (req, res) => {
         notes: record.notes,
         booking_id: record.booking_id
       };
-      console.log('Processing availability record:', {
-        date: dateStr,
-        record,
-        mapped: availabilityMap[dateStr]
+    });
+
+    // Then, overlay booking information
+    bookings.forEach(booking => {
+      console.log('Processing booking:', booking);
+      const start = new Date(booking.check_in_date);
+      const end = new Date(booking.check_out_date);
+      console.log('Parsed dates:', { start, end });
+      const dates = eachDayOfInterval({ start, end });
+      
+      dates.forEach(date => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        availabilityMap[dateStr] = {
+          ...availabilityMap[dateStr],
+          status: 'occupied',
+          reason: 'booked',
+          booking_id: booking.id
+        };
       });
     });
+
+    console.log('Final availability map:', availabilityMap);
 
     const responseData = {
       status: 'success',
