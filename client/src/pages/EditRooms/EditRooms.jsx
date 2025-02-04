@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import RoomForm from "../../components/Room/RoomForm";
+import RoomPriceManager from "../../components/RoomPriceManager/RoomPriceManager";
 import api from "../../services/api";
 
 const EditRooms = () => {
@@ -87,13 +88,27 @@ const EditRooms = () => {
                 <h3 className="font-semibold">{room.name}</h3>
                 <p>Type: {room.room_type}</p>
                 <p>Status: {room.status}</p>
-                <RoomForm
-                  initialData={room}
-                  onSubmit={(data) => {
-                    console.log('Update room form submitted with data:', data);
-                    return handleUpdateRoom(room.id, data);
-                  }}
-                />
+                <p>Default Price: ${room.price_per_night}</p>
+                
+                <div className="mt-4">
+                  <h4 className="text-lg font-semibold mb-2">Room Settings</h4>
+                  <RoomForm
+                    initialData={room}
+                    onSubmit={(data) => {
+                      console.log('Update room form submitted with data:', data);
+                      return handleUpdateRoom(room.id, data);
+                    }}
+                  />
+                </div>
+
+                <div className="mt-4">
+                  <h4 className="text-lg font-semibold mb-2">Price Management</h4>
+                  <RoomPriceManager
+                    propertyId={id}
+                    roomId={room.id}
+                    defaultPrice={room.price_per_night}
+                  />
+                </div>
               </div>
             ))}
           </div>

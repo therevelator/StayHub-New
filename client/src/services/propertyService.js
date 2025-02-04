@@ -417,7 +417,7 @@ const propertyService = {
   },
   updateRoomAvailability: async (propertyId, roomId, data) => {
     try {
-      const response = await api.put(`/properties/${propertyId}/rooms/${roomId}/availability`, data);
+      const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/availability`, data);
       return response;
     } catch (error) {
       console.error('Error updating room availability:', error);

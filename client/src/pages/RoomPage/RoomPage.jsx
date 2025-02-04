@@ -130,10 +130,24 @@ const RoomPage = () => {
   useEffect(() => {
     if (checkInDate && checkOutDate && room?.price_per_night) {
       const nights = differenceInDays(checkOutDate, checkInDate);
-      const price = parseFloat(room.price_per_night);
-      if (nights > 0 && !isNaN(price)) {
+      const defaultPrice = parseFloat(room.price_per_night);
+      
+      if (nights > 0 && !isNaN(defaultPrice)) {
         setTotalNights(nights);
-        setTotalPrice(nights * price);
+        
+        // Calculate total price using custom prices where available
+        let calculatedPrice = 0;
+        for (let i = 0; i < nights; i++) {
+          const currentDate = new Date(checkInDate);
+          currentDate.setDate(currentDate.getDate() + i);
+          const dateStr = format(currentDate, 'yyyy-MM-dd');
+          
+          // Use custom price if available, otherwise use default room price
+          const dayPrice = availabilityMap[dateStr]?.price || defaultPrice;
+          calculatedPrice += dayPrice;
+        }
+        
+        setTotalPrice(calculatedPrice);
       } else {
         setTotalNights(0);
         setTotalPrice(0);
@@ -142,7 +156,7 @@ const RoomPage = () => {
       setTotalNights(0);
       setTotalPrice(0);
     }
-  }, [checkInDate, checkOutDate, room]);
+  }, [checkInDate, checkOutDate, room, availabilityMap]);
 
   const getStatusStyles = (status) => {
     switch(status) {

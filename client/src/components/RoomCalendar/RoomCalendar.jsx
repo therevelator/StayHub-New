@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import { format, addDays, differenceInDays } from 'date-fns';
-import api from '../../services/api';
+import roomService from '../../services/roomService';
 
 const STATUS_COLORS = {
   available: 'bg-green-100 hover:bg-green-200',
@@ -19,11 +19,13 @@ const STATUS_LABELS = {
 };
 
 const RoomCalendar = ({ 
+  propertyId,
   roomId, 
   initialCheckIn, 
   initialCheckOut,
   onDateChange,
-  isAdmin = false 
+  isAdmin = false,
+  onPriceChange
 }) => {
   const [checkInDate, setCheckInDate] = useState(initialCheckIn || null);
   const [checkOutDate, setCheckOutDate] = useState(initialCheckOut || null);
@@ -49,11 +51,24 @@ const RoomCalendar = ({
       
       console.log('Fetching availability for dates:', { startDate, endDate });
       
-      const response = await api.get(`/properties/rooms/${roomId}/availability`, {
-        params: { startDate, endDate }
-      });
+      const response = await roomService.getAvailability(propertyId, roomId, startDate, endDate);
       
-      setAvailability(response.data);
+      setAvailability(response.data.data);
+      
+      // Calculate total price
+      if (response.data.data.availability) {
+        let totalPrice = 0;
+        const nights = differenceInDays(checkOutDate, checkInDate);
+        
+        for (let i = 0; i < nights; i++) {
+          const currentDate = addDays(checkInDate, i);
+          const dateStr = format(currentDate, 'yyyy-MM-dd');
+          const dayPrice = response.data.data.availability[dateStr]?.price || response.data.data.default_price;
+          totalPrice += dayPrice;
+        }
+        
+        onPriceChange?.(totalPrice, response.data.data.availability);
+      }
     } catch (err) {
       setError('Failed to fetch room availability');
       console.error('Error fetching availability:', err);

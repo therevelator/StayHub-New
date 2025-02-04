@@ -50,8 +50,10 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
       console.log('Fetching availability for:', { startDateStr, endDateStr });
       
       const response = await propertyService.getRoomAvailability(propertyId, room.id, startDateStr, endDateStr);
+      console.log('Availability response:', response.data);
       setDefaultPrice(response.data.default_price);
       setAvailability(response.data.availability || {});
+      console.log('Set availability state:', response.data.availability || {});
     } catch (error) {
       console.error('Error fetching room availability:', error);
       setAvailability({});
@@ -139,24 +141,18 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
       const updates = dates.map(date => ({
         date: format(date, 'yyyy-MM-dd'),
         price: parseFloat(price) || defaultPrice,
-        status: roomStatus
+        status: roomStatus,
+        reason: roomStatus // Add reason to match server expectations
       }));
+      console.log('Sending updates:', updates);
 
       const response = await propertyService.updateRoomAvailability(propertyId, room.id, {
         updates
       });
       
-      if (response.data) {
-        // Update local state with the returned data
-        const newAvailability = { ...availability };
-        updates.forEach(update => {
-          newAvailability[update.date] = {
-            status: response.data.status,
-            price: response.data.price
-          };
-        });
-        setAvailability(newAvailability);
-      }
+      // After successful update, refresh the availability data
+      await fetchRoomAvailability();
+      await fetchRoomReservations();
       
       await fetchRoomAvailability();
       toast.success('Changes saved successfully');
@@ -179,6 +175,7 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
     const isReserved = isDateReserved(date);
     const dateKey = format(date, 'yyyy-MM-dd');
     const dayAvailability = availability[dateKey];
+    console.log('Day availability for', dateKey, ':', dayAvailability);
     const isCurrentMonth = isSameMonth(date, currentDate);
 
     let classes = 'p-2 text-center transition-colors';
@@ -191,10 +188,12 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
       classes += ` ${STATUS_COLORS[ROOM_STATUSES.MAINTENANCE]} text-orange-800`;
     } else if (dayAvailability?.status === ROOM_STATUSES.BLOCKED) {
       classes += ` ${STATUS_COLORS[ROOM_STATUSES.BLOCKED]} text-gray-800`;
-    } else if (dayAvailability?.price !== room?.price_per_night) {
-      classes += ` ${STATUS_COLORS.CUSTOM_PRICE} text-green-800`;
     } else if (dayAvailability?.status === ROOM_STATUSES.AVAILABLE) {
-      classes += ` ${STATUS_COLORS[ROOM_STATUSES.AVAILABLE]} text-green-800`;
+      if (dayAvailability?.price !== room?.price_per_night) {
+        classes += ` ${STATUS_COLORS.CUSTOM_PRICE} text-green-800`;
+      } else {
+        classes += ` ${STATUS_COLORS[ROOM_STATUSES.AVAILABLE]} text-green-800`;
+      }
     }
 
     if (isSelected) {

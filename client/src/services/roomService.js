@@ -1,11 +1,22 @@
 import api from './api';
 
 const roomService = {
-  getRoom: (roomId) => api.get(`/properties/rooms/${roomId}`),
+  getRoom: (propertyId, roomId) => api.get(`/properties/${propertyId}/rooms/${roomId}`),
   
-  getAvailability: (roomId) => api.get(`/properties/rooms/${roomId}/availability`),
+  getAvailability: (propertyId, roomId, startDate, endDate) => 
+    api.get(`/properties/${propertyId}/rooms/${roomId}/availability`, {
+      params: { startDate, endDate }
+    }),
   
-  bookRoom: (roomId, bookingData) => api.post(`/properties/rooms/${roomId}/book`, bookingData)
+  bookRoom: (propertyId, roomId, bookingData) => 
+    api.post(`/properties/${propertyId}/rooms/${roomId}/book`, bookingData),
+
+  updateAvailability: (propertyId, roomId, date, price, is_available) =>
+    api.post(`/properties/${propertyId}/rooms/${roomId}/availability`, {
+      date,
+      price,
+      is_available
+    })
 };
 
 export default roomService; 

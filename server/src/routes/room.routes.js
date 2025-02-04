@@ -1,7 +1,7 @@
 import express from 'express';
 import * as roomController from '../controllers/room.controller.js';
-import { authenticateToken } from '../middleware/auth.middleware.js';
-import checkPropertyOwnership from '../middleware/checkPropertyOwnership.js';
+import { authenticateToken } from '../middleware/auth.js';
+import { checkPropertyOwnership } from '../middleware/property.js';
 
 const router = express.Router();
 
@@ -12,7 +12,7 @@ router.get('/:propertyId/rooms/:roomId/reservations', roomController.getRoomRese
 router.get('/:propertyId/rooms', roomController.getRooms);
 
 // Protected endpoints
-router.post('/:propertyId/rooms', 
+router.post('/:propertyId/rooms',
   authenticateToken,
   checkPropertyOwnership,
   roomController.createRoom
@@ -30,13 +30,13 @@ router.delete('/:propertyId/rooms/:roomId',
   roomController.deleteRoom
 );
 
-router.post('/:propertyId/rooms/:roomId/book', 
-  authenticateToken, 
+router.post('/:propertyId/rooms/:roomId/book',
+  authenticateToken,
   roomController.createBooking
 );
 
 // Add room availability endpoint
-router.put('/:propertyId/rooms/:roomId/availability',
+router.post('/:propertyId/rooms/:roomId/availability',
   authenticateToken,
   checkPropertyOwnership,
   roomController.updateRoomAvailability

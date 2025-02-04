@@ -5,11 +5,15 @@ import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Swal from 'sweetalert2';
+import PriceDisplay from '../PriceDisplay/PriceDisplay';
+import RoomCalendar from '../RoomCalendar/RoomCalendar';
 
-const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, specialRequests, termsAccepted }) => {
+const BookingModal = ({ isOpen, onClose, onSuccess, propertyId, roomId, availableDates, specialRequests, termsAccepted }) => {
   const [checkInDate, setCheckInDate] = useState(null);
   const [checkOutDate, setCheckOutDate] = useState(null);
   const [numberOfGuests, setNumberOfGuests] = useState(1);
+  const [totalPrice, setTotalPrice] = useState(0);
+  const [priceBreakdown, setPriceBreakdown] = useState({});
   const navigate = useNavigate();
   const { user } = useAuth();
   const [error, setError] = useState('');
@@ -22,6 +26,11 @@ const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, spec
     
     const dateString = date.toISOString().split('T')[0];
     return !availableDatesMap[dateString];
+  };
+
+  const handlePriceChange = (price, availability) => {
+    setTotalPrice(price);
+    setPriceBreakdown(availability);
   };
 
   const handleSubmit = async () => {
@@ -98,6 +107,64 @@ const BookingModal = ({ isOpen, onClose, onSuccess, roomId, availableDates, spec
   };
 
   if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-4">Book Room</h2>
+        
+        <RoomCalendar
+          propertyId={propertyId}
+          roomId={roomId}
+          initialCheckIn={checkInDate}
+          initialCheckOut={checkOutDate}
+          onDateChange={({ checkInDate, checkOutDate }) => {
+            setCheckInDate(checkInDate);
+            setCheckOutDate(checkOutDate);
+          }}
+          onPriceChange={handlePriceChange}
+        />
+
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Number of Guests
+          </label>
+          <input
+            type="number"
+            min="1"
+            value={numberOfGuests}
+            onChange={(e) => setNumberOfGuests(parseInt(e.target.value))}
+            className="w-full p-2 border rounded-md"
+          />
+        </div>
+
+        {checkInDate && checkOutDate && (
+          <PriceDisplay
+            totalPrice={totalPrice}
+            priceBreakdown={priceBreakdown}
+            checkInDate={checkInDate}
+            checkOutDate={checkOutDate}
+          />
+        )}
+
+        <div className="mt-6 flex justify-end space-x-4">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-600 hover:text-gray-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            disabled={!checkInDate || !checkOutDate}
+          >
+            Book Now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
