@@ -7,46 +7,119 @@ import { format, eachDayOfInterval, parseISO } from 'date-fns';
 export const createRoom = async (req, res) => {
   try {
     const { propertyId } = req.params;
-    const {
-      name,
-      description,
-      pricePerNight,
-      maxGuests,
-      bedrooms,
-      bathrooms,
-      amenities
-    } = req.body;
+    const roomData = req.body;
 
-    // Validate required fields
-    if (!name || !pricePerNight || !maxGuests) {
+    console.log('[RoomController] Creating room with data:', JSON.stringify(roomData, null, 2));
+    console.log('[RoomController] Property ID:', propertyId);
+
+    // Validate required fields based on schema
+    if (!roomData.name || !roomData.room_type || !roomData.max_occupancy) {
+      console.log('[RoomController] Validation failed:', { 
+        name: roomData.name,
+        room_type: roomData.room_type,
+        max_occupancy: roomData.max_occupancy
+      });
       return res.status(400).json({
         status: 'error',
-        message: 'Name, price per night, and max guests are required'
+        message: 'Name, room type, and max occupancy are required'
       });
     }
 
     // Create room
-    const [result] = await db.query(`
-      INSERT INTO rooms (
-        property_id,
-        name,
-        description,
-        price_per_night,
-        max_guests,
-        bedrooms,
-        bathrooms,
-        amenities
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
+    console.log('[RoomController] Executing query with values:', {
       propertyId,
+      name: roomData.name,
+      room_type: roomData.room_type,
+      max_occupancy: roomData.max_occupancy
+    });
+
+    const query = `INSERT INTO rooms (
+      property_id,
       name,
-      description || null,
-      pricePerNight,
-      maxGuests,
-      bedrooms || null,
-      bathrooms || null,
-      amenities ? JSON.stringify(amenities) : null
-    ]);
+      room_type,
+      bed_type,
+      beds,
+      max_occupancy,
+      base_price,
+      cleaning_fee,
+      service_fee,
+      tax_rate,
+      security_deposit,
+      description,
+      bathroom_type,
+      view_type,
+      has_private_bathroom,
+      smoking,
+      accessibility_features,
+      floor_level,
+      has_balcony,
+      has_kitchen,
+      has_minibar,
+      climate,
+      price_per_night,
+      cancellation_policy,
+      includes_breakfast,
+      extra_bed_available,
+      pets_allowed,
+      images,
+      cleaning_frequency,
+      has_toiletries,
+      has_towels_linens,
+      has_room_service,
+      flooring_type,
+      energy_saving_features,
+      status,
+      room_size,
+      amenities
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+    const values = [
+      propertyId,
+      roomData.name,
+      roomData.room_type || 'Standard Room',
+      roomData.bed_type || null,
+      JSON.stringify(roomData.beds || []),
+      roomData.max_occupancy || 2,
+      roomData.base_price || 0,
+      roomData.cleaning_fee || 0,
+      roomData.service_fee || 0,
+      roomData.tax_rate || 0,
+      roomData.security_deposit || 0,
+      roomData.description || null,
+      roomData.bathroom_type || 'private',
+      roomData.view_type || null,
+      roomData.has_private_bathroom === false ? 0 : 1,
+      roomData.smoking === true ? 1 : 0,
+      JSON.stringify(roomData.accessibility_features || []),
+      roomData.floor_level || null,
+      roomData.has_balcony === true ? 1 : 0,
+      roomData.has_kitchen === true ? 1 : 0,
+      roomData.has_minibar === true ? 1 : 0,
+      JSON.stringify(roomData.climate || {type: 'ac', available: true}),
+      roomData.price_per_night || null,
+      roomData.cancellation_policy || null,
+      roomData.includes_breakfast === true ? 1 : 0,
+      roomData.extra_bed_available === true ? 1 : 0,
+      roomData.pets_allowed === true ? 1 : 0,
+      JSON.stringify(roomData.images || []),
+      roomData.cleaning_frequency || null,
+      roomData.has_toiletries === false ? 0 : 1,
+      roomData.has_towels_linens === false ? 0 : 1,
+      roomData.has_room_service === true ? 1 : 0,
+      roomData.flooring_type || null,
+      JSON.stringify(roomData.energy_saving_features || []),
+      roomData.status || 'available',
+      roomData.room_size || null,
+      JSON.stringify(roomData.amenities || [])
+    ];
+
+    console.log('[RoomController] Query:', query);
+    console.log('[RoomController] Values:', JSON.stringify(values, null, 2));
+
+    const [result] = await db.query(query, values);
+
+
+    console.log('[RoomController] Room created with ID:', result.insertId);
 
     res.json({
       status: 'success',
@@ -56,7 +129,8 @@ export const createRoom = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error creating room:', error);
+    console.error('[RoomController] Error creating room:', error);
+    console.error('[RoomController] Error stack:', error.stack);
     res.status(500).json({
       status: 'error',
       message: 'Failed to create room'
@@ -188,8 +262,8 @@ export const getRoomAvailability = async (req, res) => {
     dateRange.forEach(date => {
       const dateStr = format(date, 'yyyy-MM-dd');
       availabilityMap[dateStr] = {
-        status: 'blocked',
-        reason: 'not configured yet',
+        status: 'available',
+        reason: 'default availability',
         price: defaultPrice,
         notes: null,
         booking_id: null
@@ -251,15 +325,10 @@ export const getRoomAvailability = async (req, res) => {
 export const updateRoom = async (req, res) => {
   try {
     const { roomId } = req.params;
-    const {
-      name,
-      description,
-      pricePerNight,
-      maxGuests,
-      bedrooms,
-      bathrooms,
-      amenities
-    } = req.body;
+    const roomData = req.body;
+
+    console.log('[RoomController] Updating room:', roomId);
+    console.log('[RoomController] Update data:', JSON.stringify(roomData, null, 2));
 
     // Check if room exists
     const room = await getRoomHelper(roomId);
@@ -270,36 +339,114 @@ export const updateRoom = async (req, res) => {
       });
     }
 
+    // Validate required fields based on schema
+    if (!roomData.name || !roomData.room_type || !roomData.max_occupancy) {
+      console.log('[RoomController] Validation failed:', {
+        name: roomData.name,
+        room_type: roomData.room_type,
+        max_occupancy: roomData.max_occupancy
+      });
+      return res.status(400).json({
+        status: 'error',
+        message: 'Name, room type, and max occupancy are required'
+      });
+    }
+
     // Update room
-    await db.query(`
+    const query = `
       UPDATE rooms
       SET
-        name = COALESCE(?, name),
-        description = COALESCE(?, description),
-        price_per_night = COALESCE(?, price_per_night),
-        max_guests = COALESCE(?, max_guests),
-        bedrooms = COALESCE(?, bedrooms),
-        bathrooms = COALESCE(?, bathrooms),
-        amenities = COALESCE(?, amenities),
-        updated_at = CURRENT_TIMESTAMP
+        name = ?,
+        room_type = ?,
+        bed_type = ?,
+        beds = ?,
+        max_occupancy = ?,
+        base_price = ?,
+        cleaning_fee = ?,
+        service_fee = ?,
+        tax_rate = ?,
+        security_deposit = ?,
+        description = ?,
+        bathroom_type = ?,
+        view_type = ?,
+        has_private_bathroom = ?,
+        smoking = ?,
+        accessibility_features = ?,
+        floor_level = ?,
+        has_balcony = ?,
+        has_kitchen = ?,
+        has_minibar = ?,
+        climate = ?,
+        price_per_night = ?,
+        cancellation_policy = ?,
+        includes_breakfast = ?,
+        extra_bed_available = ?,
+        pets_allowed = ?,
+        images = ?,
+        cleaning_frequency = ?,
+        has_toiletries = ?,
+        has_towels_linens = ?,
+        has_room_service = ?,
+        flooring_type = ?,
+        energy_saving_features = ?,
+        status = ?,
+        room_size = ?,
+        amenities = ?
       WHERE id = ?
-    `, [
-      name,
-      description,
-      pricePerNight,
-      maxGuests,
-      bedrooms,
-      bathrooms,
-      amenities ? JSON.stringify(amenities) : null,
+    `;
+
+    const values = [
+      roomData.name,
+      roomData.room_type || 'Standard Room',
+      roomData.bed_type || null,
+      JSON.stringify(roomData.beds || []),
+      roomData.max_occupancy || 2,
+      roomData.base_price || 0,
+      roomData.cleaning_fee || 0,
+      roomData.service_fee || 0,
+      roomData.tax_rate || 0,
+      roomData.security_deposit || 0,
+      roomData.description || null,
+      roomData.bathroom_type || 'private',
+      roomData.view_type || null,
+      roomData.has_private_bathroom === false ? 0 : 1,
+      roomData.smoking === true ? 1 : 0,
+      JSON.stringify(roomData.accessibility_features || []),
+      roomData.floor_level || null,
+      roomData.has_balcony === true ? 1 : 0,
+      roomData.has_kitchen === true ? 1 : 0,
+      roomData.has_minibar === true ? 1 : 0,
+      JSON.stringify(roomData.climate || {type: 'ac', available: true}),
+      roomData.price_per_night || null,
+      roomData.cancellation_policy || null,
+      roomData.includes_breakfast === true ? 1 : 0,
+      roomData.extra_bed_available === true ? 1 : 0,
+      roomData.pets_allowed === true ? 1 : 0,
+      JSON.stringify(roomData.images || []),
+      roomData.cleaning_frequency || null,
+      roomData.has_toiletries === false ? 0 : 1,
+      roomData.has_towels_linens === false ? 0 : 1,
+      roomData.has_room_service === true ? 1 : 0,
+      roomData.flooring_type || null,
+      JSON.stringify(roomData.energy_saving_features || []),
+      roomData.status || 'available',
+      roomData.room_size || null,
+      JSON.stringify(roomData.amenities || []),
       roomId
-    ]);
+    ];
+
+    console.log('[RoomController] Update query:', query);
+    console.log('[RoomController] Update values:', JSON.stringify(values, null, 2));
+
+    await db.query(query, values);
 
     res.json({
       status: 'success',
       message: 'Room updated successfully'
     });
   } catch (error) {
-    console.error('Error updating room:', error);
+    console.error('[RoomController] Error updating room:', error);
+    console.error('[RoomController] Error stack:', error.stack);
     res.status(500).json({
       status: 'error',
       message: 'Failed to update room'

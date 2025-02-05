@@ -63,15 +63,8 @@ const PropertyDetails = () => {
 
   if (!property) return null;
 
-  const calculateRoomTotalPrice = (room) => {
-    const basePrice = Number(room.base_price) || 0;
-    const cleaningFee = Number(room.cleaning_fee) || 0;
-    const serviceFee = Number(room.service_fee) || 0;
-    const taxRate = Number(room.tax_rate) || 0;
-    
-    const subtotal = basePrice + cleaningFee + serviceFee;
-    const taxAmount = subtotal * taxRate / 100;
-    return subtotal + taxAmount;
+  const getRoomPrice = (room) => {
+    return Number(room.price_per_night) || Number(room.base_price) || 0;
   };
 
   const handleBookRoom = (roomId) => {
@@ -205,7 +198,7 @@ const PropertyDetails = () => {
           <div className="lg:col-span-1 space-y-4">
             <h2 className="text-2xl font-semibold mb-4">Available Rooms</h2>
             {property.rooms?.map((room) => {
-              const totalPrice = calculateRoomTotalPrice(room);
+              const price = getRoomPrice(room);
               
               return (
                 <div key={room.id} className="bg-white rounded-lg shadow-sm p-4 sm:p-6 hover:shadow-md transition-shadow">
@@ -332,29 +325,11 @@ const PropertyDetails = () => {
                     </div>
                   </div>
 
-                  {/* Price Breakdown */}
-                  <div className="mt-4 space-y-2 text-sm sm:text-base">
-                    <div className="flex justify-between text-gray-600">
-                      <span>Base price</span>
-                      <span>${Number(room.base_price).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Cleaning fee</span>
-                      <span>${Number(room.cleaning_fee).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Service fee</span>
-                      <span>${Number(room.service_fee).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Taxes ({room.tax_rate}%)</span>
-                      <span>${(totalPrice - (Number(room.base_price) + Number(room.cleaning_fee) + Number(room.service_fee))).toFixed(2)}</span>
-                    </div>
-                    <div className="border-t border-gray-200 pt-2 mt-2">
-                      <div className="flex justify-between font-bold">
-                        <span>Total</span>
-                        <span>${totalPrice.toFixed(2)}</span>
-                      </div>
+                  {/* Price */}
+                  <div className="mt-4 text-xl font-bold">
+                    <div className="flex justify-between items-center">
+                      <span>Price per night</span>
+                      <span>${price.toFixed(2)}</span>
                     </div>
                   </div>
 

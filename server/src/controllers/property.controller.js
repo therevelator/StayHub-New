@@ -153,17 +153,21 @@ const searchProperties = async (req, res) => {
     }
 
     if (location && location !== 'Current Location') {
-      query += ' AND (LOWER(p.city) LIKE ? OR LOWER(p.country) LIKE ? OR LOWER(p.state) LIKE ?)';
+      query += ' AND (LOWER(p.city) LIKE ? OR LOWER(p.country) LIKE ? OR LOWER(p.state) LIKE ? OR LOWER(p.name) LIKE ?)';
       const searchLocation = `%${location.toLowerCase()}%`;
-      queryParams.push(searchLocation, searchLocation, searchLocation);
+      queryParams.push(searchLocation, searchLocation, searchLocation, searchLocation);
     }
 
-    // When coordinates are provided, filter by radius
-    if (lat && lon) {
+    // When coordinates are provided and no name/location search, filter by radius
+    if (lat && lon && (!location || location === 'Current Location')) {
       query += ` HAVING distance_km <= ?`;
       queryParams.push(parseFloat(radius));
       query += ` ORDER BY distance_km ASC`;
+    } else if (lat && lon) {
+      // When searching by name/location with coordinates, order by distance but don't filter
+      query += ` ORDER BY distance_km ASC`;
     } else {
+      // When no coordinates, order by creation date
       query += ' ORDER BY p.created_at DESC';
     }
 

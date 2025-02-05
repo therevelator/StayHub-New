@@ -92,11 +92,11 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
     }
 
     const dateKey = format(date, 'yyyy-MM-dd');
-    const dateStatus = availability[dateKey]?.status || ROOM_STATUSES.BLOCKED;
+    const dateStatus = availability[dateKey]?.status || ROOM_STATUSES.AVAILABLE;
 
-    // If the date is blocked and we're not selecting it as a checkout date, prevent selection
-    if (dateStatus === ROOM_STATUSES.BLOCKED && !selectedStartDate) {
-      toast.error('Cannot start a booking on a blocked date');
+    // If the date is blocked or maintenance, prevent selection
+    if ((dateStatus === ROOM_STATUSES.BLOCKED || dateStatus === ROOM_STATUSES.MAINTENANCE) && !selectedStartDate) {
+      toast.error('Cannot start a booking on a blocked or maintenance date');
       return;
     }
 
@@ -209,8 +209,8 @@ const RoomCalendar = ({ propertyId, room, onClose }) => {
         classes += ` ${STATUS_COLORS[ROOM_STATUSES.AVAILABLE]} text-green-800`;
       }
     } else {
-      // Default state when no availability is set
-      classes += ` ${STATUS_COLORS[ROOM_STATUSES.BLOCKED]} text-gray-600`;
+      // Default state when no availability is set - mark as available
+      classes += ` ${STATUS_COLORS[ROOM_STATUSES.AVAILABLE]} text-green-800`;
     }
 
     if (isSelected) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Tab } from '@headlessui/react';
 import { toast } from 'react-hot-toast';
+import Swal from 'sweetalert2';
 import propertyService from '../../../services/propertyService';
 import BasicInfoEdit from './components/BasicInfoEdit';
 import LocationEdit from './components/LocationEdit';
@@ -116,19 +117,40 @@ const EditPropertyPage = () => {
   };
 
   const handleRoomDelete = async (roomId) => {
-    if (!window.confirm('Are you sure you want to delete this room?')) {
-      return;
-    }
-
     try {
+      const result = await Swal.fire({
+        title: 'Delete Room',
+        text: 'Are you sure you want to delete this room?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel'
+      });
+
+      if (!result.isConfirmed) {
+        return;
+      }
+
       setSaving(true);
       await propertyService.deleteRoom(id, roomId);
       await loadProperty(); // Refresh property data
-      toast.success('Room deleted successfully');
+      
+      await Swal.fire({
+        title: 'Deleted!',
+        text: 'Room has been deleted successfully.',
+        icon: 'success'
+      });
     } catch (error) {
       console.error('Error deleting room:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to delete room';
-      toast.error(errorMessage);
+      
+      await Swal.fire({
+        title: 'Error',
+        text: errorMessage,
+        icon: 'error'
+      });
     } finally {
       setSaving(false);
     }

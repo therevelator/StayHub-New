@@ -192,31 +192,34 @@ export const createRoom = async (propertyId, roomData) => {
 
 export const getRoomsByPropertyId = async (propertyId) => {
   const query = `
-    SELECT 
-      r.*,
-      CAST(r.beds AS JSON) as beds_json,
-      CAST(JSON_ARRAY(
-        IF(r.has_private_bathroom = 1, 'Private Bathroom', NULL),
-        IF(r.has_balcony = 1, 'Balcony', NULL),
-        IF(r.has_kitchen = 1, 'Kitchen', NULL),
-        IF(r.has_minibar = 1, 'Mini Bar', NULL),
-        IF(r.has_toiletries = 1, 'Toiletries', NULL),
-        IF(r.has_towels_linens = 1, 'Towels & Linens', NULL),
-        IF(r.has_room_service = 1, 'Room Service', NULL)
-      ) AS JSON) as room_amenities
-    FROM rooms r
-    WHERE r.property_id = ? 
-    ORDER BY r.created_at ASC
+    SELECT * FROM rooms
+    WHERE property_id = ? 
+    ORDER BY created_at ASC
   `;
   
   try {
     const [rows] = await db.query(query, [propertyId]);
     return rows.map(row => ({
       ...row,
-      beds: row.beds_json || JSON.parse(row.beds || '[]'),
-      amenities: typeof row.room_amenities === 'string' ? 
-        JSON.parse(row.room_amenities).filter(amenity => amenity !== null) :
-        (Array.isArray(row.room_amenities) ? row.room_amenities.filter(amenity => amenity !== null) : [])
+      // Parse JSON fields
+      beds: safeJsonParse(row.beds, []),
+      amenities: safeJsonParse(row.amenities, []),
+      accessibility_features: safeJsonParse(row.accessibility_features, []),
+      energy_saving_features: safeJsonParse(row.energy_saving_features, []),
+      climate: safeJsonParse(row.climate, { type: 'ac', available: true }),
+      images: safeJsonParse(row.images, []),
+      // Convert boolean fields
+      has_private_bathroom: Boolean(row.has_private_bathroom),
+      smoking: Boolean(row.smoking),
+      has_balcony: Boolean(row.has_balcony),
+      has_kitchen: Boolean(row.has_kitchen),
+      has_minibar: Boolean(row.has_minibar),
+      includes_breakfast: Boolean(row.includes_breakfast),
+      extra_bed_available: Boolean(row.extra_bed_available),
+      pets_allowed: Boolean(row.pets_allowed),
+      has_toiletries: Boolean(row.has_toiletries),
+      has_towels_linens: Boolean(row.has_towels_linens),
+      has_room_service: Boolean(row.has_room_service)
     }));
   } catch (error) {
     console.error('Error getting rooms:', error);
