@@ -43,12 +43,20 @@ const PropertyBookings = () => {
   };
 
   const handleEditClick = (booking) => {
-    console.log('Editing booking:', booking);
-    setSelectedBooking(booking);
-    setViewingBooking(null); // Close view modal if open
+    console.log('Editing booking:', JSON.stringify(booking, null, 2));
+    // First close any open modals
+    handleCloseModal();
+    // Then set the selected booking for edit modal
+    setSelectedBooking({
+      ...booking,
+      propertyId, // Add propertyId from URL params
+    });
   };
 
   const handleViewClick = (booking) => {
+    // First close any open modals
+    handleCloseModal();
+    // Then show the viewing modal
     setViewingBooking(booking);
   };
 

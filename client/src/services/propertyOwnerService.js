@@ -131,6 +131,28 @@ class PropertyOwnerService {
     const response = await api.post(`/owner/bookings/${bookingId}/cancel`);
     return response.data;
   }
+
+  async getAvailableRooms(propertyId, checkIn, checkOut, excludeBookingId = null) {
+    const response = await api.get(`/owner/properties/${propertyId}/available-rooms`, {
+      params: {
+        checkIn,
+        checkOut,
+        excludeBookingId
+      }
+    });
+    return response.data;
+  }
+
+  async calculatePrice(roomId, checkIn, checkOut, guests) {
+    const response = await api.get(`/owner/rooms/${roomId}/calculate-price`, {
+      params: {
+        checkIn,
+        checkOut,
+        guests
+      }
+    });
+    return response.data;
+  }
 }
 
 export const propertyOwnerService = new PropertyOwnerService();

@@ -450,6 +450,15 @@ const propertyService = {
       console.error('[PropertyService] Error getting room reservations:', error);
       throw error;
     }
+  },
+  getBookings: async (propertyId) => {
+    try {
+      const response = await api.get(`/properties/${propertyId}/bookings`);
+      return response.data;
+    } catch (error) {
+      console.error('[PropertyService] Error getting property bookings:', error);
+      throw error;
+    }
   }
 };
 
