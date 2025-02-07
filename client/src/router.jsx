@@ -9,6 +9,7 @@ import AdminDashboard from './pages/Admin/Dashboard';
 import AdminProperties from './pages/Admin/Properties';
 import EditPropertyPage from './pages/Admin/EditProperty/EditPropertyPage';
 import AddPropertyPage from './pages/Admin/AddProperty/AddPropertyPage';
+import AdminUsers from './pages/AdminUsers/AdminUsers';
 
 import PropertyDetails from './pages/PropertyDetails/PropertyDetails';
 import SearchResults from './pages/SearchResults/SearchResults';
@@ -92,6 +93,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <AdminDashboard /> },
           { path: 'rooms/:id/edit', element: <EditRooms /> },
+          { path: 'users', element: <AdminUsers /> },
         ],
       },
       ...propertyOwnerRoutes,
