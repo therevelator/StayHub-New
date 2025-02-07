@@ -22,8 +22,15 @@ const authService = {
     }
   },
 
-  register: async (userData) => {
+  register: async ({ email, password, userType = 'guest', firstName, lastName }) => {
     try {
+      const userData = {
+        email,
+        password,
+        firstName,
+        lastName,
+        role: userType
+      };
       const response = await api.post('/auth/register', userData);
       return response.data;
     } catch (error) {

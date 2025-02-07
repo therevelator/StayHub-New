@@ -10,7 +10,10 @@ const Register = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    userType: 'guest', // default to guest
+    firstName: '',
+    lastName: ''
   });
 
   const handleChange = (e) => {
@@ -31,7 +34,13 @@ const Register = () => {
     try {
       setError('');
       setLoading(true);
-      await register(formData.email, formData.password);
+      await register({
+        email: formData.email,
+        password: formData.password,
+        userType: formData.userType,
+        firstName: formData.firstName,
+        lastName: formData.lastName
+      });
       navigate('/');
     } catch (err) {
       setError(err.message || 'Failed to create an account');
@@ -65,6 +74,34 @@ const Register = () => {
             </div>
           )}
           <div className="rounded-md shadow-sm -space-y-px">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label htmlFor="firstName" className="sr-only">First Name</label>
+                <input
+                  id="firstName"
+                  name="firstName"
+                  type="text"
+                  required
+                  value={formData.firstName}
+                  onChange={handleChange}
+                  className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                  placeholder="First Name"
+                />
+              </div>
+              <div>
+                <label htmlFor="lastName" className="sr-only">Last Name</label>
+                <input
+                  id="lastName"
+                  name="lastName"
+                  type="text"
+                  required
+                  value={formData.lastName}
+                  onChange={handleChange}
+                  className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                  placeholder="Last Name"
+                />
+              </div>
+            </div>
             <div>
               <label htmlFor="email" className="sr-only">
                 Email address
@@ -96,6 +133,21 @@ const Register = () => {
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
               />
+            </div>
+            <div>
+              <label htmlFor="userType" className="block text-sm font-medium text-gray-700 mt-4 mb-2">
+                User Type
+              </label>
+              <select
+                id="userType"
+                name="userType"
+                value={formData.userType}
+                onChange={handleChange}
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+              >
+                <option value="guest">Guest</option>
+                <option value="host">Property Host</option>
+              </select>
             </div>
             <div>
               <label htmlFor="confirmPassword" className="sr-only">

@@ -5,20 +5,21 @@ import {
   Bars3Icon, 
   BuildingOfficeIcon, 
   UserCircleIcon, 
-  ShieldCheckIcon 
+  ShieldCheckIcon,
+  CalendarDaysIcon
 } from '@heroicons/react/20/solid';
 
 const Header = () => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
-  const [anchorEl, setAnchorEl] = useState(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const handleMenu = (event) => {
-    setAnchorEl(event.currentTarget);
+  const handleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
   };
 
   const handleClose = () => {
-    setAnchorEl(null);
+    setIsMenuOpen(false);
   };
 
   const handleLogout = async () => {
@@ -43,21 +44,23 @@ const Header = () => {
           {/* Navigation */}
           <nav className="hidden md:flex items-center space-x-4">
             {isAuthenticated && (
-              <Link
-                to="/admin/properties/add"
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
-              >
-                <BuildingOfficeIcon className="h-5 w-5 mr-2" />
-                List Property
-              </Link>
-            )}
-            {isAuthenticated && (
-              <Link
-                to="/"
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
-              >
-                Find Places
-              </Link>
+              <>
+                {!user?.isGuest && !user?.isAdmin && (
+                  <Link
+                    to="/admin/properties/add"
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                  >
+                    <BuildingOfficeIcon className="h-5 w-5 mr-2" />
+                    List Property
+                  </Link>
+                )}
+                <Link
+                  to="/"
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                >
+                  Find Places
+                </Link>
+              </>
             )}
           </nav>
 
@@ -71,7 +74,7 @@ const Header = () => {
                 >
                   <UserCircleIcon className="h-8 w-8" />
                 </button>
-                {anchorEl && (
+                {isMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
                     {user?.isAdmin && (
                       <Link
@@ -81,6 +84,16 @@ const Header = () => {
                       >
                         <ShieldCheckIcon className="h-5 w-5 mr-2" />
                         Admin Panel
+                      </Link>
+                    )}
+                    {(user?.isGuest || !user?.isAdmin) && (
+                      <Link
+                        to="/myreservations"
+                        className="flex px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={handleClose}
+                      >
+                        <CalendarDaysIcon className="h-5 w-5 mr-2" />
+                        My Reservations
                       </Link>
                     )}
                     <button

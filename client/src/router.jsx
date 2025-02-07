@@ -16,26 +16,35 @@ import EditRooms from './pages/EditRooms/EditRooms';
 import RoomPage from './pages/RoomPage/RoomPage';
 import AdminRoute from './components/AdminRoute';
 import PrivateRoute from './components/PrivateRoute';
+import PropertyOwnerRoute from './components/PropertyOwnerRoute';
+import GuestRoute from './components/GuestRoute';
 import Dashboard from './pages/PropertyOwner/Dashboard';
 import PropertyView from './pages/PropertyOwner/PropertyView';
+import MyReservations from './pages/Guest/MyReservations';
 
 // Property Owner Routes
 const propertyOwnerRoutes = [
   {
-    path: '/owner/dashboard',
-    element: (
-      <PrivateRoute>
-        <Dashboard />
-      </PrivateRoute>
-    ),
-  },
-  {
-    path: '/owner/properties/:propertyId',
-    element: (
-      <PrivateRoute>
-        <PropertyView />
-      </PrivateRoute>
-    ),
+    path: '/owner',
+    element: <MainLayout />,
+    children: [
+      {
+        path: 'dashboard',
+        element: (
+          <PropertyOwnerRoute>
+            <Dashboard />
+          </PropertyOwnerRoute>
+        ),
+      },
+      {
+        path: 'properties/:propertyId',
+        element: (
+          <PropertyOwnerRoute>
+            <PropertyView />
+          </PropertyOwnerRoute>
+        ),
+      }
+    ]
   }
 ];
 
@@ -55,6 +64,10 @@ export const router = createBrowserRouter([
           { path: 'property/:propertyId', element: <PropertyDetails /> },
           { path: 'property/:propertyId/room/:roomId', element: <RoomPage /> },
           { path: 'search', element: <SearchResults /> },
+          { 
+            path: 'myreservations',
+            element: <GuestRoute><MyReservations /></GuestRoute>
+          },
           { 
             path: 'admin/properties',
             element: <AdminRoute><AdminProperties /></AdminRoute>

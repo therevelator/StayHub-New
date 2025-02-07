@@ -14,14 +14,24 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Invalid login data');
     }
 
-    const userWithAdmin = {
+    const userWithRoles = {
       ...userData,
-      isAdmin: userData.role === 'admin'
+      isAdmin: userData.role === 'admin',
+      isGuest: userData.role === 'guest',
+      isHost: userData.role === 'host'
     };
     
-    localStorage.setItem('user', JSON.stringify(userWithAdmin));
+    localStorage.setItem('user', JSON.stringify(userWithRoles));
     localStorage.setItem('token', token);
-    setUser(userWithAdmin);
+    setUser(userWithRoles);
+  };
+
+  const register = async (userData) => {
+    const response = await authService.register(userData);
+    if (response.data?.token && response.data?.user) {
+      login(response.data.user, response.data.token);
+    }
+    return response;
   };
 
   const logout = () => {
@@ -46,7 +56,8 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated: !!user, 
       user, 
       login, 
-      logout 
+      logout,
+      register
     }}>
       {children}
     </AuthContext.Provider>

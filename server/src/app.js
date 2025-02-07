@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes.js';
 import propertyRoutes from './routes/property.routes.js';
 import roomRoutes from './routes/room.routes.js';
+import bookingRoutes from './routes/booking.routes.js';
 import bodyParser from 'body-parser';
 import ownerRoutes from './routes/owner.routes.js';
 
@@ -33,5 +34,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/properties', roomRoutes);
 app.use('/api/owner', ownerRoutes);
+app.use('/api/bookings', bookingRoutes);
 
 export default app;

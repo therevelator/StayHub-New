@@ -154,9 +154,36 @@ export const getRooms = async (req, res) => {
       WHERE r.property_id = ?
     `, [propertyId]);
 
+    console.log('Raw rooms from DB:', rooms);
+    
+    // Parse JSON fields for each room
+    const parsedRooms = rooms.map(room => ({
+      ...room,
+      beds: room.beds ? JSON.parse(room.beds) : [],
+      amenities: room.amenities ? JSON.parse(room.amenities) : [],
+      accessibility_features: room.accessibility_features ? JSON.parse(room.accessibility_features) : [],
+      energy_saving_features: room.energy_saving_features ? JSON.parse(room.energy_saving_features) : [],
+      climate: room.climate ? JSON.parse(room.climate) : { type: 'ac', available: true },
+      images: room.images ? JSON.parse(room.images) : [],
+      // Convert boolean fields
+      has_private_bathroom: Boolean(room.has_private_bathroom),
+      smoking: Boolean(room.smoking),
+      has_balcony: Boolean(room.has_balcony),
+      has_kitchen: Boolean(room.has_kitchen),
+      has_minibar: Boolean(room.has_minibar),
+      includes_breakfast: Boolean(room.includes_breakfast),
+      extra_bed_available: Boolean(room.extra_bed_available),
+      pets_allowed: Boolean(room.pets_allowed),
+      has_toiletries: Boolean(room.has_toiletries),
+      has_towels_linens: Boolean(room.has_towels_linens),
+      has_room_service: Boolean(room.has_room_service)
+    }));
+
+    console.log('Parsed rooms:', parsedRooms);
+    
     res.json({
       status: 'success',
-      data: rooms
+      data: parsedRooms
     });
   } catch (error) {
     console.error('Error getting rooms:', error);
@@ -486,7 +513,46 @@ export const deleteRoom = async (req, res) => {
 const getRoomHelper = async (roomId) => {
   const [rooms] = await db.query(`
     SELECT 
-      r.*,
+      r.id,
+      r.property_id,
+      r.name,
+      r.room_type,
+      r.bed_type,
+      IF(r.beds IS NULL OR r.beds = '', '[]', r.beds) as beds,
+      r.max_occupancy,
+      r.base_price,
+      r.cleaning_fee,
+      r.service_fee,
+      r.tax_rate,
+      r.security_deposit,
+      r.description,
+      r.created_at,
+      r.updated_at,
+      r.bathroom_type,
+      r.view_type,
+      r.has_private_bathroom,
+      r.smoking,
+      IF(r.accessibility_features IS NULL OR r.accessibility_features = '', '[]', r.accessibility_features) as accessibility_features,
+      r.floor_level,
+      r.has_balcony,
+      r.has_kitchen,
+      r.has_minibar,
+      IF(r.climate IS NULL OR r.climate = '', '{"type":"ac","available":true}', r.climate) as climate,
+      r.price_per_night,
+      r.cancellation_policy,
+      r.includes_breakfast,
+      r.extra_bed_available,
+      r.pets_allowed,
+      IF(r.images IS NULL OR r.images = '', '[]', r.images) as images,
+      r.cleaning_frequency,
+      r.has_toiletries,
+      r.has_towels_linens,
+      r.has_room_service,
+      r.flooring_type,
+      IF(r.energy_saving_features IS NULL OR r.energy_saving_features = '', '[]', r.energy_saving_features) as energy_saving_features,
+      r.status,
+      r.room_size,
+      IF(r.amenities IS NULL OR r.amenities = '', '[]', r.amenities) as amenities,
       p.name as property_name,
       CONCAT(p.street, ', ', p.city, ', ', p.country) as property_location,
       p.property_type,
@@ -503,7 +569,32 @@ const getRoomHelper = async (roomId) => {
     WHERE r.id = ?
   `, [roomId]);
 
-  return rooms[0];
+  if (!rooms[0]) return null;
+
+  // Parse JSON fields
+  const room = {
+    ...rooms[0],
+    beds: rooms[0].beds ? JSON.parse(rooms[0].beds) : [],
+    amenities: rooms[0].amenities ? JSON.parse(rooms[0].amenities) : [],
+    accessibility_features: rooms[0].accessibility_features ? JSON.parse(rooms[0].accessibility_features) : [],
+    energy_saving_features: rooms[0].energy_saving_features ? JSON.parse(rooms[0].energy_saving_features) : [],
+    climate: rooms[0].climate ? JSON.parse(rooms[0].climate) : { type: 'ac', available: true },
+    images: rooms[0].images ? JSON.parse(rooms[0].images) : [],
+    // Convert boolean fields
+    has_private_bathroom: Boolean(rooms[0].has_private_bathroom),
+    smoking: Boolean(rooms[0].smoking),
+    has_balcony: Boolean(rooms[0].has_balcony),
+    has_kitchen: Boolean(rooms[0].has_kitchen),
+    has_minibar: Boolean(rooms[0].has_minibar),
+    includes_breakfast: Boolean(rooms[0].includes_breakfast),
+    extra_bed_available: Boolean(rooms[0].extra_bed_available),
+    pets_allowed: Boolean(rooms[0].pets_allowed),
+    has_toiletries: Boolean(rooms[0].has_toiletries),
+    has_towels_linens: Boolean(rooms[0].has_towels_linens),
+    has_room_service: Boolean(rooms[0].has_room_service)
+  };
+
+  return room;
 };
 
 export const createBooking = async (req, res) => {

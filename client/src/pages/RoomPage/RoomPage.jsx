@@ -24,6 +24,8 @@ const RoomPage = () => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [availabilityMap, setAvailabilityMap] = useState({});
   const [activeStartDate, setActiveStartDate] = useState(new Date());
+  const [numberOfGuests, setNumberOfGuests] = useState(1);
+  const [nightlyPrices, setNightlyPrices] = useState([]);
 
   const fetchAvailability = async (date) => {
     try {
@@ -137,6 +139,8 @@ const RoomPage = () => {
         
         // Calculate total price using custom prices where available
         let calculatedPrice = 0;
+        const prices = [];
+        
         for (let i = 0; i < nights; i++) {
           const currentDate = new Date(checkInDate);
           currentDate.setDate(currentDate.getDate() + i);
@@ -145,16 +149,20 @@ const RoomPage = () => {
           // Use custom price if available, otherwise use default room price
           const dayPrice = parseFloat(availabilityMap[dateStr]?.price || defaultPrice);
           calculatedPrice += dayPrice;
+          prices.push({ date: currentDate, price: dayPrice });
         }
         
+        setNightlyPrices(prices);
         setTotalPrice(parseFloat(calculatedPrice));
       } else {
         setTotalNights(0);
         setTotalPrice(0);
+        setNightlyPrices([]);
       }
     } else {
       setTotalNights(0);
       setTotalPrice(0);
+      setNightlyPrices([]);
     }
   }, [checkInDate, checkOutDate, room, availabilityMap]);
 
@@ -302,6 +310,15 @@ const RoomPage = () => {
       Swal.fire('Please select both check-in and check-out dates.');
       return;
     }
+
+    if (numberOfGuests > room.max_occupancy) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Max Occupancy Exceeded',
+        text: `This room can only accommodate up to ${room.max_occupancy} guests.`
+      });
+      return;
+    }
     if (!termsAccepted) {
       Swal.fire('You must accept the terms and conditions to proceed.');
       return;
@@ -314,6 +331,7 @@ const RoomPage = () => {
         checkOutDate: format(checkOutDate, 'yyyy-MM-dd'),
         specialRequests,
         termsAccepted,
+        numberOfGuests,
       };
 
       const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/book`, bookingData);
@@ -338,10 +356,28 @@ const RoomPage = () => {
             <div style='background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
               <p style='margin: 10px 0; font-size: 1.1em;'><strong style='color: #475569;'>Booking Reference:</strong> <span style='color: #2563eb; font-weight: 500;'>${response.data.data.bookingReference}</span></p>
               <p style='margin: 10px 0;'><strong style='color: #475569;'>Room:</strong> ${room.name}</p>
+              <p style='margin: 10px 0;'><strong style='color: #475569;'>Number of Guests:</strong> ${numberOfGuests}</p>
               <p style='margin: 10px 0;'><strong style='color: #475569;'>Check-In:</strong> ${format(checkInDate, 'EEEE, MMMM d, yyyy')}</p>
               <p style='margin: 10px 0;'><strong style='color: #475569;'>Check-Out:</strong> ${format(checkOutDate, 'EEEE, MMMM d, yyyy')}</p>
-              <p style='margin: 10px 0;'><strong style='color: #475569;'>Total Nights:</strong> ${totalNights}</p>
-              <p style='margin: 10px 0;'><strong style='color: #475569;'>Total Price:</strong> $${totalPrice.toFixed(2)}</p>
+              
+              <div style='margin: 15px 0; padding: 10px; background: #f8fafc; border-radius: 6px;'>
+                <p style='margin: 5px 0; color: #475569; font-weight: 600;'>Price Breakdown:</p>
+                ${nightlyPrices.map(({ date, price }) => `
+                  <div style='display: flex; justify-content: space-between; margin: 5px 0;'>
+                    <span style='color: #64748b;'>${format(date, 'EEE, MMM d, yyyy')}</span>
+                    <span style='color: #475569; font-weight: 500;'>$${price.toFixed(2)}</span>
+                  </div>
+                `).join('')}
+                <div style='display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;'>
+                  <span style='color: #475569; font-weight: 600;'>Total Nights:</span>
+                  <span style='color: #475569; font-weight: 500;'>${totalNights}</span>
+                </div>
+                <div style='display: flex; justify-content: space-between; margin-top: 5px; font-weight: 600;'>
+                  <span style='color: #475569;'>Total Price:</span>
+                  <span style='color: #2563eb;'>$${totalPrice.toFixed(2)}</span>
+                </div>
+              </div>
+              
               ${amenitiesStr ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Room Amenities:</strong> ${amenitiesStr}</p>` : ''}
               ${specialRequests ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Special Requests:</strong> ${specialRequests}</p>` : ''}
             </div>
@@ -441,14 +477,32 @@ const RoomPage = () => {
 
                     {room.price_per_night && (
                       <div className="border-t pt-4">
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-600">Price per night</span>
-                            <span className="font-medium">${parseFloat(room.price_per_night).toFixed(2)}</span>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Number of Guests
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max={room.max_occupancy}
+                              value={numberOfGuests}
+                              onChange={(e) => setNumberOfGuests(parseInt(e.target.value))}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <p className="text-sm text-gray-500 mt-1">Max occupancy: {room.max_occupancy} guests</p>
                           </div>
-                          {totalNights > 0 && (
-                            <>
-                              <div className="flex justify-between items-center">
+
+                          {nightlyPrices.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="font-medium text-gray-700">Price Breakdown:</p>
+                              {nightlyPrices.map(({ date, price }, index) => (
+                                <div key={index} className="flex justify-between items-center text-sm">
+                                  <span className="text-gray-600">{format(date, 'EEE, MMM d, yyyy')}</span>
+                                  <span className="font-medium">${price.toFixed(2)}</span>
+                                </div>
+                              ))}
+                              <div className="flex justify-between items-center pt-2 border-t">
                                 <span className="text-gray-600">Number of nights</span>
                                 <span>{totalNights}</span>
                               </div>
@@ -456,7 +510,7 @@ const RoomPage = () => {
                                 <span>Total price</span>
                                 <span>${totalPrice.toFixed(2)}</span>
                               </div>
-                            </>
+                            </div>
                           )}
                         </div>
                       </div>

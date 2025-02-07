@@ -103,7 +103,7 @@ export const createRoom = async (propertyId, roomData) => {
       name: roomData.name || `${roomData.room_type || 'Standard'} Room`,
       room_type: roomData.room_type?.toLowerCase() || 'standard',
       bathroom_type: roomData.bathroom_type?.toLowerCase() || 'private',
-      beds: Array.isArray(roomData.beds) ? JSON.stringify(roomData.beds) : JSON.stringify([]),
+      beds: JSON.stringify(Array.isArray(roomData.beds) && roomData.beds.length > 0 ? roomData.beds : [{ type: 'Single Bed', count: 1 }]),
       room_size: roomData.room_size || 0,
       max_occupancy: roomData.max_occupancy || 2,
       base_price: roomData.base_price || 0,

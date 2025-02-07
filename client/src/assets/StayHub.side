@@ -2621,10 +2621,22 @@
       "targets": [],
       "value": ""
     }, {
-      "id": "09aa86f4-de6c-46f1-b00c-53499233f3b0",
+      "id": "a87939d4-925a-4365-af2a-ab94fae8c4b0",
+      "comment": "",
+      "command": "type",
+      "target": "css=.search-input:nth-child(1)",
+      "targets": [
+        ["css=.search-input:nth-child(1)", "css:finder"],
+        ["xpath=//input[@value='']", "xpath:attributes"],
+        ["xpath=//div[@id='root']/div/main/div/div/form/div/div/div/input", "xpath:idRelative"],
+        ["xpath=//input", "xpath:position"]
+      ],
+      "value": "Bucharest Inn"
+    }, {
+      "id": "73a09a5d-d169-4a22-8e2a-59ba9ef209ec",
       "comment": "",
       "command": "click",
-      "target": "css=.w-full",
+      "target": "xpath=//button[contains(.,'Search')]",
       "targets": [
         ["css=.w-full", "css:finder"],
         ["xpath=//button[@type='submit']", "xpath:attributes"],
@@ -2634,12 +2646,12 @@
       ],
       "value": ""
     }, {
-      "id": "a702dcda-36b2-4ec8-9be1-993c6e1545da",
+      "id": "19b735f5-748a-4999-b9c7-6310046a4da3",
       "comment": "",
       "command": "click",
-      "target": "css=.bg-white:nth-child(1) .bg-primary-600",
+      "target": "xpath=//button[contains(.,'View Details')]",
       "targets": [
-        ["css=.bg-white:nth-child(1) .bg-primary-600", "css:finder"],
+        ["css=.rounded", "css:finder"],
         ["xpath=//div[@id='root']/div/main/div/div/div/div/div/div/button", "xpath:idRelative"],
         ["xpath=//div/div/div/div/div/button", "xpath:position"],
         ["xpath=//button[contains(.,'View Details')]", "xpath:innerText"]
@@ -2656,7 +2668,7 @@
         ["xpath=//div[3]/div/span[2]", "xpath:position"],
         ["xpath=//span[contains(.,'$112.00')]", "xpath:innerText"]
       ],
-      "value": "$112.00"
+      "value": "$20.10"
     }, {
       "id": "46b5c4a1-bebe-4a83-b3f3-afbaffe9babf",
       "comment": "",
@@ -2668,7 +2680,7 @@
         ["xpath=//div[2]/div/div/p", "xpath:position"],
         ["xpath=//p[contains(.,'1x Queen Bed')]", "xpath:innerText"]
       ],
-      "value": "1x Queen Bed"
+      "value": "1x Single Bed"
     }, {
       "id": "fc515f49-e0b9-4bce-b03e-5c4f45dfbd6e",
       "comment": "",
@@ -2680,7 +2692,7 @@
         ["xpath=//p[2]", "xpath:position"],
         ["xpath=//p[contains(.,'1x King Bed')]", "xpath:innerText"]
       ],
-      "value": "1x King Bed"
+      "value": "1x Double Bed"
     }, {
       "id": "417389f6-0670-475b-91b0-ca388f7e597e",
       "comment": "",
@@ -2692,7 +2704,7 @@
         ["xpath=//p[3]", "xpath:position"],
         ["xpath=//p[contains(.,'1x Bunk Bed')]", "xpath:innerText"]
       ],
-      "value": "1x Bunk Bed"
+      "value": "1x Queen Bed"
     }, {
       "id": "7c24b3e9-d8c8-462a-9b47-3711acf3caa3",
       "comment": "",
@@ -2704,7 +2716,7 @@
         ["xpath=//p[4]", "xpath:position"],
         ["xpath=//p[contains(.,'1x Double Bed')]", "xpath:innerText"]
       ],
-      "value": "1x Double Bed"
+      "value": "3x Bunk Bed"
     }, {
       "id": "de542663-0378-4a5f-a4e5-27eaa7c80063",
       "comment": "",
@@ -2716,7 +2728,7 @@
         ["xpath=//div[2]/div/p", "xpath:position"],
         ["xpath=//p[contains(.,'Deluxe Room • Max Occupancy: 8')]", "xpath:innerText"]
       ],
-      "value": "Deluxe Room • Max Occupancy: 8"
+      "value": "Standard Room • Max Occupancy: 11"
     }, {
       "id": "d24dd2d3-05dd-459b-af2c-157008341b8e",
       "comment": "",
@@ -2772,12 +2784,12 @@
       ],
       "value": ""
     }, {
-      "id": "90825849-98c2-430d-9bda-87419b1a29a0",
+      "id": "950e453f-cda0-422f-9bbe-4b4807cbc0e6",
       "comment": "",
       "command": "click",
-      "target": "css=.h-8",
+      "target": "css=.h-8 > path",
       "targets": [
-        ["css=.h-8", "css:finder"]
+        ["css=.h-8 > path", "css:finder"]
       ],
       "value": ""
     }, {

@@ -760,7 +760,7 @@ export const getPropertyById = async (req, res) => {
               'name', r.name,
               'room_type', r.room_type,
               'bathroom_type', r.bathroom_type,
-              'beds', r.beds,
+              'beds', IF(r.beds IS NULL OR r.beds = '', '[]', r.beds),
               'room_size', r.room_size,
               'max_occupancy', r.max_occupancy,
               'base_price', r.base_price,
@@ -771,26 +771,26 @@ export const getPropertyById = async (req, res) => {
               'description', r.description,
               'view_type', r.view_type,
               'has_private_bathroom', r.has_private_bathroom,
-              'amenities', r.amenities,
+              'amenities', IF(r.amenities IS NULL OR r.amenities = '', '[]', r.amenities),
               'smoking', r.smoking,
-              'accessibility_features', r.accessibility_features,
+              'accessibility_features', IF(r.accessibility_features IS NULL OR r.accessibility_features = '', '[]', r.accessibility_features),
               'floor_level', r.floor_level,
               'has_balcony', r.has_balcony,
               'has_kitchen', r.has_kitchen,
               'has_minibar', r.has_minibar,
-              'climate', r.climate,
+              'climate', IF(r.climate IS NULL OR r.climate = '', '{"type":"ac","available":true}', r.climate),
               'price_per_night', r.price_per_night,
               'cancellation_policy', r.cancellation_policy,
               'includes_breakfast', r.includes_breakfast,
               'extra_bed_available', r.extra_bed_available,
               'pets_allowed', r.pets_allowed,
-              'images', r.images,
+              'images', IF(r.images IS NULL OR r.images = '', '[]', r.images),
               'cleaning_frequency', r.cleaning_frequency,
               'has_toiletries', r.has_toiletries,
               'has_towels_linens', r.has_towels_linens,
               'has_room_service', r.has_room_service,
               'flooring_type', r.flooring_type,
-              'energy_saving_features', r.energy_saving_features,
+              'energy_saving_features', IF(r.energy_saving_features IS NULL OR r.energy_saving_features = '', '[]', r.energy_saving_features),
               'status', r.status,
               'created_at', r.created_at,
               'updated_at', r.updated_at
@@ -866,32 +866,76 @@ export const getPropertyById = async (req, res) => {
 
     // Parse JSON strings to objects
     const property = properties[0];
+    console.log('Raw rooms from DB:', property.rooms);
+    
+    if (property.rooms) {
+      const parsedRooms = JSON.parse(property.rooms);
+      console.log('Parsed rooms:', parsedRooms);
+      console.log('First room beds:', parsedRooms[0]?.beds);
+    }
+
+    // Format the property data
     const formattedProperty = {
       ...property,
-      rooms: property.rooms ? JSON.parse(property.rooms).map(room => ({
-        ...room,
-        beds: JSON.parse(room.beds || '[]'),
-        amenities: JSON.parse(room.amenities || '[]'),
-        accessibility_features: JSON.parse(room.accessibility_features || '[]'),
-        climate: JSON.parse(room.climate || 'null'),
-        images: JSON.parse(room.images || '[]'),
-        energy_saving_features: JSON.parse(room.energy_saving_features || '[]'),
-        has_private_bathroom: !!room.has_private_bathroom,
-        smoking: !!room.smoking,
-        has_balcony: !!room.has_balcony,
-        has_kitchen: !!room.has_kitchen,
-        has_minibar: !!room.has_minibar,
-        includes_breakfast: !!room.includes_breakfast,
-        extra_bed_available: !!room.extra_bed_available,
-        pets_allowed: !!room.pets_allowed,
-        has_toiletries: !!room.has_toiletries,
-        has_towels_linens: !!room.has_towels_linens,
-        has_room_service: !!room.has_room_service
-      })) : [],
-      recent_bookings: property.recent_bookings ? JSON.parse(property.recent_bookings) : [],
-      maintenance_tasks: property.maintenance_tasks ? JSON.parse(property.maintenance_tasks) : [],
-      recent_transactions: property.recent_transactions ? JSON.parse(property.recent_transactions) : []
+      rooms: [],
+      recent_bookings: [],
+      maintenance_tasks: [],
+      recent_transactions: []
     };
+
+    // Parse rooms if they exist
+    if (property.rooms) {
+      try {
+        const parsedRooms = JSON.parse(property.rooms);
+        formattedProperty.rooms = parsedRooms.map(room => ({
+          ...room,
+          beds: room.beds || [],
+          amenities: room.amenities ? JSON.parse(room.amenities) : [],
+          accessibility_features: room.accessibility_features ? JSON.parse(room.accessibility_features) : [],
+          climate: room.climate ? JSON.parse(room.climate) : { type: 'ac', available: true },
+          images: room.images ? JSON.parse(room.images) : [],
+          energy_saving_features: room.energy_saving_features ? JSON.parse(room.energy_saving_features) : [],
+          has_private_bathroom: !!room.has_private_bathroom,
+          smoking: !!room.smoking,
+          has_balcony: !!room.has_balcony,
+          has_kitchen: !!room.has_kitchen,
+          has_minibar: !!room.has_minibar,
+          includes_breakfast: !!room.includes_breakfast,
+          extra_bed_available: !!room.extra_bed_available,
+          pets_allowed: !!room.pets_allowed,
+          has_toiletries: !!room.has_toiletries,
+          has_towels_linens: !!room.has_towels_linens,
+          has_room_service: !!room.has_room_service
+        }));
+      } catch (e) {
+        console.error('Error parsing rooms:', e);
+      }
+    }
+
+    // Parse other JSON fields
+    if (property.recent_bookings) {
+      try {
+        formattedProperty.recent_bookings = JSON.parse(property.recent_bookings);
+      } catch (e) {
+        console.error('Error parsing recent_bookings:', e);
+      }
+    }
+
+    if (property.maintenance_tasks) {
+      try {
+        formattedProperty.maintenance_tasks = JSON.parse(property.maintenance_tasks);
+      } catch (e) {
+        console.error('Error parsing maintenance_tasks:', e);
+      }
+    }
+
+    if (property.recent_transactions) {
+      try {
+        formattedProperty.recent_transactions = JSON.parse(property.recent_transactions);
+      } catch (e) {
+        console.error('Error parsing recent_transactions:', e);
+      }
+    }
 
     res.json({
       status: 'success',

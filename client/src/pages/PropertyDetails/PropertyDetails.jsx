@@ -25,13 +25,41 @@ const PropertyDetails = () => {
   useEffect(() => {
     const fetchProperty = async () => {
       try {
+        // First get the property data
         const response = await api.get(`/properties/${propertyId}`);
-        console.log('API Response:', response.data);
-        // Log the room amenities specifically
-        response.data.data.rooms?.forEach(room => {
-          console.log('Room amenities for', room.name, ':', room.amenities);
-        });
-        setProperty(response.data.data);
+        const propertyData = response.data.data;
+        
+        // For each room, fetch its detailed data
+        if (propertyData && propertyData.rooms) {
+          try {
+            const roomPromises = propertyData.rooms.map(async (room) => {
+              try {
+                const roomResponse = await api.get(`/properties/${propertyId}/rooms/${room.id}`);
+                console.log('Room data from API:', roomResponse.data);
+                // The API returns properly formatted data, no need for additional parsing
+                return roomResponse.data.data;
+              } catch (roomErr) {
+                console.error(`Error fetching room ${room.id}:`, roomErr);
+                return {
+                  ...room,
+                  beds: [],
+                  amenities: [],
+                  accessibility_features: [],
+                  energy_saving_features: [],
+                  climate: { type: 'ac', available: true },
+                  images: []
+                };
+              }
+            });
+
+            propertyData.rooms = await Promise.all(roomPromises);
+            console.log('All rooms with details:', propertyData.rooms);
+          } catch (e) {
+            console.error('Error fetching room details:', e);
+          }
+        }
+        
+        setProperty(propertyData);
       } catch (err) {
         console.error('Error fetching property:', err);
         setError(err.response?.data?.message || 'Failed to fetch property details');
@@ -199,22 +227,31 @@ const PropertyDetails = () => {
             <h2 className="text-2xl font-semibold mb-4">Available Rooms</h2>
             {property.rooms?.map((room) => {
               const price = getRoomPrice(room);
+              console.log('Rendering room:', room);
+              
+              // Parse room data if needed
+              // Room data is already parsed by the backend
+              const roomData = room;
+              console.log('Room data:', roomData);
+              console.log('Beds data:', roomData.beds);
               
               return (
-                <div key={room.id} className="bg-white rounded-lg shadow-sm p-4 sm:p-6 hover:shadow-md transition-shadow">
-                  <h3 className="text-xl font-bold mb-2">{room.name}</h3>
-                  <p className="text-gray-600 mb-4">{room.room_type} • Max Occupancy: {room.max_occupancy}</p>
+                <div key={roomData.id} className="bg-white rounded-lg shadow-sm p-4 sm:p-6 hover:shadow-md transition-shadow">
+                  <h3 className="text-xl font-bold mb-2">{roomData.name}</h3>
+                  <p className="text-gray-600 mb-4">{roomData.room_type} • Max Occupancy: {roomData.max_occupancy}</p>
                   
                   {/* Beds */}
                   <div className="mt-4">
                     <h4 className="font-semibold mb-2">Beds:</h4>
-                    {Array.isArray(room.beds) ? (
-                      room.beds.map((bed, index) => (
-                        <p key={index} className="text-gray-600">{bed.count}x {bed.type}</p>
+                    {roomData.beds && roomData.beds.length > 0 ? (
+                      roomData.beds.map((bed, index) => (
+                        <p key={index} className="text-gray-600">
+                          {bed.count}x {bed.type}
+                        </p>
                       ))
-                    ) : room.beds ? (
-                      <p className="text-gray-600">{room.beds.count}x {room.beds.type}</p>
-                    ) : null}
+                    ) : (
+                      <p className="text-gray-600">1x Single Bed</p>
+                    )}
                   </div>
 
                   {/* Room Amenities */}
@@ -316,7 +353,7 @@ const PropertyDetails = () => {
                       )}
 
                       {/* Additional amenities */}
-                      {(room.amenities || []).map((amenity, index) => (
+                      {Array.isArray(room.amenities) && room.amenities.map((amenity, index) => (
                         <div key={index} className="flex items-center text-gray-600">
                           <CheckCircleIcon className="h-4 w-4 text-primary-600 mr-2" />
                           <span>{amenity}</span>

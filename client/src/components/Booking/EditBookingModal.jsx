@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, addMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { toast } from 'react-hot-toast';
-import { propertyOwnerService } from '../../services/propertyOwnerService';
+import bookingService from '../../services/bookingService';
 import api from '../../services/api';
 import { XMarkIcon } from '@heroicons/react/24/solid';
 
 const EditBookingModal = ({ booking, onClose, onSuccess }) => {
   const [room, setRoom] = useState(null);
   const [availabilityMap, setAvailabilityMap] = useState({});
+  const [reservations, setReservations] = useState([]);
+  const [blockedDates, setBlockedDates] = useState([]);
   const [totalPrice, setTotalPrice] = useState(parseFloat(booking.total_price) || 0);
   const [totalNights, setTotalNights] = useState(0);
   const [checkInDate, setCheckInDate] = useState(new Date(booking.check_in_date));
   const [checkOutDate, setCheckOutDate] = useState(new Date(booking.check_out_date));
-  const [numberOfGuests, setNumberOfGuests] = useState(booking.number_of_guests);
+  const [numberOfGuests, setNumberOfGuests] = useState(booking.number_of_guests || 1);
   const [specialRequests, setSpecialRequests] = useState(booking.special_requests || '');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -39,11 +41,13 @@ const EditBookingModal = ({ booking, onClose, onSuccess }) => {
         }
         setRoom(roomResponse.data.data);
 
-        // Get first and last day of the date range
-        const startDateStr = format(checkInDate, 'yyyy-MM-dd');
-        const endDateStr = format(checkOutDate, 'yyyy-MM-dd');
+        // Fetch availability for the next 6 months
+        const startDate = startOfMonth(new Date());
+        const endDate = endOfMonth(addMonths(startDate, 6));
+        const startDateStr = format(startDate, 'yyyy-MM-dd');
+        const endDateStr = format(endDate, 'yyyy-MM-dd');
 
-        // Fetch availability for the date range
+        // Fetch availability
         const availabilityResponse = await api.get(`/properties/${propertyId}/rooms/${roomId}/availability`, {
           params: {
             startDate: startDateStr,
@@ -51,9 +55,33 @@ const EditBookingModal = ({ booking, onClose, onSuccess }) => {
           }
         });
 
-        if (availabilityResponse.data?.data?.availability) {
-          setAvailabilityMap(availabilityResponse.data.data.availability);
-        }
+        // Update availability map and blocked dates
+        const availability = availabilityResponse.data.data?.availability || {};
+        const newBlockedDates = [];
+
+        // Process each date in the availability object
+        Object.entries(availability).forEach(([dateStr, data]) => {
+          // Skip the dates of the current booking being edited
+          const currentBookingStart = format(new Date(booking.check_in_date), 'yyyy-MM-dd');
+          const currentBookingEnd = format(new Date(booking.check_out_date), 'yyyy-MM-dd');
+          
+          // If this date is within the current booking's range, don't block it
+          if (dateStr >= currentBookingStart && dateStr <= currentBookingEnd) {
+            return;
+          }
+
+          if (data.status === 'occupied' || data.status === 'maintenance' || data.status === 'blocked') {
+            newBlockedDates.push(parseISO(dateStr));
+          }
+        });
+
+        setAvailabilityMap(availability);
+        setBlockedDates(newBlockedDates);
+
+        // Fetch reservations
+        const reservationsResponse = await api.get(`/properties/${propertyId}/rooms/${roomId}/reservations`);
+        const otherReservations = (reservationsResponse.data.data || []).filter(r => r.id !== booking.id);
+        setReservations(otherReservations);
       } catch (error) {
         console.error('Error fetching room data:', error);
         toast.error('Failed to fetch room data');
@@ -99,7 +127,7 @@ const EditBookingModal = ({ booking, onClose, onSuccess }) => {
     setIsLoading(true);
 
     try {
-      await propertyOwnerService.updateBooking(booking.id, {
+      await bookingService.updateBooking(booking.id, {
         checkInDate: format(checkInDate, 'yyyy-MM-dd'),
         checkOutDate: format(checkOutDate, 'yyyy-MM-dd'),
         numberOfGuests,
@@ -125,7 +153,7 @@ const EditBookingModal = ({ booking, onClose, onSuccess }) => {
 
     setIsLoading(true);
     try {
-      await propertyOwnerService.cancelBooking(booking.id);
+      await bookingService.cancelBooking(booking.id);
       toast.success('Booking cancelled successfully');
       onSuccess?.();
       onClose();
@@ -169,6 +197,25 @@ const EditBookingModal = ({ booking, onClose, onSuccess }) => {
                 minDate={new Date()}
                 className="w-full p-2 border rounded"
                 dateFormat="MMM d, yyyy"
+                excludeDates={blockedDates}
+                dayClassName={date => {
+                  const dateStr = format(date, 'yyyy-MM-dd');
+                  const currentBookingStart = format(new Date(booking.check_in_date), 'yyyy-MM-dd');
+                  const currentBookingEnd = format(new Date(booking.check_out_date), 'yyyy-MM-dd');
+                  
+                  // If this date is within the current booking's range, show it as available
+                  if (dateStr >= currentBookingStart && dateStr <= currentBookingEnd) {
+                    return 'bg-green-100';
+                  }
+
+                  const availability = availabilityMap[dateStr];
+                  if (!availability) return 'bg-gray-50';
+                  if (availability.status === 'available') return 'bg-green-100';
+                  if (availability.status === 'maintenance') return 'bg-orange-100';
+                  if (availability.status === 'blocked') return 'bg-gray-50';
+                  if (availability.status === 'occupied') return 'bg-red-100';
+                  return '';
+                }}
               />
             </div>
 
@@ -183,6 +230,25 @@ const EditBookingModal = ({ booking, onClose, onSuccess }) => {
                 minDate={checkInDate}
                 className="w-full p-2 border rounded"
                 dateFormat="MMM d, yyyy"
+                excludeDates={blockedDates}
+                dayClassName={date => {
+                  const dateStr = format(date, 'yyyy-MM-dd');
+                  const currentBookingStart = format(new Date(booking.check_in_date), 'yyyy-MM-dd');
+                  const currentBookingEnd = format(new Date(booking.check_out_date), 'yyyy-MM-dd');
+                  
+                  // If this date is within the current booking's range, show it as available
+                  if (dateStr >= currentBookingStart && dateStr <= currentBookingEnd) {
+                    return 'bg-green-100';
+                  }
+
+                  const availability = availabilityMap[dateStr];
+                  if (!availability) return 'bg-gray-50';
+                  if (availability.status === 'available') return 'bg-green-100';
+                  if (availability.status === 'maintenance') return 'bg-orange-100';
+                  if (availability.status === 'blocked') return 'bg-gray-50';
+                  if (availability.status === 'occupied') return 'bg-red-100';
+                  return '';
+                }}
               />
             </div>
 
