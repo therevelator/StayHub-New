@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import propertyService from '../../services/propertyService';
 import { propertyOwnerService } from '../../services/propertyOwnerService';
 import { Tab } from '@headlessui/react';
+import Swal from 'sweetalert2';
 import RoomsList from '../Admin/EditProperty/components/RoomsList';
 import { toast } from 'react-hot-toast';
 import { AnalyticsSection } from '../../components/OwnerDashboard/AnalyticsSection';
@@ -217,12 +218,41 @@ const PropertyView = () => {
 
   const handleRoomDelete = async (roomId) => {
     try {
+      const result = await Swal.fire({
+        title: 'Delete Room',
+        text: 'Are you sure you want to delete this room?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel'
+      });
+
+      if (!result.isConfirmed) {
+        return;
+      }
+
       await propertyService.deleteRoom(propertyId, roomId);
       await fetchData(); // Refresh property data
-      toast.success('Room deleted successfully');
+      
+      await Swal.fire({
+        icon: 'success',
+        title: 'Room Deleted',
+        text: 'Room has been deleted successfully',
+        timer: 1500,
+        showConfirmButton: false
+      });
     } catch (error) {
       console.error('Error deleting room:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete room');
+      
+      await Swal.fire({
+        icon: 'error',
+        title: 'Cannot Delete Room',
+        text: error.response?.data?.message || 'Failed to delete room',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#3085d6'
+      });
     }
   };
 

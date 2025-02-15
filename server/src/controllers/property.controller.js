@@ -1236,10 +1236,35 @@ const deleteRoom = async (req, res) => {
   const { propertyId, roomId } = req.params;
 
   try {
-    await db.query(
-      'DELETE FROM rooms WHERE id = ? AND property_id = ?',
+    // First verify the room belongs to the property
+    const [rooms] = await db.query(
+      'SELECT id FROM rooms WHERE id = ? AND property_id = ?',
       [roomId, propertyId]
     );
+
+    if (rooms.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Room not found or does not belong to this property'
+      });
+    }
+
+    // Check for active bookings
+    const [bookings] = await db.query(
+      'SELECT COUNT(*) as count FROM bookings WHERE room_id = ? AND status IN ("pending", "confirmed")',
+      [roomId]
+    );
+
+    if (bookings[0].count > 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Cannot delete room because it has active bookings. Please cancel or complete all bookings for this room first.',
+        code: 'ACTIVE_BOOKINGS'
+      });
+    }
+
+    // Delete the room
+    await db.query('DELETE FROM rooms WHERE id = ?', [roomId]);
 
     // Update the property's total max occupancy
     await updatePropertyMaxOccupancy(propertyId);
@@ -1252,7 +1277,8 @@ const deleteRoom = async (req, res) => {
     console.error('Error deleting room:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Failed to delete room'
+      message: 'An error occurred while deleting the room',
+      code: error.code || 'UNKNOWN_ERROR'
     });
   }
 };

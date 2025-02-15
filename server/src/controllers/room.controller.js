@@ -482,7 +482,10 @@ export const updateRoom = async (req, res) => {
 };
 
 export const deleteRoom = async (req, res) => {
+  const connection = await db.getConnection();
+  
   try {
+    await connection.beginTransaction();
     const { roomId } = req.params;
 
     // Check if room exists
@@ -494,19 +497,52 @@ export const deleteRoom = async (req, res) => {
       });
     }
 
-    // Delete room
-    await db.query('DELETE FROM rooms WHERE id = ?', [roomId]);
+    // Check for active bookings only (pending or confirmed)
+    const [activeBookings] = await connection.query(
+      'SELECT id, status FROM bookings WHERE room_id = ? AND status IN ("pending", "confirmed")',
+      [roomId]
+    );
+
+    if (activeBookings.length > 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Cannot delete room because it has active bookings. Please cancel or complete all bookings for this room first.',
+        code: 'ACTIVE_BOOKINGS'
+      });
+    }
+
+    // Delete all cancelled bookings
+    await connection.query(
+      'DELETE FROM bookings WHERE room_id = ? AND status = "cancelled"',
+      [roomId]
+    );
+
+    // Delete all room availability records (maintenance, price modifications, etc)
+    await connection.query(
+      'DELETE FROM room_availability WHERE room_id = ?',
+      [roomId]
+    );
+
+    // Then delete the room
+    await connection.query('DELETE FROM rooms WHERE id = ?', [roomId]);
+    await connection.commit();
 
     res.json({
       status: 'success',
       message: 'Room deleted successfully'
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Error deleting room:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Failed to delete room'
+      message: error.code === 'ER_ROW_IS_REFERENCED_2' 
+        ? 'Cannot delete room because it has active bookings. Please cancel or complete all bookings for this room first.'
+        : 'Failed to delete room',
+      code: error.code || 'UNKNOWN_ERROR'
     });
+  } finally {
+    connection.release();
   }
 };
 

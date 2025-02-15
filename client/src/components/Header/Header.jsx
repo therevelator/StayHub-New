@@ -16,6 +16,7 @@ import {
 const Header = () => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -36,7 +37,17 @@ const Header = () => {
           </Link>
 
           <div className="flex items-center space-x-4">
-            {/* Navigation */}
+            {/* Mobile menu button */}
+            <button
+              type="button"
+              className="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              <span className="sr-only">Open main menu</span>
+              <Bars3Icon className="block h-6 w-6" aria-hidden="true" />
+            </button>
+
+            {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center space-x-4">
               {isAuthenticated ? (
                 <>
@@ -152,14 +163,165 @@ const Header = () => {
                 </>
               )}
             </nav>
-
-            {/* Mobile menu button */}
-            <div className="md:hidden">
-              <button className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500">
-                <Bars3Icon className="h-6 w-6" />
-              </button>
-            </div>
           </div>
+        </div>
+
+        {/* Mobile Navigation Menu */}
+        <div
+          className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:hidden border-t border-gray-200 py-2`}
+        >
+          <nav className="px-2 space-y-1">
+            {isAuthenticated ? (
+              <>
+                <Link
+                  to="/"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <div className="flex items-center">
+                    <HomeIcon className="h-5 w-5 mr-2" />
+                    Home
+                  </div>
+                </Link>
+
+                {user?.isAdmin ? (
+                  // Admin Mobile Navigation
+                  <>
+                    <Link
+                      to="/admin/dashboard"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <ShieldCheckIcon className="h-5 w-5 mr-2" />
+                        Dashboard
+                      </div>
+                    </Link>
+                    <Link
+                      to="/admin/properties"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <BuildingStorefrontIcon className="h-5 w-5 mr-2" />
+                        Properties
+                      </div>
+                    </Link>
+                    <Link
+                      to="/admin/users"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <UserCircleIcon className="h-5 w-5 mr-2" />
+                        Users
+                      </div>
+                    </Link>
+                  </>
+                ) : (user?.role === 'host' || user?.role === 'owner') ? (
+                  // Property Owner Mobile Navigation
+                  <>
+                    <Link
+                      to="/properties/add"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <BuildingOfficeIcon className="h-5 w-5 mr-2" />
+                        List Property
+                      </div>
+                    </Link>
+                    <Link
+                      to="/properties"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <BuildingStorefrontIcon className="h-5 w-5 mr-2" />
+                        My Properties
+                      </div>
+                    </Link>
+                    <Link
+                      to="/bookings"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <CalendarDaysIcon className="h-5 w-5 mr-2" />
+                        Bookings
+                      </div>
+                    </Link>
+                  </>
+                ) : (
+                  // Guest Mobile Navigation
+                  <>
+                    <Link
+                      to="/myreservations"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <CalendarDaysIcon className="h-5 w-5 mr-2" />
+                        My Reservations
+                      </div>
+                    </Link>
+                    <Link
+                      to="/favorites"
+                      className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <div className="flex items-center">
+                        <HeartIcon className="h-5 w-5 mr-2" />
+                        Favorites
+                      </div>
+                    </Link>
+                  </>
+                )}
+
+                <Link
+                  to="/account"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <div className="flex items-center">
+                    <Cog6ToothIcon className="h-5 w-5 mr-2" />
+                    Account
+                  </div>
+                </Link>
+
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <div className="flex items-center">
+                    <UserCircleIcon className="h-5 w-5 mr-2" />
+                    Sign Out
+                  </div>
+                </button>
+              </>
+            ) : (
+              // Non-authenticated Mobile Navigation
+              <>
+                <Link
+                  to="/login"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/register"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Register
+                </Link>
+              </>
+            )}
+          </nav>
         </div>
       </div>
     </header>

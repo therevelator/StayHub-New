@@ -151,27 +151,7 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
-                        const result = await Swal.fire({
-                          title: 'Delete Room',
-                          text: 'Are you sure you want to delete this room?',
-                          icon: 'warning',
-                          showCancelButton: true,
-                          confirmButtonColor: '#d33',
-                          cancelButtonColor: '#3085d6',
-                          confirmButtonText: 'Yes, delete it!',
-                          cancelButtonText: 'Cancel'
-                        });
-
-                        if (result.isConfirmed) {
-                          await onRoomDelete(room.id);
-                          await Swal.fire(
-                            'Deleted!',
-                            'Room has been deleted successfully.',
-                            'success'
-                          );
-                        }
-                      }}
+                      onClick={() => onRoomDelete(room.id)}
                       disabled={disabled}
                       className="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
