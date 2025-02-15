@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import propertyService from '../../../services/propertyService';
@@ -9,6 +9,8 @@ import LoadingSpinner from '../../../components/LoadingSpinner';
 const AdminProperties = () => {
   const navigate = useNavigate();
   const [properties, setProperties] = useState([]);
+  const [filteredProperties, setFilteredProperties] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
@@ -46,6 +48,7 @@ const AdminProperties = () => {
       
       console.log('Processed properties:', processedProperties);
       setProperties(processedProperties);
+      setFilteredProperties(processedProperties);
     } catch (error) {
       console.error('Error loading properties:', error);
       setError('Failed to load properties');
@@ -119,21 +122,51 @@ const AdminProperties = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Properties</h1>
-        <Link
-          to="/admin/properties/add"
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-        >
-          <PlusIcon className="h-5 w-5 mr-2" />
-          Add Property
-        </Link>
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Properties</h1>
+            <p className="text-gray-600">Manage and monitor all your properties in one place</p>
+          </div>
+          <Link
+            to="/admin/properties/add"
+            className="inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            <PlusIcon className="h-5 w-5 mr-2" />
+            Add Property
+          </Link>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <div className="max-w-xl relative">
+          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+            <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full rounded-lg border-0 py-3 pl-10 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-base transition-all duration-200 hover:ring-gray-400"
+            placeholder="Search by property name or location..."
+            value={searchQuery}
+            onChange={(e) => {
+              const query = e.target.value.toLowerCase();
+              setSearchQuery(query);
+              const filtered = properties.filter(property =>
+                property.name.toLowerCase().includes(query) ||
+                (property.location && property.location.toLowerCase().includes(query)) ||
+                (property.city && property.city.toLowerCase().includes(query)) ||
+                (property.country && property.country.toLowerCase().includes(query))
+              );
+              setFilteredProperties(filtered);
+            }}
+          />
+        </div>
       </div>
 
       {properties.length > 0 ? (
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
-            {properties.map((property) => (
+            {filteredProperties.map((property) => (
               <li key={property.id}>
                 <div className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">
