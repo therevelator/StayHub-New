@@ -6,26 +6,20 @@ import {
   BuildingOfficeIcon, 
   UserCircleIcon, 
   ShieldCheckIcon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  HomeIcon,
+  Cog6ToothIcon,
+  BuildingStorefrontIcon,
+  HeartIcon
 } from '@heroicons/react/20/solid';
 
 const Header = () => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  const handleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
-
-  const handleClose = () => {
-    setIsMenuOpen(false);
-  };
 
   const handleLogout = async () => {
     try {
       await logout();
-      handleClose();
       navigate('/login');
     } catch (error) {
       console.error('Logout failed:', error);
@@ -41,91 +35,130 @@ const Header = () => {
             StayHub
           </Link>
 
-          {/* Navigation */}
-          <nav className="hidden md:flex items-center space-x-4">
-            {isAuthenticated && (
-              <>
-                {!user?.isGuest && !user?.isAdmin && (
+          <div className="flex items-center space-x-4">
+            {/* Navigation */}
+            <nav className="hidden md:flex items-center space-x-4">
+              {isAuthenticated ? (
+                <>
                   <Link
-                    to="/admin/properties/add"
+                    to="/"
                     className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
                   >
-                    <BuildingOfficeIcon className="h-5 w-5 mr-2" />
-                    List Property
+                    <HomeIcon className="h-5 w-5 mr-2" />
+                    Home
                   </Link>
-                )}
-                <Link
-                  to="/"
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
-                >
-                  Find Places
-                </Link>
-              </>
-            )}
-          </nav>
 
-          {/* User Menu */}
-          <div className="flex items-center">
-            {isAuthenticated ? (
-              <div className="relative">
-                <button
-                  onClick={handleMenu}
-                  className="flex items-center text-gray-700 hover:text-primary-600"
-                >
-                  <UserCircleIcon className="h-8 w-8" />
-                </button>
-                {isMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
-                    {user?.isAdmin && (
+                  {/* Navigation based on user type */}
+                  {user?.isAdmin ? (
+                    // Admin Navigation
+                    <>
                       <Link
-                        to="/admin/properties"
-                        className="flex px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        onClick={handleClose}
+                        to="/admin/dashboard"
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
                       >
                         <ShieldCheckIcon className="h-5 w-5 mr-2" />
-                        Admin Panel
+                        Dashboard
                       </Link>
-                    )}
-                    {(user?.isGuest || !user?.isAdmin) && (
+                      <Link
+                        to="/admin/properties"
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                      >
+                        <BuildingStorefrontIcon className="h-5 w-5 mr-2" />
+                        Properties
+                      </Link>
+                      <Link
+                        to="/admin/users"
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                      >
+                        <UserCircleIcon className="h-5 w-5 mr-2" />
+                        Users
+                      </Link>
+                    </>
+                  ) : (user?.role === 'host' || user?.role === 'owner') ? (
+                    // Property Owner Navigation
+                    <>
+                      <Link
+                        to="/properties/add"
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                      >
+                        <BuildingOfficeIcon className="h-5 w-5 mr-2" />
+                        List Property
+                      </Link>
+                      <Link
+                        to="/properties"
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                      >
+                        <BuildingStorefrontIcon className="h-5 w-5 mr-2" />
+                        My Properties
+                      </Link>
+                      <Link
+                        to="/bookings"
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                      >
+                        <CalendarDaysIcon className="h-5 w-5 mr-2" />
+                        Bookings
+                      </Link>
+                    </>
+                  ) : (
+                    // Guest Navigation
+                    <>
                       <Link
                         to="/myreservations"
-                        className="flex px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        onClick={handleClose}
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
                       >
                         <CalendarDaysIcon className="h-5 w-5 mr-2" />
                         My Reservations
                       </Link>
-                    )}
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center space-x-4">
-                <Link
-                  to="/login"
-                  className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/register"
-                  className="bg-primary-600 text-white hover:bg-primary-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Register
-                </Link>
-              </div>
-            )}
+                      <Link
+                        to="/favorites"
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                      >
+                        <HeartIcon className="h-5 w-5 mr-2" />
+                        Favorites
+                      </Link>
+                    </>
+                  )}
+
+                  <Link
+                    to="/account"
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                  >
+                    <Cog6ToothIcon className="h-5 w-5 mr-2" />
+                    Account
+                  </Link>
+
+                  <button
+                    onClick={handleLogout}
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                  >
+                    <UserCircleIcon className="h-5 w-5 mr-2" />
+                    Sign Out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="bg-primary-600 text-white hover:bg-primary-700 px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Register
+                  </Link>
+                </>
+              )}
+            </nav>
 
             {/* Mobile menu button */}
-            <button className="md:hidden ml-4 text-gray-700 hover:text-primary-600">
-              <Bars3Icon className="h-6 w-6" />
-            </button>
+            <div className="md:hidden">
+              <button className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-primary-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500">
+                <Bars3Icon className="h-6 w-6" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

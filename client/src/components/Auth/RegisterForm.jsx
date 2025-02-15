@@ -7,16 +7,34 @@ const RegisterForm = () => {
   const { register } = useAuth();
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
+    userType: 'guest',
     email: '',
     password: '',
     confirmPassword: '',
     firstName: '',
     lastName: '',
-    phoneNumber: ''
+    phoneNumber: '',
+    propertyDetails: {
+      companyName: '',
+      businessAddress: '',
+      taxId: ''
+    }
   });
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name.startsWith('property_')) {
+      const propertyField = name.replace('property_', '');
+      setFormData(prev => ({
+        ...prev,
+        propertyDetails: {
+          ...prev.propertyDetails,
+          [propertyField]: value
+        }
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -50,6 +68,19 @@ const RegisterForm = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm space-y-4">
+            <div>
+              <label htmlFor="userType" className="block text-sm font-medium text-gray-700 mb-1">I am a:</label>
+              <select
+                id="userType"
+                name="userType"
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                value={formData.userType}
+                onChange={handleChange}
+              >
+                <option value="guest">Guest</option>
+                <option value="owner">Property Owner</option>
+              </select>
+            </div>
             <div>
               <label htmlFor="firstName" className="sr-only">First Name</label>
               <input
@@ -119,7 +150,7 @@ const RegisterForm = () => {
               />
             </div>
             <div>
-              <label htmlFor="phoneNumber" className="sr-only">Phone Number</label>
+              <label htmlFor="phoneNumber" className="sr-only"></label>
               <input
                 id="phoneNumber"
                 name="phoneNumber"
@@ -130,6 +161,50 @@ const RegisterForm = () => {
                 onChange={handleChange}
               />
             </div>
+            
+            {formData.userType === 'owner' && (
+              <>
+                <div>
+                  <label htmlFor="property_companyName" className="sr-only">Company Name</label>
+                  <input
+                    id="property_companyName"
+                    name="property_companyName"
+                    type="text"
+                    className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Company Name"
+                    value={formData.propertyDetails.companyName}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="property_businessAddress" className="sr-only">Business Address</label>
+                  <input
+                    id="property_businessAddress"
+                    name="property_businessAddress"
+                    type="text"
+                    className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Business Address"
+                    value={formData.propertyDetails.businessAddress}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="property_taxId" className="sr-only">Tax ID / VAT Number</label>
+                  <input
+                    id="property_taxId"
+                    name="property_taxId"
+                    type="text"
+                    className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Tax ID / VAT Number"
+                    value={formData.propertyDetails.taxId}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <div>

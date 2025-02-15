@@ -1,0 +1,30 @@
+.phone-input-container {
+  width: 100% !important;
+}
+
+.phone-input-container .form-control {
+  width: 100% !important;
+  height: 42px !important;
+}
+
+.phone-input-container .country-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.phone-input-container .selected-flag {
+  background-color: transparent !important;
+}
+
+.phone-input-container .selected-flag:hover,
+.phone-input-container .selected-flag:focus {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.phone-input-container .country-list .country:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.phone-input-container .country-list .country.highlight {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}

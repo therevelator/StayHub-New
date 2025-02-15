@@ -7,12 +7,20 @@ const authService = {
       console.log('Login response:', response.data); // Debug log
       
       if (response.data?.data?.token && response.data?.data?.user) {
-        // Store the token securely
+        const userData = response.data.data.user;
+        // Add role-based flags
+        const userWithRoles = {
+          ...userData,
+          isAdmin: userData.role === 'admin',
+          isHost: userData.role === 'host',
+          isGuest: userData.role === 'guest'
+        };
+        // Store the token and user data securely
         localStorage.setItem('token', response.data.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+        localStorage.setItem('user', JSON.stringify(userWithRoles));
         return {
           token: response.data.data.token,
-          user: response.data.data.user
+          user: userWithRoles
         };
       }
       throw new Error('Invalid response format from server');
@@ -22,15 +30,21 @@ const authService = {
     }
   },
 
-  register: async ({ email, password, userType = 'guest', firstName, lastName }) => {
+  register: async ({ email, password, userType = 'guest', firstName, lastName, phoneNumber, propertyDetails }) => {
     try {
+      // Map frontend userType to backend role
+      const role = userType === 'owner' ? 'host' : userType;
+      
       const userData = {
         email,
         password,
         firstName,
         lastName,
-        role: userType
+        phoneNumber,
+        role,
+        ...(role === 'host' ? { propertyDetails } : {})
       };
+      
       const response = await api.post('/auth/register', userData);
       return response.data;
     } catch (error) {
@@ -47,7 +61,16 @@ const authService = {
   getCurrentUser: () => {
     try {
       const user = localStorage.getItem('user');
-      return user ? JSON.parse(user) : null;
+      if (!user) return null;
+      
+      const userData = JSON.parse(user);
+      // Ensure role flags are set
+      return {
+        ...userData,
+        isAdmin: userData.role === 'admin',
+        isHost: userData.role === 'host',
+        isGuest: userData.role === 'guest'
+      };
     } catch (error) {
       console.error('Error getting current user:', error);
       return null;
