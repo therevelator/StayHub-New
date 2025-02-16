@@ -239,7 +239,7 @@ const PropertyView = () => {
       await Swal.fire({
         icon: 'success',
         title: 'Room Deleted',
-        text: 'Room has been deleted successfully',
+        text: 'The room has been deleted successfully',
         timer: 1500,
         showConfirmButton: false
       });
