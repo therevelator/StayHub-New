@@ -190,7 +190,13 @@ const EditBookingModal = ({ booking, onClose, onSuccess }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Date</label>
               <DatePicker
                 selected={checkInDate}
-                onChange={setCheckInDate}
+                onChange={(date) => {
+                  if (checkOutDate && date > checkOutDate) {
+                    toast.error('Check-in date cannot be later than check-out date');
+                    return;
+                  }
+                  setCheckInDate(date);
+                }}
                 selectsStart
                 startDate={checkInDate}
                 endDate={checkOutDate}
@@ -223,7 +229,13 @@ const EditBookingModal = ({ booking, onClose, onSuccess }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Check-out Date</label>
               <DatePicker
                 selected={checkOutDate}
-                onChange={setCheckOutDate}
+                onChange={(date) => {
+                  if (checkInDate && date < checkInDate) {
+                    toast.error('Check-out date cannot be earlier than check-in date');
+                    return;
+                  }
+                  setCheckOutDate(date);
+                }}
                 selectsEnd
                 startDate={checkInDate}
                 endDate={checkOutDate}
