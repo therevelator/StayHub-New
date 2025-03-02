@@ -73,7 +73,7 @@ const PropertyView = () => {
 
   const calculateAverageDailyRate = () => {
     if (!property?.rooms || !Array.isArray(property.rooms) || property.rooms.length === 0) return 0;
-    const totalPrice = property.rooms.reduce((sum, r) => sum + (Number(r?.base_price || r?.price) || 0), 0);
+    const totalPrice = property.rooms.reduce((sum, r) => sum + (Number(r?.price_per_night || r?.price) || 0), 0);
     return (totalPrice / property.rooms.length).toFixed(2);
   };
 

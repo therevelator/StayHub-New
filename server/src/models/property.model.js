@@ -138,7 +138,7 @@ const findPropertiesInRadius = async (lat, lon, radius, guests, propertyType) =>
               'type', r.room_type,
               'beds', r.beds,
               'maxOccupancy', r.max_occupancy,
-              'basePrice', r.base_price,
+
               'cleaningFee', r.cleaning_fee,
               'serviceFee', r.service_fee,
               'taxRate', r.tax_rate,
@@ -293,7 +293,7 @@ const getPropertyById = async (id) => {
             'room_type', rd.room_type,
             'beds', rd.beds,
             'max_occupancy', rd.max_occupancy,
-            'base_price', rd.base_price,
+
             'cleaning_fee', rd.cleaning_fee,
             'service_fee', rd.service_fee,
             'tax_rate', rd.tax_rate,
@@ -456,7 +456,7 @@ const createProperty = async (propertyData) => {
       const roomInsertQuery = `
         INSERT INTO rooms (
           property_id, name, room_type, bed_type, beds, max_occupancy, 
-          base_price, cleaning_fee, service_fee, tax_rate, security_deposit,
+          cleaning_fee, service_fee, tax_rate, security_deposit,
           description, bathroom_type, view_type, has_private_bathroom,
           smoking, floor_level, has_balcony, has_kitchen, has_minibar, 
           climate, price_per_night, includes_breakfast, extra_bed_available,
@@ -472,7 +472,7 @@ const createProperty = async (propertyData) => {
         room.bed_type || 'single',
         room.beds || '[]',
         room.max_occupancy || 2,
-        room.base_price || 0,
+
         room.cleaning_fee || 0,
         room.service_fee || 0,
         room.tax_rate || 0,
@@ -487,7 +487,7 @@ const createProperty = async (propertyData) => {
         room.has_kitchen ? 1 : 0,
         room.has_minibar ? 1 : 0,
         room.climate || 'ac',
-        room.price_per_night || room.base_price || 0,
+        room.price_per_night || 20.00, // Default minimum price of $20
         room.includes_breakfast ? 1 : 0,
         room.extra_bed_available ? 1 : 0,
         room.pets_allowed ? 1 : 0,

@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MagnifyingGlassIcon,
   MapPinIcon,
   UserIcon,
-  HomeIcon
+  HomeIcon,
+  AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import '../../styles/searchBar.css';
+import FilterContainer from '../../components/FilterContainer/FilterContainer';
 
 const propertyTypes = [
   { label: 'Any Type', value: '' },
@@ -55,21 +57,180 @@ const Home = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [properties, setProperties] = useState([]);
+  const [filteredProperties, setFilteredProperties] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [checkInDate, setCheckInDate] = useState(null);
   const [checkOutDate, setCheckOutDate] = useState(null);
+  const [searchParams, setSearchParams] = useState({});
+  const [showFilters, setShowFilters] = useState(true);
+  const [activeFilters, setActiveFilters] = useState({
+    priceRange: [0, 1000],
+    rating: 0,
+    amenities: {},
+    beds: {}
+  });
 
   const handleRadiusChange = (selectedRadius) => {
     setRadius(selectedRadius);
+  };
+  
+  // Handle filter changes - wrapped in useCallback to prevent infinite renders
+  const handleFilterChange = useCallback((newFilters) => {
+    setActiveFilters(newFilters);
+    
+    // Check if all filters are in their default state
+    const areFiltersCleared = 
+      newFilters.priceRange[0] === 0 &&
+      newFilters.priceRange[1] === 1000 &&
+      newFilters.rating === 0 &&
+      Object.values(newFilters.amenities).every(val => !val) &&
+      (!newFilters.beds || Object.values(newFilters.beds).every(val => !val));
+
+    // If all filters are cleared, reset to original properties
+    if (areFiltersCleared) {
+      setFilteredProperties(properties);
+      return;
+    }
+    
+    // Apply filters to properties
+    if (properties.length > 0) {
+      const filtered = properties.filter(property => {
+        // Apply price filter
+        const propertyPrice = Number(property.price) || 0;
+        if (propertyPrice < newFilters.priceRange[0] || propertyPrice > newFilters.priceRange[1]) {
+          return false;
+        }
+        
+        // Apply rating filter
+        if (newFilters.rating > 0 && (!property.rating || property.rating < newFilters.rating)) {
+          return false;
+        }
+        
+        // Helper function to normalize keys
+        const normalizeKey = (key) => {
+          return key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        };
+
+        // Helper function to parse room data
+        const parseRooms = () => {
+          if (!property.rooms) return [];
+          return property.rooms.map(room => {
+            if (typeof room === 'string') {
+              try {
+                return JSON.parse(room);
+              } catch (e) {
+                console.error('Error parsing room:', e);
+                return null;
+              }
+            }
+            return room;
+          }).filter(room => room !== null);
+        };
+
+        // Apply amenities filter
+        const selectedAmenities = Object.entries(newFilters.amenities)
+          .filter(([_, selected]) => selected)
+          .map(([name]) => normalizeKey(name));
+        
+        if (selectedAmenities.length > 0) {
+          console.log('\n=== Checking Property Amenities ===');
+          console.log(`Property ID: ${property.id}`);
+          console.log(`Property Name: ${property.name}`);
+          console.log('Selected amenities:', selectedAmenities);
+
+          // Check amenities
+          const hasAllAmenities = selectedAmenities.every(amenityKey => {
+            // Check for kitchen
+            if (amenityKey === 'kitchen') {
+              const rooms = parseRooms();
+              const hasKitchen = rooms.some(room => room.has_kitchen === 1 || room.has_kitchen === true);
+              if (hasKitchen) {
+                console.log('✅ Found kitchen in rooms');
+                return true;
+              }
+            }
+
+            // Check room_amenities array
+            let roomAmenities = property.room_amenities;
+            if (typeof roomAmenities === 'string') {
+              try {
+                roomAmenities = JSON.parse(roomAmenities);
+              } catch (error) {
+                console.error('Error parsing room_amenities:', error);
+                return false;
+              }
+            }
+
+            if (Array.isArray(roomAmenities) && roomAmenities.includes(amenityKey)) {
+              console.log(`✅ Found ${amenityKey} in room amenities`);
+              return true;
+            }
+
+            console.log(`❌ ${amenityKey} not found`);
+            return false;
+          });
+
+          if (!hasAllAmenities) {
+            return false;
+          }
+        }
+
+        // Apply bed types filter
+        const selectedBeds = Object.entries(newFilters.beds)
+          .filter(([_, selected]) => selected)
+          .map(([name]) => normalizeKey(name));
+
+        if (selectedBeds.length > 0) {
+          console.log('\n=== Checking Property Beds ===');
+          console.log('Selected beds:', selectedBeds);
+
+          // Check room_beds array
+          let roomBeds = property.room_beds;
+          if (typeof roomBeds === 'string') {
+            try {
+              roomBeds = JSON.parse(roomBeds);
+            } catch (error) {
+              console.error('Error parsing room_beds:', error);
+              return false;
+            }
+          }
+
+          const hasAllBeds = selectedBeds.every(bedType => {
+            if (Array.isArray(roomBeds) && roomBeds.includes(bedType)) {
+              console.log(`✅ Found ${bedType} in room beds`);
+              return true;
+            }
+            console.log(`❌ ${bedType} not found`);
+            return false;
+          });
+
+          if (!hasAllBeds) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
+      
+      setFilteredProperties(filtered);
+    }
+  }, [properties]); // Only re-create when properties change
+  
+  // Toggle filters visibility on mobile
+  const toggleFilters = () => {
+    setShowFilters(!showFilters);
   };
 
   // Get user's location on component mount
   useEffect(() => {
     if (navigator.geolocation) {
       setIsLoadingLocation(true);
+      
+      // Try to get a more precise location first with a longer timeout
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          console.log('Geolocation success:', position.coords);
           setUserLocation({
             lat: position.coords.latitude,
             lon: position.coords.longitude
@@ -77,15 +238,40 @@ const Home = () => {
           setIsLoadingLocation(false);
         },
         (error) => {
-          console.error('Geolocation error:', error);
-          setIsLoadingLocation(false);
+          console.error('High accuracy geolocation error:', error);
+          
+          // If high accuracy fails, try again with lower accuracy but higher timeout
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              console.log('Low accuracy geolocation success:', position.coords);
+              setUserLocation({
+                lat: position.coords.latitude,
+                lon: position.coords.longitude
+              });
+              setIsLoadingLocation(false);
+            },
+            (fallbackError) => {
+              console.error('Fallback geolocation error:', fallbackError);
+              setIsLoadingLocation(false);
+              // You could set a default location here if needed
+              // setUserLocation({ lat: 40.7128, lon: -74.0060 }); // Example: New York
+            },
+            {
+              enableHighAccuracy: false,
+              timeout: 30000, // Much longer timeout
+              maximumAge: 60000 // Accept cached positions up to 1 minute old
+            }
+          );
         },
         {
           enableHighAccuracy: true,
-          timeout: 5000,
+          timeout: 15000, // Increased from 5000
           maximumAge: 0
         }
       );
+    } else {
+      console.error('Geolocation is not supported by this browser');
+      setIsLoadingLocation(false);
     }
   }, []);
 
@@ -155,7 +341,33 @@ const Home = () => {
       });
 
       if (response.data.status === 'success') {
-        const propertiesWithDistance = response.data.data.map(property => ({
+        // Debug raw API response
+        console.log('Raw API response:', JSON.stringify(response.data.data));
+        
+        // Check for base_price in the API response
+        const hasBasePrice = response.data.data.some(property => 
+          property.rooms && property.rooms.some(room => room.base_price)
+        );
+        console.log('API response contains base_price:', hasBasePrice);
+        // Preprocess to remove base_price from all properties and rooms
+        const preprocessedProperties = response.data.data.map(property => {
+          // Create a new property object without base_price
+          const newProperty = { ...property };
+          
+          // If property has rooms, remove base_price from each room
+          if (newProperty.rooms && Array.isArray(newProperty.rooms)) {
+            newProperty.rooms = newProperty.rooms.map(room => {
+              // Create a new room object without base_price
+              const { base_price, ...newRoom } = room;
+              return newRoom;
+            });
+          }
+          
+          return newProperty;
+        });
+        
+        // First map to add distance
+        const propertiesWithDistance = preprocessedProperties.map(property => ({
           ...property,
           distance: calculateDistance(
             searchParams.lat,
@@ -165,8 +377,211 @@ const Home = () => {
           )
         }));
         
-        console.log('Properties received:', propertiesWithDistance);
-        setProperties(propertiesWithDistance);
+        // If check-in and check-out dates are provided, fetch room prices for those dates
+        let propertiesWithPrices = [...propertiesWithDistance];
+        
+        if (searchParams.checkIn && searchParams.checkOut) {
+          // Process properties sequentially to avoid too many concurrent requests
+          for (let i = 0; i < propertiesWithDistance.length; i++) {
+            const property = propertiesWithDistance[i];
+            
+            if (property.rooms && Array.isArray(property.rooms) && property.rooms.length > 0) {
+              try {
+                // Create an array of promises for each room's availability check
+                const roomPromises = property.rooms.map(room => {
+                  return api.get(`/properties/${property.id}/rooms/${room.id}/availability`, {
+                    params: {
+                      startDate: searchParams.checkIn,
+                      endDate: searchParams.checkOut
+                    }
+                  }).catch(err => {
+                    console.error(`Error fetching room ${room.id} availability:`, err);
+                    return { data: { data: { defaultPrice: room.price_per_night || 0 } } };
+                  });
+                });
+                
+                // Wait for all room availability checks to complete
+                const roomResponses = await Promise.all(roomPromises);
+                
+                // Extract prices and calculate the lowest price
+                const roomPrices = roomResponses.map(response => {
+                  if (response.data && response.data.data) {
+                    // Calculate average price from availability data
+                    const availabilityData = response.data.data.availability || [];
+                    if (availabilityData.length > 0) {
+                      // Sum all prices and divide by number of days
+                      const totalPrice = availabilityData.reduce((sum, day) => {
+                        return sum + (parseFloat(day.price) || 0);
+                      }, 0);
+                      return totalPrice / availabilityData.length;
+                    } else {
+                      // Use default price if no availability data
+                      return parseFloat(response.data.data.defaultPrice) || 0;
+                    }
+                  }
+                  return 0;
+                }).filter(price => price > 0);
+                
+                // Update the property with the lowest price
+                if (roomPrices.length > 0) {
+                  propertiesWithPrices[i] = {
+                    ...propertiesWithPrices[i],
+                    price: Math.min(...roomPrices)
+                  };
+                } else {
+                  // Fallback to basic price calculation if no room prices available
+                  const basicPrices = property.rooms
+                    .map(room => {
+                      // Only use price_per_night
+                      const pricePerNight = room.price_per_night ? parseFloat(room.price_per_night) : 0;
+                      return pricePerNight;
+                    })
+                    .filter(price => price > 0);
+                  
+                  propertiesWithPrices[i] = {
+                    ...propertiesWithPrices[i],
+                    price: basicPrices.length > 0 ? Math.min(...basicPrices) : (property.price || 0)
+                  };
+                }
+              } catch (error) {
+                console.error(`Error processing property ${property.id}:`, error);
+                // Fallback to basic price calculation
+                const basicPrices = property.rooms
+                  .map(room => {
+                    // Only use price_per_night
+                    const pricePerNight = room.price_per_night ? parseFloat(room.price_per_night) : 0;
+                    return pricePerNight;
+                  })
+                  .filter(price => price > 0);
+                
+                propertiesWithPrices[i] = {
+                  ...propertiesWithPrices[i],
+                  price: basicPrices.length > 0 ? Math.min(...basicPrices) : (property.price || 0)
+                };
+              }
+            } else {
+              // No rooms, use property price
+              propertiesWithPrices[i] = {
+                ...propertiesWithPrices[i],
+                price: property.price || 0
+              };
+            }
+          }
+        } else {
+          // If no dates provided, use basic price calculation
+          propertiesWithPrices = propertiesWithDistance.map(property => {
+            let lowestPrice = null;
+            if (property.rooms && Array.isArray(property.rooms) && property.rooms.length > 0) {
+              // Debug room data
+              console.log('Property rooms:', property.id, property.rooms.map(r => ({
+                id: r.id,
+                price_per_night: r.price_per_night
+              })));
+              
+              // Calculate prices with strict type handling
+              const prices = property.rooms
+                .map(room => {
+                  // Log room price data for debugging
+                  console.log(`Room ${room.id} price data:`, {
+                    price_per_night: room.price_per_night,
+                    price_per_night_parsed: parseFloat(room.price_per_night)
+                  });
+                  
+                  // Only use price_per_night
+                  const pricePerNight = room.price_per_night ? parseFloat(room.price_per_night) : 0;
+                  console.log(`Room ${room.id} price: ${pricePerNight}`);
+                  return pricePerNight;
+                })
+                .filter(price => price > 0);
+                
+              console.log('Calculated prices:', prices);
+              
+              if (prices.length > 0) {
+                lowestPrice = Math.min(...prices);
+              }
+            }
+            
+            // Log room prices for debugging
+            if (property.rooms && Array.isArray(property.rooms) && property.rooms.length > 0) {
+              console.log(`Property ${property.id} rooms:`, property.rooms.map(r => ({
+                id: r.id,
+                price_per_night: r.price_per_night
+              })));
+            }
+            
+            const finalPrice = lowestPrice || property.price || 0;
+            console.log(`Property ${property.id} final price: ${finalPrice}`);
+            return {
+              ...property,
+              price: finalPrice
+            };
+          });
+        }
+        
+        // Final properties with both distance and accurate prices
+        const propertiesWithDistanceAndPrice = propertiesWithPrices;
+        
+        // Enhance properties with room amenities
+        const enhancedProperties = propertiesWithDistanceAndPrice.map(property => {
+          // Start with the property's own amenities
+          let allAmenities = Array.isArray(property.amenities) ? [...property.amenities] : [];
+          
+          // Add all room amenities to the property's amenities
+          if (property.rooms && Array.isArray(property.rooms)) {
+            property.rooms.forEach(room => {
+              if (room.amenities) {
+                // Handle different room amenity formats
+                if (Array.isArray(room.amenities)) {
+                  // Add each room amenity to the property amenities
+                  room.amenities.forEach(amenity => {
+                    // Handle both string and object amenities
+                    const amenityValue = typeof amenity === 'object' ? 
+                      (amenity.amenity || amenity.name || '') : amenity;
+                    
+                    if (amenityValue && !allAmenities.includes(amenityValue)) {
+                      allAmenities.push(amenityValue);
+                    }
+                  });
+                } else if (typeof room.amenities === 'object') {
+                  // Handle object format amenities
+                  Object.entries(room.amenities).forEach(([key, value]) => {
+                    if (value === true && !allAmenities.includes(key)) {
+                      allAmenities.push(key);
+                    } else if (Array.isArray(value)) {
+                      value.forEach(item => {
+                        const amenityValue = typeof item === 'object' ? 
+                          (item.amenity || item.name || '') : item;
+                        
+                        if (amenityValue && !allAmenities.includes(amenityValue)) {
+                          allAmenities.push(amenityValue);
+                        }
+                      });
+                    }
+                  });
+                }
+              }
+              
+              // Also check for view_type and add it as an amenity
+              if (room.view_type && !allAmenities.includes(room.view_type)) {
+                allAmenities.push(room.view_type);
+                console.log(`Added view type '${room.view_type}' from room ${room.id} to property ${property.id}`);
+              }
+            });
+          }
+          
+          console.log(`Property ${property.id} amenities enhanced from ${property.amenities?.length || 0} to ${allAmenities.length}`);
+          
+          // Return the enhanced property with all amenities
+          return {
+            ...property,
+            amenities: allAmenities
+          };
+        });
+        
+        console.log('Properties received:', enhancedProperties);
+        setProperties(enhancedProperties);
+        setFilteredProperties(enhancedProperties);
+        setSearchParams(searchParams);
       } else {
         console.error('Search error:', response.data.message);
         setProperties([]);
@@ -190,106 +605,118 @@ const Home = () => {
           Discover amazing properties at the best prices
         </p>
 
-        {/* Search Form */}
-        <form onSubmit={handleSearch} className="mb-12">
-          <div className="search-bar">
-            <div className="search-section">
-              <label className="search-label">Location</label>
-              <div className="flex items-center">
-                <input
-                  type="text"
-                  placeholder="Destination..."
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="search-input"
-                />
-              </div>
-            </div>
-
-            <div className="search-section">
-              <label className="search-label">Property Type</label>
-              <select
-                value={propertyType}
-                onChange={(e) => setPropertyType(e.target.value)}
-                className="search-select"
-              >
-                <option value="">Any Type</option>
-                {propertyTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="search-section">
-              <label className="search-label">Guests</label>
-              <input
-                type="number"
-                min="1"
-                value={guests}
-                onChange={(e) => setGuests(parseInt(e.target.value))}
-                className="search-input"
-              />
-            </div>
-
-            <div className="search-section">
-              <label className="search-label">Radius</label>
-              <select
-                value={radius}
-                onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
-                className="search-select"
-              >
-                {radiusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="search-section">
-              <label className="search-label">Check-in Date</label>
-              <DatePicker
-                selected={checkInDate}
-                onChange={date => setCheckInDate(date)}
-                placeholderText="Check-in date"
-                className="date-picker"
-                dateFormat="MMM d, yyyy"
-                minDate={new Date()}
-              />
-            </div>
-
-            <div className="search-section">
-              <label className="search-label">Check-out Date</label>
-              <DatePicker
-                selected={checkOutDate}
-                onChange={date => setCheckOutDate(date)}
-                placeholderText="Check-out date"
-                className="date-picker"
-                dateFormat="MMM d, yyyy"
-                minDate={checkInDate || new Date()}
-              />
-            </div>
-
-            <button
-              type="submit"
-              className={`w-full bg-primary-600 text-white p-4 rounded-lg font-semibold hover:bg-primary-700 transition-colors ${
-                loading || ((!location || location === 'Current Location') && isLoadingLocation)
-                  ? 'opacity-50 cursor-not-allowed'
-                  : ''
-              }`}
-              disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
-            >
-              {loading 
-                ? 'Searching...' 
-                : ((!location || location === 'Current Location') && isLoadingLocation)
-                  ? 'Getting location...'
-                  : 'Search'
-              }
-            </button>
+        {/* Main Content Layout */}
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Filters Sidebar - Always visible on desktop */}
+          <div className="lg:w-1/5 lg:flex-shrink-0">
+            <FilterContainer 
+              onFilterChange={handleFilterChange} 
+              properties={properties} 
+            />
           </div>
-        </form>
+
+          {/* Right Content Area */}
+          <div className="lg:w-4/5 lg:flex-grow">
+            {/* Search Form */}
+            <form onSubmit={handleSearch} className="mb-12">
+              <div className="search-bar">
+                <div className="search-section">
+                  <label className="search-label">Location</label>
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      placeholder="Destination..."
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      className="search-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="search-section">
+                  <label className="search-label">Property Type</label>
+                  <select
+                    value={propertyType}
+                    onChange={(e) => setPropertyType(e.target.value)}
+                    className="search-select"
+                  >
+                    <option value="">Any Type</option>
+                    {propertyTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="search-section">
+                  <label className="search-label">Guests</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={guests}
+                    onChange={(e) => setGuests(parseInt(e.target.value))}
+                    className="search-input"
+                  />
+                </div>
+
+                <div className="search-section">
+                  <label className="search-label">Radius</label>
+                  <select
+                    value={radius}
+                    onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
+                    className="search-select"
+                  >
+                    {radiusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="search-section">
+                  <label className="search-label">Check-in Date</label>
+                  <DatePicker
+                    selected={checkInDate}
+                    onChange={date => setCheckInDate(date)}
+                    placeholderText="Check-in date"
+                    className="date-picker"
+                    dateFormat="MMM d, yyyy"
+                    minDate={new Date()}
+                  />
+                </div>
+
+                <div className="search-section">
+                  <label className="search-label">Check-out Date</label>
+                  <DatePicker
+                    selected={checkOutDate}
+                    onChange={date => setCheckOutDate(date)}
+                    placeholderText="Check-out date"
+                    className="date-picker"
+                    dateFormat="MMM d, yyyy"
+                    minDate={checkInDate || new Date()}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className={`w-full bg-primary-600 text-white py-2 px-4 rounded-md font-medium text-sm hover:bg-primary-700 transition-colors ${
+                    loading || ((!location || location === 'Current Location') && isLoadingLocation)
+                      ? 'opacity-50 cursor-not-allowed'
+                      : ''
+                  }`}
+                  disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
+                >
+                  {loading 
+                    ? 'Searching...' 
+                    : ((!location || location === 'Current Location') && isLoadingLocation)
+                      ? 'Getting location...'
+                      : 'Search'
+                  }
+                </button>
+              </div>
+            </form>
 
         {/* Error Message */}
         {error && (
@@ -300,14 +727,29 @@ const Home = () => {
           </div>
         )}
 
-        {/* Results Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {properties.length === 0 && (
-            <div className="col-span-full text-center text-gray-500">
-              {loading ? 'Searching...' : 'No properties found'}
+            {/* Filter Toggle Button (Mobile/Tablet Only) */}
+            <div className="lg:hidden mb-4">
+              <button
+                onClick={toggleFilters}
+                className="w-full flex items-center justify-center bg-white border border-gray-300 rounded-md px-4 py-2 text-gray-700"
+              >
+                <AdjustmentsHorizontalIcon className="h-5 w-5 mr-2" />
+                {showFilters ? 'Hide Filters' : 'Show Filters'}
+              </button>
             </div>
-          )}
-          {properties.map((property) => (
+
+            {/* Mobile/Tablet Filters (Collapsible) */}
+            <div className={`lg:hidden mb-6 ${showFilters ? 'block' : 'hidden'}`}>
+              <FilterContainer onFilterChange={handleFilterChange} properties={properties} />
+            </div>
+            {/* Results Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+              {filteredProperties.length === 0 && (
+                <div className="col-span-full text-center text-gray-500">
+                  {loading ? 'Searching...' : properties.length > 0 ? 'No properties match your filters' : 'No properties found'}
+                </div>
+              )}
+              {filteredProperties.map((property) => (
             <div
               key={property.id}
               className="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform transition-transform hover:scale-105"
@@ -337,7 +779,8 @@ const Home = () => {
                 </p>
                 <div className="flex justify-between items-center">
                   <span className="text-primary-600 font-semibold">
-                    ${property.price || 0}/night
+                    from ${Number(property.price).toFixed(2)}/night
+                    {searchParams.checkIn && searchParams.checkOut && <span className="text-xs block">for selected dates</span>}
                   </span>
                   <button
                     onClick={(e) => {
@@ -352,6 +795,8 @@ const Home = () => {
               </div>
             </div>
           ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

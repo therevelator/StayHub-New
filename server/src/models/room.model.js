@@ -106,8 +106,7 @@ export const createRoom = async (propertyId, roomData) => {
       beds: JSON.stringify(Array.isArray(roomData.beds) && roomData.beds.length > 0 ? roomData.beds : [{ type: 'Single Bed', count: 1 }]),
       room_size: roomData.room_size || 0,
       max_occupancy: roomData.max_occupancy || 2,
-      base_price: roomData.base_price || 0,
-      price_per_night: roomData.price_per_night || roomData.base_price || 0,
+      price_per_night: roomData.price_per_night || 20.00, // Default minimum price of $20
       view_type: roomData.view_type?.toLowerCase() || 'standard',
       has_private_bathroom: roomData.bathroom_type?.toLowerCase() === 'private',
       amenities: Array.isArray(roomData.amenities) ? JSON.stringify(roomData.amenities) : JSON.stringify([]),
@@ -284,7 +283,7 @@ export const updateRoom = async (roomId, roomData) => {
     }
 
     // Ensure numeric fields are valid numbers
-    const numericFields = ['price_per_night', 'base_price', 'room_size', 'floor_level', 'max_occupancy'];
+    const numericFields = ['price_per_night', 'room_size', 'floor_level', 'max_occupancy'];
     for (const field of numericFields) {
       if (roomData[field] !== undefined) {
         const value = Number(roomData[field]);
@@ -331,7 +330,7 @@ export const updateRoom = async (roomId, roomData) => {
       beds: roomData.beds,
       room_size: roomData.room_size,
       max_occupancy: roomData.max_occupancy,
-      base_price: roomData.base_price,
+
       price_per_night: roomData.price_per_night,
       view_type: roomData.view_type,
       has_private_bathroom: roomData.has_private_bathroom,

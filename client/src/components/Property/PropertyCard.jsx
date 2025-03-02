@@ -3,6 +3,37 @@ import { Link } from 'react-router-dom';
 import { StarIcon } from '@heroicons/react/24/solid';
 
 const PropertyCard = ({ property, onClick, sx = {} }) => {
+  // Debug the incoming property data
+  console.log(`PropertyCard for ${property.id}:`, {
+    originalPrice: property.price,
+    hasRooms: property.rooms && Array.isArray(property.rooms),
+    roomCount: property.rooms && Array.isArray(property.rooms) ? property.rooms.length : 0,
+    roomPrices: property.rooms && Array.isArray(property.rooms) ? 
+      property.rooms.map(r => ({ id: r.id, price_per_night: r.price_per_night })) : []
+  });
+  
+  // Ensure we're using price_per_night if available
+  const propertyWithCorrectPrice = { ...property };
+  
+  // If property has rooms with price_per_night, use the lowest one
+  if (propertyWithCorrectPrice.rooms && Array.isArray(propertyWithCorrectPrice.rooms) && propertyWithCorrectPrice.rooms.length > 0) {
+    const prices = propertyWithCorrectPrice.rooms
+      .map(room => {
+        const price = room.price_per_night ? parseFloat(room.price_per_night) : 0;
+        console.log(`Room ${room.id} price_per_night:`, price);
+        return price;
+      })
+      .filter(price => price > 0);
+    
+    console.log(`Property ${property.id} all prices:`, prices);
+    
+    if (prices.length > 0) {
+      const minPrice = Math.min(...prices);
+      console.log(`Property ${property.id} min price:`, minPrice);
+      propertyWithCorrectPrice.price = minPrice;
+    }
+  }
+  
   const {
     name,
     description,
@@ -10,7 +41,7 @@ const PropertyCard = ({ property, onClick, sx = {} }) => {
     rating = 0,
     imageUrl,
     location,
-  } = property;
+  } = propertyWithCorrectPrice;
 
   const mainImage = imageUrl || 'https://via.placeholder.com/300x200?text=No+Image';
 

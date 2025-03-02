@@ -1,0 +1,92 @@
+/* Filter Container Styles */
+.filter-container {
+  position: sticky;
+  top: 20px;
+  border: 1px solid #e5e7eb;
+}
+
+/* Price Range Slider Styles */
+.price-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 5px;
+  background: #e5e7eb;
+  outline: none;
+  margin: 10px 0;
+}
+
+.price-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #4f46e5;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.price-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #4f46e5;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Checkbox Styles */
+input[type="checkbox"] {
+  accent-color: #4f46e5;
+  cursor: pointer;
+}
+
+/* Amenity Search Styles */
+.amenity-search-input:focus {
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.amenity-suggestions {
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+
+.amenity-suggestions::-webkit-scrollbar {
+  width: 6px;
+}
+
+.amenity-suggestions::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 3px;
+}
+
+.amenity-suggestions::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 3px;
+}
+
+.amenity-tag {
+  transition: all 0.2s ease;
+}
+
+.amenity-tag:hover {
+  background-color: #e5e7eb;
+}
+
+.amenity-remove-btn {
+  font-size: 14px;
+  line-height: 14px;
+}
+
+/* Mobile Styles */
+@media (max-width: 768px) {
+  .filter-container {
+    position: static;
+    margin-bottom: 20px;
+  }
+}

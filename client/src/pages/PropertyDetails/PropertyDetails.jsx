@@ -27,7 +27,22 @@ const PropertyDetails = () => {
       try {
         // First get the property data
         const response = await api.get(`/properties/${propertyId}`);
-        const propertyData = response.data.data;
+        let propertyData = response.data.data;
+        
+        // Debug raw API response
+        console.log('Raw property data from API:', JSON.stringify(propertyData));
+        
+        // Remove base_price from property and its rooms
+        if (propertyData) {
+          // If property has rooms, remove base_price from each room
+          if (propertyData.rooms && Array.isArray(propertyData.rooms)) {
+            propertyData.rooms = propertyData.rooms.map(room => {
+              // Create a new room object without base_price
+              const { base_price, ...roomWithoutBasePrice } = room;
+              return roomWithoutBasePrice;
+            });
+          }
+        }
         
         // For each room, fetch its detailed data
         if (propertyData && propertyData.rooms) {
@@ -36,7 +51,15 @@ const PropertyDetails = () => {
               try {
                 const roomResponse = await api.get(`/properties/${propertyId}/rooms/${room.id}`);
                 console.log('Room data from API:', roomResponse.data);
-                // The API returns properly formatted data, no need for additional parsing
+                
+                // Remove base_price from room data
+                const roomData = roomResponse.data.data;
+                if (roomData) {
+                  // Create a new room object without base_price
+                  const { base_price, ...roomWithoutBasePrice } = roomData;
+                  console.log('Room data after removing base_price:', roomWithoutBasePrice);
+                  return roomWithoutBasePrice;
+                }
                 return roomResponse.data.data;
               } catch (roomErr) {
                 console.error(`Error fetching room ${room.id}:`, roomErr);
@@ -92,32 +115,139 @@ const PropertyDetails = () => {
   if (!property) return null;
 
   const getRoomPrice = (room) => {
-    return Number(room.price_per_night) || Number(room.base_price) || 0;
+    // Log the room data for debugging
+    console.log('Room price data:', {
+      id: room.id,
+      name: room.name,
+      price_per_night: room.price_per_night,
+      price_per_night_parsed: parseFloat(room.price_per_night)
+    });
+    
+    // Convert string values to numbers and handle null/undefined
+    const pricePerNight = room.price_per_night ? parseFloat(room.price_per_night) : 0;
+    
+    // Only use price_per_night
+    if (pricePerNight > 0) {
+      console.log(`Using price_per_night: ${pricePerNight}`);
+      return pricePerNight;
+    }
+    
+    console.log('No valid price found, returning 0');
+    return 0;
+  };
+
+  // Get the lowest room price from all available rooms
+  const getLowestRoomPrice = () => {
+    if (!property.rooms || !Array.isArray(property.rooms) || property.rooms.length === 0) {
+      console.log('No rooms available');
+      return null;
+    }
+    
+    console.log('All rooms:', property.rooms);
+    
+    // Log all room prices for debugging
+    property.rooms.forEach(room => {
+      console.log(`Room ${room.id} price data:`, {
+        name: room.name,
+        price_per_night: room.price_per_night,
+        price_per_night_parsed: parseFloat(room.price_per_night)
+      });
+    });
+    
+    // Calculate prices with strict type handling
+    const prices = property.rooms.map(room => {
+      // Only use price_per_night
+      const pricePerNight = room.price_per_night ? parseFloat(room.price_per_night) : 0;
+      console.log(`Room ${room.id} price: ${pricePerNight}`);
+      return pricePerNight;
+    }).filter(price => price > 0);
+    
+    console.log('All valid prices:', prices);
+    const lowestPrice = prices.length > 0 ? Math.min(...prices) : null;
+    console.log('Lowest price:', lowestPrice);
+    return lowestPrice;
   };
 
   const handleBookRoom = (roomId) => {
     navigate(`/property/${propertyId}/room/${roomId}`);
   };
 
+  // Format the full address
+  const getFullAddress = () => {
+    if (!property) return '';
+    
+    // Handle both direct property fields and nested location structure
+    const parts = [
+      property.street || property.location?.street,
+      property.city || property.location?.city,
+      property.state || property.location?.state,
+      property.country || property.location?.country,
+      property.postal_code || property.location?.postal_code
+    ].filter(Boolean);
+    
+    return parts.join(', ');
+  };
+  
+  // Safely get property name
+  const getPropertyName = () => {
+    return property.name || property.basicInfo?.name || 'Property Details';
+  };
+  
+  // Safely get property location
+  const getPropertyLocation = () => {
+    const city = property.city || property.location?.city;
+    const country = property.country || property.location?.country;
+    
+    if (city && country) return `${city}, ${country}`;
+    if (city) return city;
+    if (country) return country;
+    return 'Location not specified';
+  };
+  
+  // Safely get property description
+  const getPropertyDescription = () => {
+    return property.description || property.basicInfo?.description || 'No description available';
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 py-8">
+        {/* Property Address - Top Left */}
+        <div className="mb-6 flex flex-row justify-between items-center">
+          <div className="flex items-center text-gray-700">
+            <MapPinIcon className="h-5 w-5 mr-2" />
+            <span className="text-lg">{getFullAddress()}</span>
+          </div>
+          
+          {/* Lowest Price Display */}
+          {getLowestRoomPrice() && (
+            <div className="text-primary-600 font-semibold text-lg">
+              from ${getLowestRoomPrice().toFixed(2)} / night
+            </div>
+          )}
+        </div>
+        
         {/* Property Details */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-8">
           {/* Left Column - Property Info */}
           <div className="lg:col-span-2">
-            <h1 className="text-3xl font-bold mb-4">{property.basicInfo?.name}</h1>
+            <h1 className="text-3xl font-bold mb-4">{getPropertyName()}</h1>
             
             {/* Location and Rating */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center text-gray-600">
                 <MapPinIcon className="h-5 w-5 mr-2" />
-                <span>{`${property.location?.city}, ${property.location?.country}`}</span>
+                <span>{getPropertyLocation()}</span>
               </div>
               <div className="flex items-center">
                 <StarIconSolid className="h-5 w-5 text-yellow-400 mr-1" />
-                <span className="font-semibold">{property.basicInfo?.rating?.toFixed(1) || 'New'}</span>
-                <span className="text-gray-600 ml-1">({property.basicInfo?.total_reviews} reviews)</span>
+                <span className="font-semibold">
+                  {typeof property.star_rating === 'number' ? property.star_rating.toFixed(1) : 
+                   typeof property.basicInfo?.rating === 'number' ? property.basicInfo.rating.toFixed(1) : 'New'}
+                </span>
+                <span className="text-gray-600 ml-1">
+                  ({property.total_reviews || property.basicInfo?.total_reviews || 0} reviews)
+                </span>
               </div>
             </div>
 
@@ -183,41 +313,81 @@ const PropertyDetails = () => {
             {/* Description */}
             <div className="mb-8">
               <h2 className="text-2xl font-semibold mb-4">About this property</h2>
-              <p className="text-gray-600">{property.basicInfo?.description}</p>
+              <p className="text-gray-600">{getPropertyDescription()}</p>
             </div>
 
             {/* Property Amenities */}
             <div className="mb-8">
               <h2 className="text-2xl font-semibold mb-4">Property Amenities</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {property.amenities ? (
-                  typeof property.amenities === 'object' && !Array.isArray(property.amenities) ? (
-                    // Handle object format with categories
-                    Object.entries(property.amenities).map(([category, items]) => (
-                      <div key={category}>
-                        <h3 className="font-semibold text-gray-700 mb-2 capitalize">{category}</h3>
-                        {Array.isArray(items) ? items.map((item, index) => (
-                          <div key={`${category}-${index}`} className="flex items-center mb-2">
-                            <CheckCircleIcon className="h-5 w-5 text-primary-600 mr-2" />
-                            <span className="text-gray-600">
-                              {typeof item === 'object' ? item.amenity || item.name : item}
-                            </span>
+                {(() => {
+                  // Handle different amenities data structures
+                  if (property.amenities) {
+                    // Case 1: Array of objects with category and amenity properties
+                    if (Array.isArray(property.amenities) && property.amenities.length > 0 && 
+                        typeof property.amenities[0] === 'object' && 'category' in property.amenities[0]) {
+                      
+                      const amenitiesByCategory = property.amenities.reduce((acc, item) => {
+                        const category = item.category || 'General';
+                        if (!acc[category]) acc[category] = [];
+                        acc[category].push(item.amenity);
+                        return acc;
+                      }, {});
+                      
+                      return Object.entries(amenitiesByCategory).map(([category, items]) => (
+                        <div key={category}>
+                          <h3 className="font-semibold text-gray-700 mb-2 capitalize">{category}</h3>
+                          {items.map((item, index) => (
+                            <div key={`${category}-${index}`} className="flex items-center mb-2">
+                              <CheckCircleIcon className="h-5 w-5 text-primary-600 mr-2" />
+                              <span className="text-gray-600">{item}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ));
+                    }
+                    
+                    // Case 2: Simple array of strings
+                    else if (Array.isArray(property.amenities)) {
+                      return (
+                        <div className="col-span-full">
+                          <h3 className="font-semibold text-gray-700 mb-2">Available Amenities</h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {property.amenities.map((item, index) => (
+                              <div key={index} className="flex items-center mb-2">
+                                <CheckCircleIcon className="h-5 w-5 text-primary-600 mr-2" />
+                                <span className="text-gray-600">
+                                  {typeof item === 'object' ? item.amenity || item.name : item}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        )) : null}
-                      </div>
-                    ))
-                  ) : Array.isArray(property.amenities) ? (
-                    // Handle array format
-                    property.amenities.map((item, index) => (
-                      <div key={index} className="flex items-center mb-2">
-                        <CheckCircleIcon className="h-5 w-5 text-primary-600 mr-2" />
-                        <span className="text-gray-600">
-                          {typeof item === 'object' ? item.amenity || item.name : item}
-                        </span>
-                      </div>
-                    ))
-                  ) : null
-                ) : null}
+                        </div>
+                      );
+                    }
+                    
+                    // Case 3: Object with categories as keys
+                    else if (typeof property.amenities === 'object') {
+                      return Object.entries(property.amenities).map(([category, items]) => (
+                        <div key={category}>
+                          <h3 className="font-semibold text-gray-700 mb-2 capitalize">{category}</h3>
+                          {Array.isArray(items) ? items.map((item, index) => (
+                            <div key={`${category}-${index}`} className="flex items-center mb-2">
+                              <CheckCircleIcon className="h-5 w-5 text-primary-600 mr-2" />
+                              <span className="text-gray-600">
+                                {typeof item === 'object' ? item.amenity || item.name : item}
+                              </span>
+                            </div>
+                          )) : null}
+                        </div>
+                      ));
+                    }
+                  }
+                  
+                  // No amenities found
+                  return <div className="text-gray-500">No amenities listed for this property</div>;
+                })()
+                }
               </div>
             </div>
           </div>

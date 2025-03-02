@@ -84,6 +84,83 @@ const searchProperties = async (req, res) => {
 
     // Main search query
     let query = `
+      WITH RoomBeds AS (
+        SELECT DISTINCT
+          r.property_id,
+          LOWER(REPLACE(REPLACE(REPLACE(bed.type, ' ', ''), '&', ''), '-', '')) as bed_name
+        FROM rooms r
+        CROSS JOIN JSON_TABLE(
+          COALESCE(r.beds, '[]'),
+          '$[*]' COLUMNS (
+            type VARCHAR(255) PATH '$.type'
+          )
+        ) bed
+        WHERE bed.type IS NOT NULL
+      ),
+      AggregatedBeds AS (
+        SELECT 
+          property_id,
+          JSON_ARRAYAGG(bed_name) as room_beds
+        FROM RoomBeds
+        GROUP BY property_id
+      ),
+      PropertyAmenities AS (
+        SELECT DISTINCT
+          property_id,
+          LOWER(REPLACE(REPLACE(REPLACE(amenity, ' ', ''), '&', ''), '-', '')) as amenity_name
+        FROM property_amenities
+      ),
+      RoomAmenities AS (
+        SELECT DISTINCT
+          property_id,
+          amenity_name
+        FROM (
+          -- Room boolean fields as amenities
+          SELECT property_id, 'roomservice' as amenity_name FROM rooms WHERE has_room_service = 1
+          UNION
+          SELECT property_id, 'privatebathroom' FROM rooms WHERE has_private_bathroom = 1
+          UNION
+          SELECT property_id, 'balcony' FROM rooms WHERE has_balcony = 1
+          UNION
+          SELECT property_id, 'kitchen' FROM rooms WHERE has_kitchen = 1
+          UNION
+          SELECT property_id, 'minibar' FROM rooms WHERE has_minibar = 1
+          UNION
+          SELECT property_id, 'breakfastincluded' FROM rooms WHERE includes_breakfast = 1
+          UNION
+          SELECT property_id, 'extrabedavailable' FROM rooms WHERE extra_bed_available = 1
+          UNION
+          SELECT property_id, 'petsallowed' FROM rooms WHERE pets_allowed = 1
+          UNION
+          SELECT property_id, 'toiletries' FROM rooms WHERE has_toiletries = 1
+          UNION
+          SELECT property_id, 'towelslinens' FROM rooms WHERE has_towels_linens = 1
+          UNION
+          SELECT property_id, 'smokingallowed' FROM rooms WHERE smoking = 1
+          UNION
+          -- Room amenities array
+          SELECT 
+            r.property_id,
+            LOWER(REPLACE(REPLACE(REPLACE(a.amenity, ' ', ''), '&', ''), '-', '')) as amenity_name
+          FROM rooms r
+          JOIN JSON_TABLE(
+            COALESCE(r.amenities, '[]'),
+            '$[*]' COLUMNS (amenity VARCHAR(255) PATH '$')
+          ) a
+        ) room_amenities
+      ),
+      CombinedAmenities AS (
+        SELECT property_id, amenity_name FROM PropertyAmenities
+        UNION
+        SELECT property_id, amenity_name FROM RoomAmenities
+      ),
+      AggregatedAmenities AS (
+        SELECT 
+          property_id,
+          JSON_ARRAYAGG(amenity_name) as room_amenities
+        FROM CombinedAmenities
+        GROUP BY property_id
+      )
       SELECT 
         p.*,
         u.email as host_email,
@@ -103,7 +180,7 @@ const searchProperties = async (req, res) => {
               'type', r.room_type,
               'beds', r.beds,
               'maxOccupancy', r.max_occupancy,
-              'basePrice', r.base_price,
+              'price_per_night', r.price_per_night,
               'cleaningFee', r.cleaning_fee,
               'serviceFee', r.service_fee,
               'taxRate', r.tax_rate,
@@ -118,6 +195,28 @@ const searchProperties = async (req, res) => {
           FROM rooms r
           WHERE r.property_id = p.id
         ) as total_max_occupancy,
+        (
+          SELECT JSON_ARRAYAGG(amenity)
+          FROM property_amenities
+          WHERE property_id = p.id
+        ) as property_amenities,
+        (
+          SELECT JSON_ARRAYAGG(
+            LOWER(REPLACE(REPLACE(REPLACE(amenity, ' ', ''), '&', ''), '-', ''))
+          )
+          FROM property_amenities
+          WHERE property_id = p.id
+        ) as normalized_amenities,
+        (
+          SELECT room_amenities
+          FROM AggregatedAmenities aa
+          WHERE aa.property_id = p.id
+        ) as room_amenities,
+        (
+          SELECT room_beds
+          FROM AggregatedBeds ab
+          WHERE ab.property_id = p.id
+        ) as room_beds,
     `;
 
     // Add distance calculation
@@ -601,7 +700,7 @@ export const getAllProperties = async (req, res) => {
               'type', r.room_type,
               'beds', r.beds,
               'maxOccupancy', r.max_occupancy,
-              'basePrice', r.base_price,
+              'price_per_night', r.price_per_night,
               'cleaningFee', r.cleaning_fee,
               'serviceFee', r.service_fee,
               'taxRate', r.tax_rate,

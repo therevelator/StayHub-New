@@ -17,7 +17,37 @@ const SearchResults = () => {
         setLoading(true);
         console.log('Fetching properties with params:', params);
         const response = await api.get('/properties/search', { params });
-        setProperties(response.data.data || []);
+        console.log('Search API response:', JSON.stringify(response.data));
+        
+        // Process properties to ensure they have correct pricing
+        const processedProperties = (response.data.data || []).map(property => {
+          console.log(`Processing property ${property.id}:`, {
+            originalPrice: property.price,
+            hasRooms: property.rooms && Array.isArray(property.rooms),
+            roomCount: property.rooms && Array.isArray(property.rooms) ? property.rooms.length : 0
+          });
+          
+          // If property has rooms with price_per_night, use the lowest one for the property price
+          if (property.rooms && Array.isArray(property.rooms) && property.rooms.length > 0) {
+            const prices = property.rooms
+              .map(room => {
+                const price = room.price_per_night ? parseFloat(room.price_per_night) : 0;
+                console.log(`Room ${room.id} price_per_night:`, price);
+                return price;
+              })
+              .filter(price => price > 0);
+            
+            if (prices.length > 0) {
+              const minPrice = Math.min(...prices);
+              console.log(`Setting property ${property.id} price to:`, minPrice);
+              property.price = minPrice;
+            }
+          }
+          
+          return property;
+        });
+        
+        setProperties(processedProperties);
       } catch (err) {
         setError('Failed to fetch properties');
         console.error('Error fetching properties:', err);

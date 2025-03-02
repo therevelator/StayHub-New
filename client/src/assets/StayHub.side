@@ -97,7 +97,7 @@
       "id": "4f02959b-97b6-41d1-9f06-b62d1d5f6949",
       "comment": "",
       "command": "click",
-      "target": "css=.w-full",
+      "target": "xpath=//button[contains(.,'Search')]",
       "targets": [
         ["css=.w-full", "css:finder"],
         ["xpath=//button[@type='submit']", "xpath:attributes"],
@@ -183,7 +183,7 @@
       "id": "6ab564f1-f2b3-4966-9518-86541869e41b",
       "comment": "",
       "command": "click",
-      "target": "css=.px-3",
+      "target": "xpath=//textarea",
       "targets": [
         ["css=.px-3", "css:finder"],
         ["xpath=//div[@id='root']/div/main/div/div/div/div/div[2]/div[2]/div/div[3]/textarea", "xpath:idRelative"],
@@ -194,7 +194,7 @@
       "id": "e6f81eb0-7146-4b38-9d51-ca7ad20eae4d",
       "comment": "",
       "command": "type",
-      "target": "css=.px-3",
+      "target": "xpath=//textarea",
       "targets": [
         ["css=.px-3", "css:finder"],
         ["xpath=//div[@id='root']/div/main/div/div/div/div/div[2]/div[2]/div/div[3]/textarea", "xpath:idRelative"],
@@ -277,9 +277,9 @@
       "id": "90fa2712-d6a0-4506-aec1-6d3b7c82f996",
       "comment": "",
       "command": "click",
-      "target": "css=.text-red-600",
+      "target": "css=.hover\\3Atext-red-800",
       "targets": [
-        ["css=.text-red-600", "css:finder"],
+        ["css=.hover\\3Atext-red-800", "css:finder"],
         ["xpath=//div[@id='headlessui-tabs-panel-:rg:']/div/div/div[2]/div/table/tbody/tr/td[7]/div/button[2]", "xpath:idRelative"],
         ["xpath=//td[7]/div/button[2]", "xpath:position"]
       ],
@@ -389,51 +389,18 @@
       ],
       "value": ""
     }, {
-      "id": "114e44b8-0d32-42dc-b390-96cfca7b55d1",
-      "comment": "",
-      "command": "click",
-      "target": "css=.h-8 > path",
-      "targets": [
-        ["css=.h-8 > path", "css:finder"]
-      ],
-      "value": ""
-    }, {
-      "id": "3ccfc70c-af07-43b2-b229-5e8e8f0947b2",
-      "comment": "",
-      "command": "click",
-      "target": "linkText=Admin Panel",
-      "targets": [
-        ["linkText=Admin Panel", "linkText"],
-        ["css=.hover\\3A bg-gray-100:nth-child(1)", "css:finder"],
-        ["xpath=//a[contains(text(),'Admin Panel')]", "xpath:link"],
-        ["xpath=//div[@id='root']/div/header/div/div/div/div/div/a", "xpath:idRelative"],
-        ["xpath=(//a[contains(@href, '/admin/properties')])[2]", "xpath:href"],
-        ["xpath=//div/div/div/a", "xpath:position"],
-        ["xpath=//a[contains(.,'Admin Panel')]", "xpath:innerText"]
-      ],
-      "value": ""
-    }, {
-      "id": "b0e4c459-fd3a-45b5-8c36-9cf8ee2101c9",
-      "comment": "",
-      "command": "click",
-      "target": "css=.h-8",
-      "targets": [
-        ["css=.h-8", "css:finder"]
-      ],
-      "value": ""
-    }, {
       "id": "95d0fe6b-212d-4430-808d-75f18e512664",
       "comment": "",
       "command": "click",
-      "target": "linkText=Admin Panel",
+      "target": "xpath=//a[contains(text(),'Properties')]",
       "targets": [
-        ["linkText=Admin Panel", "linkText"],
-        ["css=.hover\\3A bg-gray-100:nth-child(1)", "css:finder"],
-        ["xpath=//a[contains(text(),'Admin Panel')]", "xpath:link"],
-        ["xpath=//div[@id='root']/div/header/div/div/div/div/div/a", "xpath:idRelative"],
-        ["xpath=(//a[contains(@href, '/admin/properties')])[2]", "xpath:href"],
-        ["xpath=//div/div/div/a", "xpath:position"],
-        ["xpath=//a[contains(.,'Admin Panel')]", "xpath:innerText"]
+        ["linkText=Properties", "linkText"],
+        ["css=.inline-flex:nth-child(3)", "css:finder"],
+        ["xpath=//a[contains(text(),'Properties')]", "xpath:link"],
+        ["xpath=//div[@id='root']/div/header/div/div/div/nav/a[3]", "xpath:idRelative"],
+        ["xpath=//a[contains(@href, '/admin/properties')]", "xpath:href"],
+        ["xpath=//a[3]", "xpath:position"],
+        ["xpath=//a[contains(.,'Properties')]", "xpath:innerText"]
       ],
       "value": ""
     }, {
@@ -735,11 +702,11 @@
       "id": "d4493da6-0c93-4f66-ac32-712dc5740032",
       "comment": "",
       "command": "click",
-      "target": "css=.justify-center",
+      "target": "xpath=//button[contains(.,'Save Changes')]",
       "targets": [
-        ["css=.justify-center", "css:finder"],
+        ["css=.border", "css:finder"],
         ["xpath=//button[@type='submit']", "xpath:attributes"],
-        ["xpath=//div[@id='headlessui-tabs-panel-:rg:']/form/div[5]/button", "xpath:idRelative"],
+        ["xpath=//div[@id='headlessui-tabs-panel-:re:']/form/div[5]/button", "xpath:idRelative"],
         ["xpath=//div[5]/button", "xpath:position"],
         ["xpath=//button[contains(.,'Save Changes')]", "xpath:innerText"]
       ],
@@ -748,7 +715,7 @@
       "id": "c5583ecb-3ef4-4e63-830e-b7ee2e16fdee",
       "comment": "",
       "command": "click",
-      "target": "css=.py-1",
+      "target": "xpath=//button[contains(.,'Get Current Location')]",
       "targets": [
         ["css=.py-1", "css:finder"],
         ["xpath=(//button[@type='button'])[8]", "xpath:attributes"],
@@ -761,39 +728,12 @@
       "id": "ba0116a9-fe9a-4f70-8925-a882c6b6ca0d",
       "comment": "",
       "command": "click",
-      "target": "css=.ml-2",
+      "target": "xpath=//span[contains(.,'Verify')]",
       "targets": [
         ["css=.ml-2", "css:finder"],
         ["xpath=//div[@id='headlessui-tabs-panel-:ri:']/form/div[2]/div/button/span", "xpath:idRelative"],
         ["xpath=//button/span", "xpath:position"],
         ["xpath=//span[contains(.,'Verify')]", "xpath:innerText"]
-      ],
-      "value": ""
-    }, {
-      "id": "8441b751-8658-4371-82f9-4d832bdb34da",
-      "comment": "",
-      "command": "click",
-      "target": "css=.justify-center",
-      "targets": [
-        ["css=.justify-center", "css:finder"],
-        ["xpath=//button[@type='submit']", "xpath:attributes"],
-        ["xpath=//div[@id='headlessui-tabs-panel-:ri:']/form/div[6]/button", "xpath:idRelative"],
-        ["xpath=//div[6]/button", "xpath:position"],
-        ["xpath=//button[contains(.,'Save Changes')]", "xpath:innerText"]
-      ],
-      "value": ""
-    }, {
-      "id": "5d21c962-d837-4236-b827-26eb5f78e1a1",
-      "comment": "",
-      "command": "click",
-      "target": "id=state",
-      "targets": [
-        ["id=state", "id"],
-        ["name=state", "name"],
-        ["css=#state", "css:finder"],
-        ["xpath=//input[@id='state']", "xpath:attributes"],
-        ["xpath=//div[@id='headlessui-tabs-panel-:ri:']/form/div[3]/div[2]/input", "xpath:idRelative"],
-        ["xpath=//div[2]/input", "xpath:position"]
       ],
       "value": ""
     }, {
@@ -828,11 +768,11 @@
       "id": "d38840db-50ff-4220-9f42-6175de091cbf",
       "comment": "",
       "command": "click",
-      "target": "css=.justify-center",
+      "target": "css=.text-white",
       "targets": [
-        ["css=.justify-center", "css:finder"],
+        ["css=.text-white", "css:finder"],
         ["xpath=//button[@type='submit']", "xpath:attributes"],
-        ["xpath=//div[@id='headlessui-tabs-panel-:ri:']/form/div[6]/button", "xpath:idRelative"],
+        ["xpath=//div[@id='headlessui-tabs-panel-:rg:']/form/div[6]/button", "xpath:idRelative"],
         ["xpath=//div[6]/button", "xpath:position"],
         ["xpath=//button[contains(.,'Save Changes')]", "xpath:innerText"]
       ],
@@ -1106,7 +1046,7 @@
       "id": "db06548d-999a-4f81-8702-81f9f4980256",
       "comment": "",
       "command": "click",
-      "target": "css=.justify-center",
+      "target": "xpath=//button[contains(.,'Save Changes')]",
       "targets": [
         ["css=.justify-center", "css:finder"],
         ["xpath=//button[@type='submit']", "xpath:attributes"],
@@ -1665,11 +1605,11 @@
       "id": "fd1ba7ac-787d-40cf-82a6-b5f38fd7257d",
       "comment": "",
       "command": "click",
-      "target": "css=.justify-center",
+      "target": "xpath=//button[contains(.,'Complete Property Setup')]",
       "targets": [
-        ["css=.justify-center", "css:finder"],
-        ["xpath=(//button[@type='button'])[8]", "xpath:attributes"],
-        ["xpath=//div[@id='headlessui-tabs-panel-:rq:']/div/div[2]/button", "xpath:idRelative"],
+        ["css=.border", "css:finder"],
+        ["xpath=(//button[@type='button'])[9]", "xpath:attributes"],
+        ["xpath=//div[@id='headlessui-tabs-panel-:ro:']/div/div[2]/button", "xpath:idRelative"],
         ["xpath=//div[2]/button", "xpath:position"],
         ["xpath=//button[contains(.,'Complete Property Setup')]", "xpath:innerText"]
       ],
@@ -1684,106 +1624,6 @@
         ["xpath=(//button[@type='button'])[10]", "xpath:attributes"],
         ["xpath=//div[6]/button", "xpath:position"],
         ["xpath=//button[contains(.,'View Properties')]", "xpath:innerText"]
-      ],
-      "value": ""
-    }, {
-      "id": "a6d09b04-96f5-4cb0-bd28-6ecf68eda9c2",
-      "comment": "",
-      "command": "click",
-      "target": "css=li:nth-child(1) .inline-flex:nth-child(1) > .h-4",
-      "targets": [
-        ["css=li:nth-child(1) .inline-flex:nth-child(1) > .h-4", "css:finder"]
-      ],
-      "value": ""
-    }, {
-      "id": "5cb12b3b-67f3-4519-98d0-3183b1aca395",
-      "comment": "",
-      "command": "click",
-      "target": "css=.border:nth-child(2)",
-      "targets": [
-        ["css=.border:nth-child(2)", "css:finder"],
-        ["xpath=//div[@id='root']/div/main/div/div/button", "xpath:idRelative"],
-        ["xpath=//main/div/div/button", "xpath:position"],
-        ["xpath=//button[contains(.,'Cancel')]", "xpath:innerText"]
-      ],
-      "value": ""
-    }, {
-      "id": "7ee76d17-a840-4d7a-9168-4cfc8fb540bb",
-      "comment": "",
-      "command": "chooseOkOnNextConfirmation",
-      "target": "",
-      "targets": [],
-      "value": ""
-    }, {
-      "id": "76e1404b-a1b9-4f78-8810-c53e20808de1",
-      "comment": "",
-      "command": "click",
-      "target": "css=li:nth-child(1) .inline-flex:nth-child(2) path",
-      "targets": [
-        ["css=li:nth-child(1) .inline-flex:nth-child(2) path", "css:finder"]
-      ],
-      "value": ""
-    }, {
-      "id": "f5c7cf43-e574-48dc-9f98-8d41e63830c1",
-      "comment": "",
-      "command": "click",
-      "target": "css=.swal2-confirm",
-      "targets": [
-        ["css=.swal2-confirm", "css:finder"],
-        ["xpath=(//button[@type='button'])[13]", "xpath:attributes"],
-        ["xpath=//div[6]/button", "xpath:position"],
-        ["xpath=//button[contains(.,'OK')]", "xpath:innerText"]
-      ],
-      "value": ""
-    }, {
-      "id": "364dce15-b866-4a4d-ba3f-631ed164cfa1",
-      "comment": "",
-      "command": "click",
-      "target": "css=.h-8 > path",
-      "targets": [
-        ["css=.h-8 > path", "css:finder"]
-      ],
-      "value": ""
-    }, {
-      "id": "a815aee4-7e60-4dfe-80e1-06b3ef4e105a",
-      "comment": "",
-      "command": "mouseOver",
-      "target": "css=.h-8 > path",
-      "targets": [
-        ["css=.h-8 > path", "css:finder"]
-      ],
-      "value": ""
-    }, {
-      "id": "6e363f8a-8ca9-4ced-91e1-a92dc2963ccd",
-      "comment": "",
-      "command": "mouseOut",
-      "target": "css=.h-8 > path",
-      "targets": [
-        ["css=.h-8 > path", "css:finder"]
-      ],
-      "value": ""
-    }, {
-      "id": "0a51ae3d-4d56-44af-a279-c887b7d2f8cb",
-      "comment": "",
-      "command": "click",
-      "target": "css=.w-full",
-      "targets": [
-        ["css=.w-full", "css:finder"],
-        ["xpath=//div[@id='root']/div/header/div/div/div/div/div/button", "xpath:idRelative"],
-        ["xpath=//div/div/div/div/div/button", "xpath:position"],
-        ["xpath=//button[contains(.,'Sign Out')]", "xpath:innerText"]
-      ],
-      "value": ""
-    }, {
-      "id": "a294151d-9d4c-456c-9046-1ce270a8bd62",
-      "comment": "",
-      "command": "click",
-      "target": "css=.swal2-confirm",
-      "targets": [
-        ["css=.swal2-confirm", "css:finder"],
-        ["xpath=(//button[@type='button'])[13]", "xpath:attributes"],
-        ["xpath=//div[6]/button", "xpath:position"],
-        ["xpath=//button[contains(.,'Yes, delete it!')]", "xpath:innerText"]
       ],
       "value": ""
     }]
@@ -1847,10 +1687,10 @@
       ],
       "value": "L3v75th5n!"
     }, {
-      "id": "f461d773-8765-4be3-a859-cdf83f01c17b",
+      "id": "6870edc2-0d4c-4f25-b5e4-1be6d3455d2e",
       "comment": "",
       "command": "click",
-      "target": "css=.group",
+      "target": "xpath=//button[contains(.,'Sign in')]",
       "targets": [
         ["css=.group", "css:finder"],
         ["xpath=//button[@type='submit']", "xpath:attributes"],
@@ -1860,61 +1700,64 @@
       ],
       "value": ""
     }, {
-      "id": "c6620a6d-9be1-4979-ab7f-45ad016a38dc",
-      "comment": "",
-      "command": "click",
-      "target": "css=.h-8",
-      "targets": [
-        ["css=.h-8", "css:finder"]
-      ],
-      "value": ""
-    }, {
-      "id": "14dc8311-04d7-4a5d-81a6-f136444bd172",
-      "comment": "",
-      "command": "mouseOver",
-      "target": "css=.h-8",
-      "targets": [
-        ["css=.h-8", "css:finder"]
-      ],
-      "value": ""
-    }, {
-      "id": "fc19e6da-3865-40a0-8e02-563dec50fe50",
-      "comment": "",
-      "command": "mouseOut",
-      "target": "css=.h-8",
-      "targets": [
-        ["css=.h-8", "css:finder"]
-      ],
-      "value": ""
-    }, {
       "id": "0621eda5-d7d6-4b35-b7cd-fc68fc73fcb4",
       "comment": "",
       "command": "click",
-      "target": "linkText=Admin Panel",
+      "target": "linkText=Properties",
       "targets": [
-        ["linkText=Admin Panel", "linkText"],
-        ["css=.hover\\3A bg-gray-100:nth-child(1)", "css:finder"],
-        ["xpath=//a[contains(text(),'Admin Panel')]", "xpath:link"],
-        ["xpath=//div[@id='root']/div/header/div/div/div/div/div/a", "xpath:idRelative"],
-        ["xpath=(//a[contains(@href, '/admin/properties')])[2]", "xpath:href"],
-        ["xpath=//div/div/div/a", "xpath:position"],
-        ["xpath=//a[contains(.,'Admin Panel')]", "xpath:innerText"]
+        ["linkText=Properties", "linkText"],
+        ["css=.inline-flex:nth-child(3)", "css:finder"],
+        ["xpath=//a[contains(text(),'Properties')]", "xpath:link"],
+        ["xpath=//div[@id='root']/div/header/div/div/div/nav/a[3]", "xpath:idRelative"],
+        ["xpath=//a[contains(@href, '/admin/properties')]", "xpath:href"],
+        ["xpath=//a[3]", "xpath:position"],
+        ["xpath=//a[contains(.,'Properties')]", "xpath:innerText"]
       ],
       "value": ""
     }, {
       "id": "7bc9c1a2-3aa6-4ee5-b7f0-7d728ed85b40",
       "comment": "",
       "command": "click",
-      "target": "css=li:nth-child(2) .inline-flex:nth-child(1) > .h-4",
+      "target": "xpath=//input[@value='']",
       "targets": [
-        ["css=li:nth-child(2) .inline-flex:nth-child(1) > .h-4", "css:finder"]
+        ["css=.border-0", "css:finder"],
+        ["xpath=//input[@value='']", "xpath:attributes"],
+        ["xpath=//div[@id='root']/div/main/div/div/div[2]/div/input", "xpath:idRelative"],
+        ["xpath=//input", "xpath:position"]
       ],
       "value": ""
+    }, {
+      "id": "47514a9f-386f-43e5-a640-a079449959c6",
+      "comment": "",
+      "command": "type",
+      "target": "xpath=//div[@id='root']/div/main/div/div/div[2]/div/input",
+      "targets": [
+        ["css=.border-0", "css:finder"],
+        ["xpath=//input[@value='']", "xpath:attributes"],
+        ["xpath=//div[@id='root']/div/main/div/div/div[2]/div/input", "xpath:idRelative"],
+        ["xpath=//input", "xpath:position"]
+      ],
+      "value": "Bucharest Inn"
     }, {
       "id": "47945adb-772a-4fa6-9c51-0ef25fbdbfb7",
       "comment": "",
       "command": "click",
-      "target": "id=headlessui-tabs-tab-:r8:",
+      "target": "xpath=//a[contains(text(),'Edit')]",
+      "targets": [
+        ["linkText=Edit", "linkText"],
+        ["css=.hover\\3A border-gray-300", "css:finder"],
+        ["xpath=//a[contains(text(),'Edit')]", "xpath:link"],
+        ["xpath=//div[@id='root']/div/main/div/div/div[3]/div/div/div/div[2]/a", "xpath:idRelative"],
+        ["xpath=//a[contains(@href, '/admin/properties/21/edit')]", "xpath:href"],
+        ["xpath=//div[2]/a", "xpath:position"],
+        ["xpath=//a[contains(.,'Edit')]", "xpath:innerText"]
+      ],
+      "value": ""
+    }, {
+      "id": "8a37e233-0944-4ad8-9d8f-079ddc63a605",
+      "comment": "",
+      "command": "click",
+      "target": "xpath=//button[contains(.,'Rooms')]",
       "targets": [
         ["id=headlessui-tabs-tab-:r8:", "id"],
         ["css=#headlessui-tabs-tab-\\3Ar8\\3A", "css:finder"],
@@ -1925,14 +1768,14 @@
       ],
       "value": ""
     }, {
-      "id": "8a37e233-0944-4ad8-9d8f-079ddc63a605",
+      "id": "fd299567-20d6-4726-9bb0-036eca5a109e",
       "comment": "",
       "command": "click",
-      "target": "css=.border-transparent",
+      "target": "xpath=//button[contains(.,'Add Room')]",
       "targets": [
         ["css=.border-transparent", "css:finder"],
-        ["xpath=(//button[@type='button'])[7]", "xpath:attributes"],
-        ["xpath=//div[@id='headlessui-tabs-panel-:rm:']/div/div/button", "xpath:idRelative"],
+        ["xpath=(//button[@type='button'])[8]", "xpath:attributes"],
+        ["xpath=//div[@id='headlessui-tabs-panel-:rk:']/div/div/button", "xpath:idRelative"],
         ["xpath=//div[2]/div/div/div/button", "xpath:position"],
         ["xpath=//button[contains(.,'Add Room')]", "xpath:innerText"]
       ],
@@ -2281,24 +2124,6 @@
       "targets": [],
       "value": "label=Bunk Bed"
     }, {
-      "id": "fb816455-db88-4908-bd23-67fdb9856dec",
-      "comment": "",
-      "command": "click",
-      "target": "css=.flex:nth-child(4) > .flex-1 > .w-full",
-      "targets": [
-        ["css=.flex:nth-child(4) > .flex-1 > .w-full", "css:finder"],
-        ["xpath=//div[@id='headlessui-tabs-panel-:rm:']/div/div[3]/div/div/div[2]/form/div[2]/div/div[4]/div/select", "xpath:idRelative"],
-        ["xpath=//div[4]/div/select", "xpath:position"]
-      ],
-      "value": ""
-    }, {
-      "id": "42e8a371-1706-4198-9e6f-9e22726533d5",
-      "comment": "",
-      "command": "select",
-      "target": "css=.flex:nth-child(4) > .flex-1 > .w-full",
-      "targets": [],
-      "value": "label=Double Bed"
-    }, {
       "id": "ea0c793e-f708-4e86-b734-27e703450557",
       "comment": "",
       "command": "click",
@@ -2462,14 +2287,9 @@
       "id": "31704b6c-9d48-4811-9de1-55003fa34de2",
       "comment": "",
       "command": "click",
-      "target": "xpath=//button[4]",
+      "target": "css=li:nth-child(3) .inline-flex:nth-child(2) > .h-4",
       "targets": [
-        ["id=headlessui-tabs-tab-:r10:", "id"],
-        ["css=#headlessui-tabs-tab-\\3Ar10\\3A", "css:finder"],
-        ["xpath=//button[@id='headlessui-tabs-tab-:r10:']", "xpath:attributes"],
-        ["xpath=//div[@id='root']/div/main/div/div[2]/div/button[4]", "xpath:idRelative"],
-        ["xpath=//button[4]", "xpath:position"],
-        ["xpath=//button[contains(.,'Rooms')]", "xpath:innerText"]
+        ["css=li:nth-child(3) .inline-flex:nth-child(2) > .h-4", "css:finder"]
       ],
       "value": ""
     }, {
