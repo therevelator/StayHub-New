@@ -1,7 +1,8 @@
 /* Filter Container Styles */
 .filter-container {
-  position: sticky;
-  top: 20px;
+  margin-top: -17.5%;
+  position: relative;
+  top: 10px;
   border: 1px solid #e5e7eb;
 }
 

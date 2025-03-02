@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MagnifyingGlassIcon,
   MapPinIcon,
+  HeartIcon,
   UserIcon,
   HomeIcon,
   AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
+import { searchPhotos } from '../../services/pexels';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import '../../styles/searchBar.css';
@@ -56,7 +58,9 @@ const Home = () => {
   const [radius, setRadius] = useState(25);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [backgroundImage, setBackgroundImage] = useState('');
   const [properties, setProperties] = useState([]);
+  const [popularDestinations, setPopularDestinations] = useState([]);
   const [filteredProperties, setFilteredProperties] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
@@ -65,11 +69,21 @@ const Home = () => {
   const [searchParams, setSearchParams] = useState({});
   const [showFilters, setShowFilters] = useState(true);
   const [activeFilters, setActiveFilters] = useState({
-    priceRange: [0, 1000],
+    priceRange: [0, 0], // Will be updated when properties load
     rating: 0,
     amenities: {},
     beds: {}
   });
+
+  // Calculate price range from current properties
+  const propertyPriceRange = useMemo(() => {
+    if (!properties.length) return { min: 0, max: 0 };
+    const prices = properties.map(p => parseFloat(p.price)).filter(p => !isNaN(p) && p > 0);
+    return {
+      min: Math.floor(Math.min(...prices)),
+      max: Math.ceil(Math.max(...prices))
+    };
+  }, [properties]);
 
   const handleRadiusChange = (selectedRadius) => {
     setRadius(selectedRadius);
@@ -96,10 +110,15 @@ const Home = () => {
     // Apply filters to properties
     if (properties.length > 0) {
       const filtered = properties.filter(property => {
-        // Apply price filter
-        const propertyPrice = Number(property.price) || 0;
-        if (propertyPrice < newFilters.priceRange[0] || propertyPrice > newFilters.priceRange[1]) {
-          return false;
+        // Only apply price filter if the range is not at min/max
+        const propertyPrice = parseFloat(property.price);
+        if (isNaN(propertyPrice)) return false;
+        
+        const [minPrice, maxPrice] = newFilters.priceRange;
+        if (minPrice > propertyPriceRange.min || maxPrice < propertyPriceRange.max) {
+          if (propertyPrice < minPrice || propertyPrice > maxPrice) {
+            return false;
+          }
         }
         
         // Apply rating filter
@@ -275,6 +294,38 @@ const Home = () => {
     }
   }, []);
 
+  const updateBackgroundImage = useCallback(async (searchLocation) => {
+    if (!searchLocation) return;
+    try {
+      // Clean up the location name (remove extra spaces, commas, etc)
+      const cleanLocation = searchLocation.split(',')[0].trim();
+      const photos = await searchPhotos(`${cleanLocation} city landmarks`);
+      if (photos && photos.length > 0) {
+        setBackgroundImage(photos[0].src.landscape);
+      }
+    } catch (error) {
+      console.error('Error updating background image:', error);
+      // Fallback to Unsplash if Pexels fails
+      const fallbackUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(cleanLocation)},city`;
+      setBackgroundImage(fallbackUrl);
+    }
+  }, []);
+
+  // Load popular destinations on mount
+  useEffect(() => {
+    const loadPopularDestinations = async () => {
+      const destinations = ['Paris', 'London', 'New York', 'Tokyo'];
+      const destinationsWithImages = await Promise.all(
+        destinations.map(async (city) => ({
+          name: city,
+          image: await getRandomCityPhoto(city) || `https://source.unsplash.com/400x300/?${city.toLowerCase()},city`
+        }))
+      );
+      setPopularDestinations(destinationsWithImages);
+    };
+    loadPopularDestinations();
+  }, []);
+
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
     
@@ -288,6 +339,9 @@ const Home = () => {
     setError('');
 
     try {
+      // Update background image based on search location
+      await updateBackgroundImage(location);
+
       let searchParams = {
         guests,
         type: propertyType,
@@ -605,10 +659,152 @@ const Home = () => {
           Discover amazing properties at the best prices
         </p>
 
-        {/* Main Content Layout */}
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Filters Sidebar - Always visible on desktop */}
-          <div className="lg:w-1/5 lg:flex-shrink-0">
+      </div>
+
+      {/* Quick Filters */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex gap-4 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-primary-50 text-primary-700 font-medium text-sm hover:bg-primary-100 transition-colors">
+              Popular
+            </button>
+            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
+              Beach Front
+            </button>
+            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
+              Mountain View
+            </button>
+            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
+              City Center
+            </button>
+            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
+              Pet Friendly
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="relative">
+        {/* Hero Section */}
+        <div className="relative h-[300px] bg-gray-900">
+          <div className="absolute inset-0">
+            <img
+              src={`${backgroundImage}?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&h=600&q=80`}
+              className="w-full h-full object-cover opacity-60 transition-opacity duration-300"
+              alt="Hero background"
+            />
+          </div>
+          <div className="relative z-10 h-full flex flex-col items-center justify-center px-4">
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Find Your Perfect Stay
+            </h1>
+            <p className="text-base text-white text-center">
+              Discover amazing properties at the best prices, from cozy apartments to luxury villas
+            </p>
+          </div>
+        </div>
+
+        {/* Search Form - Desktop: right-aligned, Mobile: centered */}
+        <div className="container mx-auto px-4">
+          <form onSubmit={handleSearch} className="search-form-container">
+            <div className="search-bar">
+            <div className="search-section">
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  placeholder="Destination..."
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 pl-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <MapPinIcon className="h-5 w-5 text-gray-400" />
+                </div>
+              </div>
+            </div>
+
+            <div className="search-section">
+              <select
+                value={propertyType}
+                onChange={(e) => setPropertyType(e.target.value)}
+                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              >
+                <option value="">Any Type</option>
+                {propertyTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="search-section">
+              <select
+                value={guests}
+                onChange={(e) => setGuests(parseInt(e.target.value))}
+                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              >
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5+</option>
+              </select>
+            </div>
+
+            <div className="search-section">
+              <select
+                value={radius}
+                onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
+                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              >
+                {radiusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="search-section">
+              <DatePicker
+                selected={checkInDate}
+                onChange={date => setCheckInDate(date)}
+                placeholderText="Check-in date"
+                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                dateFormat="MMM d, yyyy"
+                minDate={new Date()}
+              />
+            </div>
+
+            <div className="search-section">
+              <DatePicker
+                selected={checkOutDate}
+                onChange={date => setCheckOutDate(date)}
+                placeholderText="Check-out date"
+                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                dateFormat="MMM d, yyyy"
+                minDate={checkInDate || new Date()}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="search-button"
+              disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
+            >
+              <MagnifyingGlassIcon className="h-5 w-5" />
+            </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 mt-10">
+        <div className="flex flex-col xl:flex-row gap-8">
+          {/* Filters */}
+          <div className="hidden xl:block xl:w-1/5 xl:flex-shrink-0 xl:-mt-[96px]">
             <FilterContainer 
               onFilterChange={handleFilterChange} 
               properties={properties} 
@@ -616,116 +812,13 @@ const Home = () => {
           </div>
 
           {/* Right Content Area */}
-          <div className="lg:w-4/5 lg:flex-grow">
-            {/* Search Form */}
-            <form onSubmit={handleSearch} className="mb-12">
-              <div className="search-bar">
-                <div className="search-section">
-                  <label className="search-label">Location</label>
-                  <div className="flex items-center">
-                    <input
-                      type="text"
-                      placeholder="Destination..."
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
-                      className="search-input"
-                    />
-                  </div>
-                </div>
-
-                <div className="search-section">
-                  <label className="search-label">Property Type</label>
-                  <select
-                    value={propertyType}
-                    onChange={(e) => setPropertyType(e.target.value)}
-                    className="search-select"
-                  >
-                    <option value="">Any Type</option>
-                    {propertyTypes.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="search-section">
-                  <label className="search-label">Guests</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={guests}
-                    onChange={(e) => setGuests(parseInt(e.target.value))}
-                    className="search-input"
-                  />
-                </div>
-
-                <div className="search-section">
-                  <label className="search-label">Radius</label>
-                  <select
-                    value={radius}
-                    onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
-                    className="search-select"
-                  >
-                    {radiusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="search-section">
-                  <label className="search-label">Check-in Date</label>
-                  <DatePicker
-                    selected={checkInDate}
-                    onChange={date => setCheckInDate(date)}
-                    placeholderText="Check-in date"
-                    className="date-picker"
-                    dateFormat="MMM d, yyyy"
-                    minDate={new Date()}
-                  />
-                </div>
-
-                <div className="search-section">
-                  <label className="search-label">Check-out Date</label>
-                  <DatePicker
-                    selected={checkOutDate}
-                    onChange={date => setCheckOutDate(date)}
-                    placeholderText="Check-out date"
-                    className="date-picker"
-                    dateFormat="MMM d, yyyy"
-                    minDate={checkInDate || new Date()}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className={`w-full bg-primary-600 text-white py-2 px-4 rounded-md font-medium text-sm hover:bg-primary-700 transition-colors ${
-                    loading || ((!location || location === 'Current Location') && isLoadingLocation)
-                      ? 'opacity-50 cursor-not-allowed'
-                      : ''
-                  }`}
-                  disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
-                >
-                  {loading 
-                    ? 'Searching...' 
-                    : ((!location || location === 'Current Location') && isLoadingLocation)
-                      ? 'Getting location...'
-                      : 'Search'
-                  }
-                </button>
+          <div className="order-2 lg:order-none lg:w-4/5 lg:flex-grow">
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-8" role="alert">
+                <span className="block sm:inline">{error}</span>
               </div>
-            </form>
-
-        {/* Error Message */}
-        {error && (
-          <div className="max-w-4xl mx-auto mb-8">
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
-              <span className="block sm:inline">{error}</span>
-            </div>
-          </div>
-        )}
+            )}
 
             {/* Filter Toggle Button (Mobile/Tablet Only) */}
             <div className="lg:hidden mb-4">
@@ -742,8 +835,38 @@ const Home = () => {
             <div className={`lg:hidden mb-6 ${showFilters ? 'block' : 'hidden'}`}>
               <FilterContainer onFilterChange={handleFilterChange} properties={properties} />
             </div>
+            {/* Popular Destinations */}
+            {filteredProperties.length > 0 && popularDestinations.length > 0 && (
+              <div className="mb-12">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Popular Destinations</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {popularDestinations.map((destination) => (
+                    <div 
+                      key={destination.name} 
+                      className="relative h-40 rounded-lg overflow-hidden cursor-pointer group"
+                      onClick={() => {
+                        setLocation(destination.name);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                    >
+                      <img
+                        src={destination.image}
+                        alt={destination.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
+                        <div className="absolute bottom-4 left-4">
+                          <h3 className="text-white font-semibold text-lg">{destination.name}</h3>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Results Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProperties.length === 0 && (
                 <div className="col-span-full text-center text-gray-500">
                   {loading ? 'Searching...' : properties.length > 0 ? 'No properties match your filters' : 'No properties found'}
@@ -752,15 +875,20 @@ const Home = () => {
               {filteredProperties.map((property) => (
             <div
               key={property.id}
-              className="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transform transition-transform hover:scale-105"
+              className="bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer group"
               onClick={() => navigate(`/property/${property.id}`)}
             >
-              <img
-                src={property.imageUrl || '/placeholder-property.jpg'}
-                alt={property.name}
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-4">
+              <div className="relative">
+                <img
+                  src={property.imageUrl || '/placeholder-property.jpg'}
+                  alt={property.name}
+                  className="w-full h-56 object-cover group-hover:scale-110 transition-transform duration-300"
+                />
+                <div className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
+                  <HeartIcon className="h-5 w-5 text-gray-600" />
+                </div>
+              </div>
+              <div className="p-5">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   {property.name || 'Unnamed Property'}
                 </h3>

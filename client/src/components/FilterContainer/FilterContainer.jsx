@@ -12,10 +12,28 @@ import '../../styles/filterContainer.css';
 import '../../styles/dualRangeSlider.css';
 
 const FilterContainer = ({ onFilterChange, properties = [] }) => {
-  // Price range state
-  const [priceRange, setPriceRange] = useState([0, 1000]);
-  const [minPrice, setMinPrice] = useState(0);
-  const [maxPrice, setMaxPrice] = useState(1000);
+  // Calculate min and max prices from properties
+  const minMaxPrices = useMemo(() => {
+    const prices = properties
+      .map(p => parseFloat(p.price))
+      .filter(p => !isNaN(p) && p > 0);
+    return {
+      min: prices.length ? Math.floor(Math.min(...prices)) : 0,
+      max: prices.length ? Math.ceil(Math.max(...prices)) : 1000
+    };
+  }, [properties]);
+
+  // Price range state - initialize to full range
+  const [priceRange, setPriceRange] = useState([minMaxPrices.min, minMaxPrices.max]);
+  const [minPrice, setMinPrice] = useState(minMaxPrices.min);
+  const [maxPrice, setMaxPrice] = useState(minMaxPrices.max);
+
+  // Update price range when properties change
+  useEffect(() => {
+    setPriceRange([minMaxPrices.min, minMaxPrices.max]);
+    setMinPrice(minMaxPrices.min);
+    setMaxPrice(minMaxPrices.max);
+  }, [minMaxPrices]);
   
   // Rating filter state
   const [rating, setRating] = useState(0);
@@ -337,9 +355,9 @@ const FilterContainer = ({ onFilterChange, properties = [] }) => {
             {/* Min price slider */}
             <input
               type="range"
-              min="0"
-              max="1000"
-              step="10"
+              min={minMaxPrices.min}
+              max={minMaxPrices.max}
+              step={Math.max(1, Math.floor((minMaxPrices.max - minMaxPrices.min) / 100))}
               value={priceRange[0]}
               onChange={(e) => {
                 const value = parseInt(e.target.value);
@@ -353,9 +371,9 @@ const FilterContainer = ({ onFilterChange, properties = [] }) => {
             {/* Max price slider */}
             <input
               type="range"
-              min="0"
-              max="1000"
-              step="10"
+              min={minMaxPrices.min}
+              max={minMaxPrices.max}
+              step={Math.max(1, Math.floor((minMaxPrices.max - minMaxPrices.min) / 100))}
               value={priceRange[1]}
               onChange={(e) => {
                 const value = parseInt(e.target.value);
@@ -368,8 +386,8 @@ const FilterContainer = ({ onFilterChange, properties = [] }) => {
           </div>
           
           <div className="price-display">
-            <span>${priceRange[0]}</span>
-            <span>${priceRange[1]}</span>
+            <span className="text-sm truncate">${new Intl.NumberFormat().format(priceRange[0])}</span>
+            <span className="text-sm truncate">${new Intl.NumberFormat().format(priceRange[1])}</span>
           </div>
         </div>
         
@@ -382,8 +400,8 @@ const FilterContainer = ({ onFilterChange, properties = [] }) => {
               </div>
               <input
                 type="number"
-                min="0"
-                max="990"
+                min={minMaxPrices.min}
+                max={minMaxPrices.max - 10}
                 value={minPrice}
                 onChange={handleMinPriceChange}
                 className="block w-full pl-7 pr-3 py-2 text-sm border border-gray-300 rounded-md"
@@ -398,8 +416,8 @@ const FilterContainer = ({ onFilterChange, properties = [] }) => {
               </div>
               <input
                 type="number"
-                min="10"
-                max="1000"
+                min={minMaxPrices.min + 10}
+                max={minMaxPrices.max}
                 value={maxPrice}
                 onChange={handleMaxPriceChange}
                 className="block w-full pl-7 pr-3 py-2 text-sm border border-gray-300 rounded-md"

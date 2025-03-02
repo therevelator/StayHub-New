@@ -390,6 +390,10 @@ const RoomPage = () => {
         width: '600px',
         showCloseButton: true,
         allowOutsideClick: false
+      }).then((result) => {
+        if (result.isConfirmed) {
+          window.location.reload();
+        }
       });
     } catch (error) {
       console.error('Error booking the room:', error);

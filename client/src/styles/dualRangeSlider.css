@@ -3,6 +3,8 @@
   position: relative;
   height: 40px;
   width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .dual-range-slider {
@@ -59,4 +61,12 @@
   justify-content: space-between;
   font-size: 0.875rem;
   color: #4b5563;
+  max-width: 100%;
+  gap: 8px;
+}
+
+.price-display span {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
 }
