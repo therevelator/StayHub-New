@@ -7,11 +7,16 @@ const propertyService = {
     
     try {
       // Format the main property data
+      // Validate required location fields
+      if (!data.city || !data.country) {
+        throw new Error('City and country are required fields');
+      }
+
       const propertyData = {
         name: data.name?.trim(),
         description: data.description?.trim(),
-        latitude: data.latitude || 0,
-        longitude: data.longitude || 0,
+        latitude: data.latitude || null,
+        longitude: data.longitude || null,
         street: data.street?.trim(),
         city: data.city?.trim(),
         state: data.state?.trim(),
@@ -80,17 +85,27 @@ const propertyService = {
     if (data.name) updateData.name = data.name.trim();
     if (data.description) updateData.description = data.description.trim();
     if (data.property_type) updateData.property_type = data.property_type;
-    if (data.guests) updateData.guests = parseInt(data.guests);
-    if (data.bedrooms) updateData.bedrooms = parseInt(data.bedrooms);
-    if (data.beds) updateData.beds = parseInt(data.beds);
-    if (data.bathrooms) updateData.bathrooms = parseFloat(data.bathrooms);
-    if (data.star_rating) updateData.star_rating = parseFloat(data.star_rating);
+    if (data.guests !== undefined) updateData.guests = parseInt(data.guests) || 1;
+    if (data.bedrooms !== undefined) updateData.bedrooms = parseInt(data.bedrooms) || 1;
+    if (data.beds !== undefined) updateData.beds = parseInt(data.beds) || 1;
+    if (data.bathrooms !== undefined) updateData.bathrooms = parseFloat(data.bathrooms) || 1;
+    if (data.star_rating !== undefined) updateData.star_rating = parseFloat(data.star_rating) || 0;
     
-    // Location fields
+    // Handle location fields
     if (data.street) updateData.street = data.street.trim();
-    if (data.city) updateData.city = data.city.trim();
+    if (data.city) {
+      if (!data.city.trim()) {
+        throw new Error('City cannot be empty');
+      }
+      updateData.city = data.city.trim();
+    }
     if (data.state) updateData.state = data.state.trim();
-    if (data.country) updateData.country = data.country.trim();
+    if (data.country) {
+      if (!data.country.trim()) {
+        throw new Error('Country cannot be empty');
+      }
+      updateData.country = data.country.trim();
+    }
     if (data.postal_code) updateData.postal_code = data.postal_code.trim();
     if (data.latitude) updateData.latitude = parseFloat(data.latitude);
     if (data.longitude) updateData.longitude = parseFloat(data.longitude);
@@ -275,17 +290,40 @@ const propertyService = {
       // Format the data to match the expected structure
       const formattedData = {
         ...roomData,
-        property_id: propertyId
+        property_id: propertyId,
+        // Ensure arrays are stringified
+        beds: JSON.stringify(Array.isArray(roomData.beds) ? roomData.beds : []),
+        amenities: JSON.stringify(Array.isArray(roomData.amenities) ? roomData.amenities : []),
+        accessibility_features: JSON.stringify(Array.isArray(roomData.accessibility_features) ? roomData.accessibility_features : []),
+        energy_saving_features: JSON.stringify(Array.isArray(roomData.energy_saving_features) ? roomData.energy_saving_features : []),
+        // Ensure numeric values
+        price_per_night: Number(roomData.price_per_night) || 0,
+        base_price: Number(roomData.base_price) || 0,
+        max_occupancy: Number(roomData.max_occupancy) || 2,
+        floor_level: Number(roomData.floor_level) || 1,
+        room_size: Number(roomData.room_size) || 0,
+        // Ensure boolean values
+        has_private_bathroom: Boolean(roomData.has_private_bathroom),
+        smoking: Boolean(roomData.smoking),
+        has_balcony: Boolean(roomData.has_balcony),
+        has_kitchen: Boolean(roomData.has_kitchen),
+        has_minibar: Boolean(roomData.has_minibar),
+        includes_breakfast: Boolean(roomData.includes_breakfast),
+        extra_bed_available: Boolean(roomData.extra_bed_available),
+        pets_allowed: Boolean(roomData.pets_allowed),
+        has_toiletries: Boolean(roomData.has_toiletries),
+        has_towels_linens: Boolean(roomData.has_towels_linens),
+        has_room_service: Boolean(roomData.has_room_service)
       };
 
       // Upload room images if provided
       if (images.length > 0) {
         const uploadedImages = await uploadMultipleImages(images);
-        formattedData.images = uploadedImages.map(img => ({
+        formattedData.images = JSON.stringify(uploadedImages.map(img => ({
           url: img.url,
           thumbnail: img.thumbnail,
           delete_url: img.delete_url
-        }));
+        })));
       }
 
       console.log('[PropertyService] Sending formatted data:', formattedData);

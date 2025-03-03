@@ -193,12 +193,35 @@ const RoomForm = ({ room, onSubmit, onClose }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
     // Format the data before submission
     const submissionData = {
       ...formData,
       // Ensure numeric values
       price_per_night: Number(formData.price_per_night) || 0,
       base_price: Number(formData.base_price) || 0,
+      max_occupancy: Number(formData.max_occupancy) || 2,
+      floor_level: Number(formData.floor_level) || 1,
+      room_size: Number(formData.room_size) || 0,
+      
+      // Ensure arrays are properly formatted
+      beds: Array.isArray(formData.beds) ? formData.beds : [],
+      amenities: Array.isArray(formData.amenities) ? formData.amenities : [],
+      accessibility_features: Array.isArray(formData.accessibility_features) ? formData.accessibility_features : [],
+      energy_saving_features: Array.isArray(formData.energy_saving_features) ? formData.energy_saving_features : [],
+      
+      // Ensure boolean values
+      has_private_bathroom: Boolean(formData.has_private_bathroom),
+      smoking: Boolean(formData.smoking),
+      has_balcony: Boolean(formData.has_balcony),
+      has_kitchen: Boolean(formData.has_kitchen),
+      has_minibar: Boolean(formData.has_minibar),
+      includes_breakfast: Boolean(formData.includes_breakfast),
+      extra_bed_available: Boolean(formData.extra_bed_available),
+      pets_allowed: Boolean(formData.pets_allowed),
+      has_toiletries: Boolean(formData.has_toiletries),
+      has_towels_linens: Boolean(formData.has_towels_linens),
+      has_room_service: Boolean(formData.has_room_service),
       room_size: Number(formData.room_size) || 0,
       floor_level: Number(formData.floor_level) || 1,
       max_occupancy: Number(formData.max_occupancy) || 2,

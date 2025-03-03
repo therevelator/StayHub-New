@@ -313,17 +313,12 @@ const Home = () => {
 
   // Load popular destinations on mount
   useEffect(() => {
-    const loadPopularDestinations = async () => {
-      const destinations = ['Paris', 'London', 'New York', 'Tokyo'];
-      const destinationsWithImages = await Promise.all(
-        destinations.map(async (city) => ({
-          name: city,
-          image: await getRandomCityPhoto(city) || `https://source.unsplash.com/400x300/?${city.toLowerCase()},city`
-        }))
-      );
-      setPopularDestinations(destinationsWithImages);
-    };
-    loadPopularDestinations();
+    const destinations = ['Paris', 'London', 'New York', 'Tokyo'];
+    const destinationsWithImages = destinations.map(city => ({
+      name: city,
+      image: `https://source.unsplash.com/400x300/?${city.toLowerCase()},city`
+    }));
+    setPopularDestinations(destinationsWithImages);
   }, []);
 
   const handleSearch = async (e) => {
@@ -666,10 +661,13 @@ const Home = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex gap-4 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
             <button className="flex-shrink-0 px-4 py-2 rounded-full bg-primary-50 text-primary-700 font-medium text-sm hover:bg-primary-100 transition-colors">
-              Popular
+              Properties
             </button>
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
-              Beach Front
+            <button 
+              onClick={() => navigate('/trips')}
+              className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors"
+            >
+              Trips
             </button>
             <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
               Mountain View

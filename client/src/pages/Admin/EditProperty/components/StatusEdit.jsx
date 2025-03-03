@@ -151,12 +151,13 @@ const StatusEdit = ({ property, onUpdate, onSubmit, disabled }) => {
           type="button"
           onClick={async () => {
             try {
-              // Update status and languages first
-              await onUpdate('status', formData);
-              await onUpdate('languages', formData);
+              // Only update if there are changes
+              if (formData.is_active !== property.is_active || formData.languages_spoken !== property.languages_spoken) {
+                await onUpdate('status', formData);
+              }
               
-              // Then trigger submit
-              await onUpdate('submit', true);
+              // Trigger submit
+              await onUpdate('submit');
             } catch (error) {
               console.error('Error during property submission:', error);
             }

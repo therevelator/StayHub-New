@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { Calendar } from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -85,6 +85,23 @@ const RoomPage = () => {
       setError(error.response?.data?.message || 'Failed to fetch availability');
     }
   };
+
+  // Get URL search params
+  const [searchParams] = useSearchParams();
+
+  // Set initial dates from URL parameters
+  useEffect(() => {
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    
+    if (startDate) {
+      setCheckInDate(new Date(startDate));
+      setActiveStartDate(new Date(startDate));
+    }
+    if (endDate) {
+      setCheckOutDate(new Date(endDate));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchData = async () => {

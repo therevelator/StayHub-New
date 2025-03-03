@@ -144,10 +144,12 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
                       type="button"
                       onClick={() => handleEditRoom(room)}
                       disabled={disabled}
+                      data-testid={`edit-room-${room.id}`}
+                      aria-label={`Edit room ${room.name}`}
                       className="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <PencilIcon className="h-4 w-4" />
-                      <span className="sr-only">Edit room</span>
+                      <span className="sr-only">Edit {room.name}</span>
                     </button>
                     <button
                       type="button"

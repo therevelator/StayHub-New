@@ -15,6 +15,7 @@ import PropertyDetails from './pages/PropertyDetails/PropertyDetails';
 import SearchResults from './pages/SearchResults/SearchResults';
 import EditRooms from './pages/EditRooms/EditRooms';
 import RoomPage from './pages/RoomPage/RoomPage';
+import Trips from './pages/Trips/Trips';
 import AdminRoute from './components/AdminRoute';
 import PrivateRoute from './components/PrivateRoute';
 import PropertyOwnerRoute from './components/PropertyOwnerRoute';
@@ -58,6 +59,10 @@ export const router = createBrowserRouter([
         path: '/',
         element: <MainLayout />,
         children: [
+          {
+            path: '/trips',
+            element: <PrivateRoute><Trips /></PrivateRoute>,
+          },
           { index: true, element: <Home /> },
           { path: 'login', element: <Login /> },
           { path: 'register', element: <Register /> },

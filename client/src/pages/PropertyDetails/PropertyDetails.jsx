@@ -413,15 +413,48 @@ const PropertyDetails = () => {
                   {/* Beds */}
                   <div className="mt-4">
                     <h4 className="font-semibold mb-2">Beds:</h4>
-                    {roomData.beds && roomData.beds.length > 0 ? (
-                      roomData.beds.map((bed, index) => (
-                        <p key={index} className="text-gray-600">
-                          {bed.count}x {bed.type}
-                        </p>
-                      ))
-                    ) : (
-                      <p className="text-gray-600">1x Single Bed</p>
-                    )}
+                    <div className="space-y-1">
+                      {(() => {
+                        // Ensure we have a valid beds array
+                        let beds = [];
+                        
+                        try {
+                          // Handle string format
+                          if (typeof roomData.beds === 'string') {
+                            beds = JSON.parse(roomData.beds);
+                          }
+                          // Handle array format
+                          else if (Array.isArray(roomData.beds)) {
+                            beds = roomData.beds;
+                          }
+                          // Handle object format (legacy)
+                          else if (roomData.beds && typeof roomData.beds === 'object') {
+                            beds = [roomData.beds];
+                          }
+                        } catch (e) {
+                          console.error('Failed to parse beds:', e);
+                        }
+
+                        // Validate and format each bed entry
+                        return beds.length > 0 ? (
+                          beds.map((bed, index) => {
+                            // Ensure bed has valid count and type
+                            const count = typeof bed.count === 'number' ? bed.count : 1;
+                            const type = typeof bed.type === 'string' ? bed.type : 'Single Bed';
+                            
+                            return (
+                              <p key={index} className="text-gray-600 flex items-center">
+                                <span className="font-medium">{count}x</span>
+                                <span className="ml-1">{type}</span>
+                              </p>
+                            );
+                          })
+                        ) : (
+                          <p className="text-gray-600">1x Single Bed (Default)</p>
+                        );
+                      })()
+                      }
+                    </div>
                   </div>
 
                   {/* Room Amenities */}

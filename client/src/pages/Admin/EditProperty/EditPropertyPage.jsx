@@ -52,17 +52,25 @@ const EditPropertyPage = () => {
     }
   };
 
-  const handleUpdate = async (data) => {
+  const handleUpdate = async (section, sectionData) => {
     console.log('[EditPropertyPage] Starting update');
     console.log('[EditPropertyPage] Current property state:', property);
-    console.log('[EditPropertyPage] Received update data:', data);
+    console.log('[EditPropertyPage] Received update data:', { section, sectionData });
     
     try {
       setSaving(true);
       
+      // Handle special submit case
+      if (section === 'submit') {
+        // Here you can add any special handling for submission
+        // For now, just show a success message
+        toast.success('Property setup completed successfully');
+        return;
+      }
+      
       // Send update to server
-      console.log('[EditPropertyPage] Sending update with data:', data);
-      const updatedProperty = await propertyService.update(id, data);
+      console.log('[EditPropertyPage] Sending update with data:', sectionData);
+      const updatedProperty = await propertyService.update(id, sectionData);
       console.log('[EditPropertyPage] Update response received:', updatedProperty);
       
       // Update local state with the response data

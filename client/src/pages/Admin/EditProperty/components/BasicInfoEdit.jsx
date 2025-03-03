@@ -63,18 +63,20 @@ const BasicInfoEdit = ({ property, onUpdate, disabled }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Create a clean object with only valid fields
+    // Create a clean object with only modified fields
     const updateData = {};
     
-    // Always include all fields to ensure proper state update
-    updateData.name = formData.name.trim();
-    updateData.description = formData.description.trim();
-    updateData.property_type = formData.property_type;
-    updateData.guests = parseInt(formData.guests);
-    updateData.bedrooms = parseInt(formData.bedrooms);
-    updateData.beds = parseInt(formData.beds);
-    updateData.bathrooms = parseFloat(formData.bathrooms);
-    updateData.star_rating = parseFloat(formData.star_rating);
+    // Only include fields that have valid values
+    if (formData.name) updateData.name = formData.name.trim();
+    if (formData.description) updateData.description = formData.description.trim();
+    if (formData.property_type) updateData.property_type = formData.property_type;
+    
+    // Handle numeric fields - only include if they are valid numbers
+    if (formData.guests !== '') updateData.guests = parseInt(formData.guests) || 1;
+    if (formData.bedrooms !== '') updateData.bedrooms = parseInt(formData.bedrooms) || 1;
+    if (formData.beds !== '') updateData.beds = parseInt(formData.beds) || 1;
+    if (formData.bathrooms !== '') updateData.bathrooms = parseFloat(formData.bathrooms) || 1;
+    if (formData.star_rating !== '') updateData.star_rating = parseFloat(formData.star_rating) || 0;
     
     console.log('[BasicInfoEdit] Form submitted');
     console.log('[BasicInfoEdit] Original form data:', formData);

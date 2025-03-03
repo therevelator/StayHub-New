@@ -172,18 +172,38 @@ const LocationEdit = ({ property, onUpdate, disabled }) => {
     toast.loading('Verifying address...');
 
     try {
+      // Add city and country to query to improve accuracy
+      const query = `${address} ${formData.city} ${formData.country}`;
       const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(address)}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}`
+        `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}&limit=5`
       );
       const data = await response.json();
 
-      if (data.results && data.results[0]) {
-        const { lat, lng } = data.results[0].geometry;
+      if (data.results && data.results.length > 0) {
+        // Find the result that best matches our city and country
+        const matchingResult = data.results.find(result => {
+          const components = result.components;
+          const cityMatch = components.city?.toLowerCase() === formData.city.toLowerCase() ||
+                          components.town?.toLowerCase() === formData.city.toLowerCase();
+          const countryMatch = components.country?.toLowerCase() === formData.country.toLowerCase();
+          return cityMatch && countryMatch;
+        }) || data.results[0]; // Fallback to first result if no match
+
+        const { lat, lng } = matchingResult.geometry;
+        
+        // Update form with the verified components
+        const components = matchingResult.components;
         setFormData(prev => ({
           ...prev,
+          street: components.road || components.street || prev.street,
+          city: components.city || components.town || prev.city,
+          state: components.state || prev.state,
+          country: components.country || prev.country,
+          postal_code: components.postcode || prev.postal_code,
           latitude: lat.toString(),
           longitude: lng.toString()
         }));
+        
         setMapCenter([lat, lng]);
         setMarkerPosition([lat, lng]);
         toast.dismiss();
