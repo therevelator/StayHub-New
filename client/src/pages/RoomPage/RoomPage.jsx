@@ -7,6 +7,7 @@ import { Calendar } from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { format, differenceInDays } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { BedDouble, Bath, Mountain, Grid, Maximize, Home, Sofa } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 const RoomPage = () => {
@@ -30,8 +31,11 @@ const RoomPage = () => {
   const fetchAvailability = async (date) => {
     try {
       // Get first and last day of the displayed month
+      // Get first and last day of the month in local time
       const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
       const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      firstDay.setHours(0, 0, 0, 0);
+      lastDay.setHours(0, 0, 0, 0);
       
       const startDateStr = format(firstDay, 'yyyy-MM-dd');
       const endDateStr = format(lastDay, 'yyyy-MM-dd');
@@ -56,7 +60,6 @@ const RoomPage = () => {
       
       if (availabilityResponse.data?.data?.availability) {
         Object.entries(availabilityResponse.data.data.availability).forEach(([date, info]) => {
-          console.log('Processing date:', date, 'info:', info);
           availabilityData[date] = info;
           
           switch(info.status) {
@@ -76,7 +79,6 @@ const RoomPage = () => {
         });
       }
       
-      console.log('Processed availability:', { available, occupied, maintenance, blocked });
       setAvailabilityMap(availabilityData);
       setAvailableDates(available);
       setBookingDates([...occupied, ...maintenance, ...blocked]);
@@ -95,11 +97,23 @@ const RoomPage = () => {
     const endDate = searchParams.get('endDate');
     
     if (startDate) {
-      setCheckInDate(new Date(startDate));
-      setActiveStartDate(new Date(startDate));
+      const [year, month, day] = startDate.split('-').map(Number);
+      const checkInDateObj = new Date(year, month - 1, day);
+      checkInDateObj.setHours(0, 0, 0, 0);
+      console.log('=== START DATE DEBUG ===');
+      console.log('Input start date:', startDate);
+      console.log('Parsed date:', format(checkInDateObj, 'yyyy-MM-dd'));
+      setCheckInDate(checkInDateObj);
+      setActiveStartDate(checkInDateObj);
     }
     if (endDate) {
-      setCheckOutDate(new Date(endDate));
+      const [year, month, day] = endDate.split('-').map(Number);
+      const checkOutDateObj = new Date(year, month - 1, day);
+      checkOutDateObj.setHours(0, 0, 0, 0);
+      console.log('=== END DATE DEBUG ===');
+      console.log('Input end date:', endDate);
+      console.log('Parsed date:', format(checkOutDateObj, 'yyyy-MM-dd'));
+      setCheckOutDate(checkOutDateObj);
     }
   }, [searchParams]);
 
@@ -221,20 +235,33 @@ const RoomPage = () => {
   const handleDateClick = (value) => {
     if (!value) return;
     
-    const dateStr = format(value, 'yyyy-MM-dd');
+    console.log('=== DATE SELECTION DEBUG ===');
+    console.log('Calendar value:', {
+      raw: value,
+      year: value.getFullYear(),
+      month: value.getMonth() + 1,
+      date: value.getDate(),
+      hours: value.getHours(),
+      fullDate: value.toString(),
+      isoString: value.toISOString()
+    });
+    
+    const selectedDate = value;
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const dateInfo = availabilityMap[dateStr];
     
     // Only allow selecting the first blocked date after an available date as checkout
     if (dateInfo && (dateInfo.status === 'occupied' || dateInfo.status === 'maintenance' || dateInfo.status === 'blocked')) {
       // If we have a check-in date and this is after it, check if it's the first blocked date
-      if (checkInDate && value > checkInDate && !checkOutDate) {
+      if (checkInDate && selectedDate > checkInDate && !checkOutDate) {
         // Check if all dates between check-in and this date are available
-        const daysBetween = differenceInDays(value, checkInDate);
+        const daysBetween = differenceInDays(selectedDate, checkInDate);
         let isFirstBlockedDate = true;
         
         for (let i = 1; i < daysBetween; i++) {
           const currentDate = new Date(checkInDate);
           currentDate.setDate(currentDate.getDate() + i);
+          currentDate.setHours(12, 0, 0, 0);
           const currentDateStr = format(currentDate, 'yyyy-MM-dd');
           const currentDateInfo = availabilityMap[currentDateStr];
           
@@ -245,7 +272,7 @@ const RoomPage = () => {
         }
         
         if (isFirstBlockedDate) {
-          setCheckOutDate(value);
+          setCheckOutDate(selectedDate);
           return;
         }
       }
@@ -255,23 +282,25 @@ const RoomPage = () => {
     }
 
     // If clicking the same check-in date, cancel the selection
-    if (checkInDate && format(value, 'yyyy-MM-dd') === format(checkInDate, 'yyyy-MM-dd') && !checkOutDate) {
+    if (checkInDate && format(selectedDate, 'yyyy-MM-dd') === format(checkInDate, 'yyyy-MM-dd') && !checkOutDate) {
       setCheckInDate(null);
       return;
     }
 
     if (!checkInDate || (checkInDate && checkOutDate)) {
       // Start new selection
-      setCheckInDate(value);
+      setCheckInDate(selectedDate);
       setCheckOutDate(null);
+      console.log('Set check-in date:', format(selectedDate, 'yyyy-MM-dd'));
     } else {
       // Complete the selection
-      if (value <= checkInDate) {
+      if (selectedDate <= checkInDate) {
         // Prevent selecting same day or earlier day for checkout
         Swal.fire('Check-out date must be after check-in date');
         return;
       }
-      setCheckOutDate(value);
+      setCheckOutDate(selectedDate);
+      console.log('Set check-out date:', format(selectedDate, 'yyyy-MM-dd'));
     }
   };
 
@@ -342,14 +371,22 @@ const RoomPage = () => {
     }
 
     try {
+      // Format dates in YYYY-MM-DD format for the API
       const bookingData = {
         propertyId,
-        checkInDate: format(checkInDate, 'yyyy-MM-dd'),
-        checkOutDate: format(checkOutDate, 'yyyy-MM-dd'),
+        checkInDate: format(new Date(checkInDate), 'yyyy-MM-dd'),
+        checkOutDate: format(new Date(checkOutDate), 'yyyy-MM-dd'),
         specialRequests,
         termsAccepted,
         numberOfGuests,
       };
+      
+      console.log('Selected dates:', { 
+        checkIn: checkInDate, 
+        checkOut: checkOutDate,
+        formattedCheckIn: format(new Date(checkInDate), 'yyyy-MM-dd'),
+        formattedCheckOut: format(new Date(checkOutDate), 'yyyy-MM-dd')
+      });
 
       const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/book`, bookingData);
       
@@ -394,8 +431,61 @@ const RoomPage = () => {
                   <span style='color: #2563eb;'>$${totalPrice.toFixed(2)}</span>
                 </div>
               </div>
+
+              <div style='margin: 15px 0; padding: 10px; background: #f8fafc; border-radius: 6px;'>
+                <p style='margin: 5px 0; color: #475569; font-weight: 600;'>Room Details:</p>
+                ${room.description ? `<p style='margin: 8px 0; color: #64748b;'>${room.description}</p>` : ''}
+                
+                ${room.beds ? `
+                  <div style='margin: 10px 0;'>
+                    <strong style='color: #475569;'>Bed Configuration:</strong>
+                    <div style='color: #64748b; margin-top: 4px;'>
+                      ${(typeof room.beds === 'string' ? JSON.parse(room.beds) : room.beds)
+                        .map(bed => `${bed.count} ${bed.type}`).join(', ')}
+                    </div>
+                  </div>
+                ` : ''}
+
+                ${room.bathroom_type ? `
+                  <div style='margin: 10px 0;'>
+                    <strong style='color: #475569;'>Bathroom:</strong>
+                    <span style='color: #64748b; margin-left: 4px;'>${room.bathroom_type}</span>
+                  </div>
+                ` : ''}
+
+                ${room.view_type ? `
+                  <div style='margin: 10px 0;'>
+                    <strong style='color: #475569;'>View:</strong>
+                    <span style='color: #64748b; margin-left: 4px;'>${room.view_type}</span>
+                  </div>
+                ` : ''}
+
+                ${room.flooring_type ? `
+                  <div style='margin: 10px 0;'>
+                    <strong style='color: #475569;'>Flooring:</strong>
+                    <span style='color: #64748b; margin-left: 4px;'>${room.flooring_type}</span>
+                  </div>
+                ` : ''}
+
+                ${room.size ? `
+                  <div style='margin: 10px 0;'>
+                    <strong style='color: #475569;'>Room Size:</strong>
+                    <span style='color: #64748b; margin-left: 4px;'>${room.size} m²</span>
+                  </div>
+                ` : ''}
+              </div>
               
-              ${amenitiesStr ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Room Amenities:</strong> ${amenitiesStr}</p>` : ''}
+              ${room.amenities ? `
+                <div style='margin: 10px 0;'>
+                  <strong style='color: #475569;'>Amenities:</strong>
+                  <div style='display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;'>
+                    ${(typeof room.amenities === 'string' ? JSON.parse(room.amenities) : room.amenities)
+                      .map(amenity => `<span style='background: #f1f5f9; padding: 2px 8px; border-radius: 4px; color: #64748b; font-size: 0.9em;'>${amenity}</span>`)
+                      .join('')}
+                  </div>
+                </div>
+              ` : ''}
+              
               ${specialRequests ? `<p style='margin: 10px 0;'><strong style='color: #475569;'>Special Requests:</strong> ${specialRequests}</p>` : ''}
             </div>
             ${room.images?.[0] ? `<img src='${room.images[0]}' alt='Room Image' style='width: 100%; border-radius: 8px; margin-top: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);' />` : ''}
@@ -428,7 +518,7 @@ const RoomPage = () => {
   if (error) return <div className="text-red-500 text-center">{error}</div>;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       {room && (
         <div className="space-y-8">
           <div className="bg-white rounded-lg shadow-lg p-6">
@@ -436,7 +526,7 @@ const RoomPage = () => {
             <p className="text-gray-600 mb-4">{room.description}</p>
             
             {/* Calendar Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Calendar */}
               <Card>
                 <CardHeader>
@@ -452,6 +542,7 @@ const RoomPage = () => {
                     tileContent={tileContent}
                     minDate={new Date()}
                     className="w-full border rounded-lg p-4"
+                    locale="en-US"
                   />
                   <div className="flex flex-wrap gap-4 mt-4">
                     <div className="flex items-center">
@@ -488,11 +579,11 @@ const RoomPage = () => {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Check-in Date</p>
-                        <p className="text-lg">{checkInDate ? format(checkInDate, 'MMM d, yyyy') : 'Not selected'}</p>
+                        <p className="text-lg">{checkInDate ? format(new Date(checkInDate), 'MMM d, yyyy') : 'Not selected'}</p>
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-600">Check-out Date</p>
-                        <p className="text-lg">{checkOutDate ? format(checkOutDate, 'MMM d, yyyy') : 'Not selected'}</p>
+                        <p className="text-lg">{checkOutDate ? format(new Date(checkOutDate), 'MMM d, yyyy') : 'Not selected'}</p>
                       </div>
                     </div>
 
@@ -549,6 +640,106 @@ const RoomPage = () => {
                         placeholder="Any special requests or requirements?"
                       ></textarea>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Room Details */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Room Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Home className="w-5 h-5 text-gray-600" />
+                        <h4 className="font-medium text-gray-700">Description</h4>
+                      </div>
+                      <p className="text-gray-600">{room.description}</p>
+                    </div>
+
+                    {room.beds && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <BedDouble className="w-5 h-5 text-gray-600" />
+                          <h4 className="font-medium text-gray-700">Bed Configuration</h4>
+                        </div>
+                        <div className="text-gray-600 space-y-1">
+                          {typeof room.beds === 'string' ? 
+                            JSON.parse(room.beds).map((bed, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                                {bed.count} {bed.type}
+                              </div>
+                            )) : 
+                            room.beds.map((bed, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                                {bed.count} {bed.type}
+                              </div>
+                            ))
+                          }
+                        </div>
+                      </div>
+                    )}
+
+                    {room.bathroom_type && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Bath className="w-5 h-5 text-gray-600" />
+                          <h4 className="font-medium text-gray-700">Bathroom Type</h4>
+                        </div>
+                        <p className="text-gray-600">{room.bathroom_type}</p>
+                      </div>
+                    )}
+
+                    {room.view_type && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Mountain className="w-5 h-5 text-gray-600" />
+                          <h4 className="font-medium text-gray-700">View Type</h4>
+                        </div>
+                        <p className="text-gray-600">{room.view_type}</p>
+                      </div>
+                    )}
+
+                    {room.flooring_type && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Grid className="w-5 h-5 text-gray-600" />
+                          <h4 className="font-medium text-gray-700">Flooring Type</h4>
+                        </div>
+                        <p className="text-gray-600">{room.flooring_type}</p>
+                      </div>
+                    )}
+
+                    {room.size && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Maximize className="w-5 h-5 text-gray-600" />
+                          <h4 className="font-medium text-gray-700">Room Size</h4>
+                        </div>
+                        <p className="text-gray-600">{room.size} m²</p>
+                      </div>
+                    )}
+
+                    {room.amenities && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sofa className="w-5 h-5 text-gray-600" />
+                          <h4 className="font-medium text-gray-700">Amenities</h4>
+                        </div>
+                        <div className="text-gray-600 flex flex-wrap gap-2">
+                          {(typeof room.amenities === 'string' ? 
+                            JSON.parse(room.amenities) :
+                            room.amenities
+                          ).map((amenity, index) => (
+                            <span key={index} className="bg-gray-100 px-2 py-1 rounded-md text-sm">{amenity}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

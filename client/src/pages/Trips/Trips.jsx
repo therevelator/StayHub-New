@@ -9,6 +9,7 @@ import propertyService from '../../services/propertyService';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { debounce } from 'lodash';
+import { format } from 'date-fns';
 
 // Fix Leaflet default marker icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -165,6 +166,20 @@ const Trips = () => {
 
   // Handle booking room click
   const handleBookNowClick = useCallback((propertyId, roomId) => {
+    console.log('=== TRIPS DATE DEBUG ===');
+    console.log('Selected dates in Trips:', {
+      startDate: startDate ? {
+        raw: startDate,
+        localDate: format(startDate, 'yyyy-MM-dd'),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      } : null,
+      endDate: endDate ? {
+        raw: endDate,
+        localDate: format(endDate, 'yyyy-MM-dd'),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      } : null
+    });
+
     if (!startDate || !endDate) {
       // Show error message if dates not selected
       Swal.fire({
@@ -185,10 +200,17 @@ const Trips = () => {
       return;
     }
 
+    // Format dates in local timezone to preserve the actual selected dates
+    const startDateStr = format(startDate, 'yyyy-MM-dd');
+    const endDateStr = format(endDate, 'yyyy-MM-dd');
+    
+    console.log('Navigating to RoomPage with dates:', {
+      startDateStr,
+      endDateStr
+    });
+
     // Navigate with dates as query parameters
-    navigate(`/property/${propertyId}/room/${roomId}?` + 
-      `startDate=${startDate.toISOString().split('T')[0]}&` +
-      `endDate=${endDate.toISOString().split('T')[0]}`);
+    navigate(`/property/${propertyId}/room/${roomId}?startDate=${startDateStr}&endDate=${endDateStr}`);
   }, [user, navigate, startDate, endDate]);
 
   // Handle map bounds change
