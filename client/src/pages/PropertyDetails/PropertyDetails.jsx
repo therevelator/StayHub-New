@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { StarIcon as StarIconSolid } from '@heroicons/react/20/solid';
 import { 
@@ -21,6 +21,46 @@ const PropertyDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [searchParams] = useSearchParams();
+  const [roomAvailability, setRoomAvailability] = useState({});
+
+  const fetchRoomAvailability = async (roomId, startDate, endDate) => {
+    try {
+      const response = await api.get(`/properties/${propertyId}/rooms/${roomId}/availability`, {
+        params: { startDate, endDate }
+      });
+      return response.data.data.requested_room;
+    } catch (error) {
+      console.error(`Error fetching availability for room ${roomId}:`, error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+
+    if (property?.rooms && startDate && endDate) {
+      const fetchAllRoomsAvailability = async () => {
+        const availabilityPromises = property.rooms.map(room => 
+          fetchRoomAvailability(room.id, startDate, endDate)
+        );
+
+        const availabilityResults = await Promise.all(availabilityPromises);
+        const availabilityMap = {};
+
+        availabilityResults.forEach((result, index) => {
+          if (result) {
+            availabilityMap[property.rooms[index].id] = result;
+          }
+        });
+
+        setRoomAvailability(availabilityMap);
+      };
+
+      fetchAllRoomsAvailability();
+    }
+  }, [property, searchParams]);
 
   useEffect(() => {
     const fetchProperty = async () => {
@@ -114,6 +154,15 @@ const PropertyDetails = () => {
 
   if (!property) return null;
 
+  const isRoomAvailable = (roomId) => {
+    const roomData = roomAvailability[roomId];
+    if (!roomData || !roomData.availability) return true; // If no availability data, assume available
+    
+    return Object.values(roomData.availability).every(info => 
+      info.status === 'available' && !info.booking_id
+    );
+  };
+
   const getRoomPrice = (room) => {
     // Log the room data for debugging
     console.log('Room price data:', {
@@ -169,7 +218,14 @@ const PropertyDetails = () => {
   };
 
   const handleBookRoom = (roomId) => {
-    navigate(`/property/${propertyId}/room/${roomId}`);
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const queryParams = new URLSearchParams();
+    
+    if (startDate) queryParams.append('startDate', startDate);
+    if (endDate) queryParams.append('endDate', endDate);
+    
+    navigate(`/property/${propertyId}/room/${roomId}?${queryParams.toString()}`);
   };
 
   // Format the full address
@@ -565,20 +621,63 @@ const PropertyDetails = () => {
                     </div>
                   </div>
 
-                  {/* Price */}
-                  <div className="mt-4 text-xl font-bold">
-                    <div className="flex justify-between items-center">
-                      <span>Price per night</span>
-                      <span>${price.toFixed(2)}</span>
-                    </div>
+                  {/* Price and Availability */}
+                  <div className="mt-4">
+                    {searchParams.get('startDate') && searchParams.get('endDate') ? (
+                      <div>
+                        {isRoomAvailable(room.id) ? (
+                          <>
+                            <div className="text-xl font-bold flex justify-between items-center">
+                              <span>Price per night</span>
+                              <span>${price.toFixed(2)}</span>
+                            </div>
+                            <p className="text-green-600 text-sm mt-1 flex items-center">
+                              <CheckCircleIcon className="h-4 w-4 mr-1" />
+                              Available for selected dates
+                            </p>
+                            <button
+                              onClick={() => handleBookRoom(room.id)}
+                              className="w-full bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors mt-4"
+                            >
+                              Book this Room
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-xl font-bold flex justify-between items-center text-gray-400">
+                              <span>Not Available</span>
+                            </div>
+                            <p className="text-red-600 text-sm mt-1 flex items-center">
+                              <XCircleIcon className="h-4 w-4 mr-1" />
+                              Not available for selected dates
+                            </p>
+                            <button
+                              disabled
+                              className="w-full bg-gray-200 text-gray-500 py-3 px-4 rounded-lg cursor-not-allowed mt-4"
+                            >
+                              Room Not Available
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-xl font-bold flex justify-between items-center">
+                          <span>Price per night</span>
+                          <span>${price.toFixed(2)}</span>
+                        </div>
+                        <p className="text-gray-600 text-sm mt-1">
+                          Select dates to check availability
+                        </p>
+                        <button
+                          onClick={() => handleBookRoom(room.id)}
+                          className="w-full bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors mt-4"
+                        >
+                          View Room Details
+                        </button>
+                      </>
+                    )}
                   </div>
-
-                  <button
-                    onClick={() => handleBookRoom(room.id)}
-                    className="w-full bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors mt-4"
-                  >
-                    Book this Room
-                  </button>
                 </div>
               );
             })}

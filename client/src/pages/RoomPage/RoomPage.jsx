@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { Calendar } from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { BedDouble, Bath, Mountain, Grid, Maximize, Home, Sofa } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -27,11 +27,57 @@ const RoomPage = () => {
   const [activeStartDate, setActiveStartDate] = useState(new Date());
   const [numberOfGuests, setNumberOfGuests] = useState(1);
   const [nightlyPrices, setNightlyPrices] = useState([]);
+  const [alternativeRooms, setAlternativeRooms] = useState([]);
+
+  const isRoomFullyAvailable = (availability) => {
+    if (!availability) return false;
+    return Object.values(availability).every(info => 
+      info.status === 'available' && !info.booking_id
+    );
+  };
+
+  const isDateRangeAvailable = (availability, startDate, endDate) => {
+    if (!startDate || !endDate || !availability) {
+      console.log('Missing required data:', { availability, startDate, endDate });
+      return false;
+    }
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    
+    // Get all dates in the range
+    const dates = [];
+    const current = new Date(start);
+    while (current <= end) {
+      dates.push(format(current, 'yyyy-MM-dd'));
+      current.setDate(current.getDate() + 1);
+    }
+    
+    console.log('Checking availability for dates:', dates);
+    
+    // Check if we have availability info for ALL dates and they are ALL available
+    const availability_status = dates.map(date => {
+      const info = availability[date];
+      const status = {
+        date,
+        available: info && info.status === 'available' && !info.booking_id,
+        info
+      };
+      console.log('Date status:', status);
+      return status;
+    });
+    
+    const all_available = availability_status.every(status => status.available);
+    console.log('All dates available:', all_available);
+    
+    return all_available;
+  };
 
   const fetchAvailability = async (date) => {
     try {
       // Get first and last day of the displayed month
-      // Get first and last day of the month in local time
       const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
       const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
       firstDay.setHours(0, 0, 0, 0);
@@ -51,37 +97,44 @@ const RoomPage = () => {
 
       console.log('Raw availability response:', availabilityResponse.data);
       
-      // Process availability data
-      const available = [];
-      const occupied = [];
-      const maintenance = [];
-      const blocked = [];
-      const availabilityData = {};
+      const { requested_room, other_rooms } = availabilityResponse.data.data;
       
-      if (availabilityResponse.data?.data?.availability) {
-        Object.entries(availabilityResponse.data.data.availability).forEach(([date, info]) => {
-          availabilityData[date] = info;
-          
-          switch(info.status) {
-            case 'available':
-              available.push(date);
-              break;
-            case 'occupied':
-              occupied.push(date);
-              break;
-            case 'maintenance':
-              maintenance.push(date);
-              break;
-            case 'blocked':
-              blocked.push(date);
-              break;
+      // Process availability data for the requested room
+      const available = [];
+      const unavailable = [];
+      
+      if (requested_room?.availability) {
+        Object.entries(requested_room.availability).forEach(([date, info]) => {
+          // A date is only available if it's explicitly marked as available AND has no booking_id
+          if (info.status === 'available' && !info.booking_id) {
+            available.push(date);
+          } else {
+            unavailable.push(date);
           }
         });
       }
       
-      setAvailabilityMap(availabilityData);
+      const availability = requested_room?.availability || {};
+      setAvailabilityMap(availability);
       setAvailableDates(available);
-      setBookingDates([...occupied, ...maintenance, ...blocked]);
+      setBookingDates(unavailable);
+      
+      // Update room data with availability status
+      setRoom(prev => ({
+        ...prev,
+        ...requested_room,
+        is_fully_available: isRoomFullyAvailable(availability)
+      }));
+      
+      // Process alternative rooms - check each room's complete date range
+      const processedAlternativeRooms = (other_rooms || []).map(room => ({
+        ...room,
+        is_available: Object.values(room.availability).every(info => 
+          info.status === 'available' && !info.booking_id
+        )
+      }));
+      
+      setAlternativeRooms(processedAlternativeRooms);
     } catch (error) {
       console.error('Error fetching availability:', error);
       setError(error.response?.data?.message || 'Failed to fetch availability');
@@ -250,34 +303,14 @@ const RoomPage = () => {
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const dateInfo = availabilityMap[dateStr];
     
-    // Only allow selecting the first blocked date after an available date as checkout
-    if (dateInfo && (dateInfo.status === 'occupied' || dateInfo.status === 'maintenance' || dateInfo.status === 'blocked')) {
-      // If we have a check-in date and this is after it, check if it's the first blocked date
-      if (checkInDate && selectedDate > checkInDate && !checkOutDate) {
-        // Check if all dates between check-in and this date are available
-        const daysBetween = differenceInDays(selectedDate, checkInDate);
-        let isFirstBlockedDate = true;
-        
-        for (let i = 1; i < daysBetween; i++) {
-          const currentDate = new Date(checkInDate);
-          currentDate.setDate(currentDate.getDate() + i);
-          currentDate.setHours(12, 0, 0, 0);
-          const currentDateStr = format(currentDate, 'yyyy-MM-dd');
-          const currentDateInfo = availabilityMap[currentDateStr];
-          
-          if (currentDateInfo && (currentDateInfo.status === 'occupied' || currentDateInfo.status === 'maintenance' || currentDateInfo.status === 'blocked')) {
-            isFirstBlockedDate = false;
-            break;
-          }
-        }
-        
-        if (isFirstBlockedDate) {
-          setCheckOutDate(selectedDate);
-          return;
-        }
-      }
-      // Otherwise, don't allow selection
-      Swal.fire('You can only select the first blocked date after your check-in date');
+    // Don't allow selecting unavailable dates
+    if (!dateInfo || dateInfo.status !== 'available' || dateInfo.booking_id) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Date Not Available',
+        text: `This room is not available on ${format(selectedDate, 'MMMM d, yyyy')}`,
+        footer: 'Check our alternative rooms for these dates'
+      });
       return;
     }
 
@@ -329,7 +362,9 @@ const RoomPage = () => {
     } else if (isBetween) {
       classes.push('bg-amber-50 text-amber-800 hover:bg-amber-100');
     } else if (dateInfo) {
-      classes.push(getStatusStyles(dateInfo.status));
+      // Consider a date unavailable if it has a booking_id or non-available status
+      const isAvailable = dateInfo.status === 'available' && !dateInfo.booking_id;
+      classes.push(getStatusStyles(isAvailable ? 'available' : 'occupied'));
     } else {
       classes.push('hover:bg-gray-100');
     }
@@ -354,6 +389,16 @@ const RoomPage = () => {
   const handleBooking = async () => {
     if (!checkInDate || !checkOutDate) {
       Swal.fire('Please select both check-in and check-out dates.');
+      return;
+    }
+
+    // Check if the entire date range is available
+    if (!isDateRangeAvailable(availabilityMap, checkInDate, checkOutDate)) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Room Not Available',
+        text: 'Some dates in your selected range are not available. Please choose different dates.'
+      });
       return;
     }
 
@@ -389,6 +434,49 @@ const RoomPage = () => {
       });
 
       const response = await api.post(`/properties/${propertyId}/rooms/${roomId}/book`, bookingData);
+      
+      // If booking fails due to availability, show alternative rooms
+      if (response.data.status === 'error' && alternativeRooms.length > 0) {
+        const availableAlternatives = alternativeRooms.filter(r => r.is_available);
+        if (availableAlternatives.length > 0) {
+          const alternativesHtml = availableAlternatives
+            .map(r => {
+              // Calculate price range for the room
+              const prices = Object.values(r.availability).map(a => parseFloat(a.price));
+              const minPrice = Math.min(...prices);
+              const maxPrice = Math.max(...prices);
+              const priceRange = minPrice === maxPrice ? 
+                `$${minPrice.toFixed(2)}` : 
+                `$${minPrice.toFixed(2)} - $${maxPrice.toFixed(2)}`;
+              
+              return `<div class="mb-3 p-2 border rounded">
+                <strong>${r.name}</strong><br>
+                Room type: ${r.room_type}<br>
+                Max occupancy: ${r.max_occupancy}<br>
+                Price per night: ${priceRange}
+              </div>`;
+            })
+            .join('');
+            
+          Swal.fire({
+            title: 'Alternative Available Rooms',
+            html: `<div class="text-left">
+                    These rooms are available for your selected dates:<br><br>
+                    ${alternativesHtml}
+                  </div>`,
+            showCancelButton: true,
+            confirmButtonText: 'View Details',
+            cancelButtonText: 'Close',
+            width: '600px'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              // Navigate to property page with current dates
+              window.location.href = `/properties/${propertyId}?startDate=${format(checkInDate, 'yyyy-MM-dd')}&endDate=${format(checkOutDate, 'yyyy-MM-dd')}`;
+            }
+          });
+          return;
+        }
+      }
       
       // Debug logging
       console.log('Room data for booking:', {
@@ -587,46 +675,56 @@ const RoomPage = () => {
                       </div>
                     </div>
 
-                    {room.price_per_night && (
-                      <div className="border-t pt-4">
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Number of Guests
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              max={room.max_occupancy}
-                              value={numberOfGuests}
-                              onChange={(e) => setNumberOfGuests(parseInt(e.target.value))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
-                            />
-                            <p className="text-sm text-gray-500 mt-1">Max occupancy: {room.max_occupancy} guests</p>
-                          </div>
-
-                          {nightlyPrices.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="font-medium text-gray-700">Price Breakdown:</p>
-                              {nightlyPrices.map(({ date, price }, index) => (
-                                <div key={index} className="flex justify-between items-center text-sm">
-                                  <span className="text-gray-600">{format(date, 'EEE, MMM d, yyyy')}</span>
-                                  <span className="font-medium">${price.toFixed(2)}</span>
-                                </div>
-                              ))}
-                              <div className="flex justify-between items-center pt-2 border-t">
-                                <span className="text-gray-600">Number of nights</span>
-                                <span>{totalNights}</span>
-                              </div>
-                              <div className="flex justify-between items-center font-medium text-lg pt-2 border-t">
-                                <span>Total price</span>
-                                <span>${totalPrice.toFixed(2)}</span>
-                              </div>
-                            </div>
-                          )}
+                    <div className="border-t pt-4">
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Number of Guests
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max={room.max_occupancy}
+                            value={numberOfGuests}
+                            onChange={(e) => setNumberOfGuests(parseInt(e.target.value))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <p className="text-sm text-gray-500 mt-1">Max occupancy: {room.max_occupancy} guests</p>
                         </div>
+
+                        {checkInDate && checkOutDate ? (
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-lg font-medium mb-4">
+                              <span>Price per night</span>
+                              <span>${room.price_per_night}</span>
+                            </div>
+                            {nightlyPrices.length > 0 && (
+                              <>
+                                <p className="font-medium text-gray-700">Price Breakdown:</p>
+                                {nightlyPrices.map(({ date, price }, index) => (
+                                  <div key={index} className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-600">{format(date, 'EEE, MMM d, yyyy')}</span>
+                                    <span className="font-medium">${price.toFixed(2)}</span>
+                                  </div>
+                                ))}
+                                <div className="flex justify-between items-center pt-2 border-t">
+                                  <span className="text-gray-600">Number of nights</span>
+                                  <span>{totalNights}</span>
+                                </div>
+                                <div className="flex justify-between items-center font-medium text-lg pt-2 border-t">
+                                  <span>Total price</span>
+                                  <span>${totalPrice.toFixed(2)}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 bg-gray-50 rounded-lg">
+                            <p className="text-gray-600">Select dates to see prices and availability</p>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
 
                     <div className="border-t pt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -745,53 +843,81 @@ const RoomPage = () => {
               </Card>
             </div>
 
-            {/* Terms and Conditions */}
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-2">Terms and Conditions</h3>
-              <div className="bg-gray-50 p-4 rounded-md text-sm text-gray-600 mb-4 h-40 overflow-y-auto">
-                <h4 className="font-semibold mb-2">1. Booking and Payment</h4>
-                <p className="mb-2">• Full payment is required at the time of booking</p>
-                <p className="mb-2">• Rates are per room, per night</p>
-                
-                <h4 className="font-semibold mb-2">2. Cancellation Policy</h4>
-                <p className="mb-2">• Free cancellation up to 48 hours before check-in</p>
-                <p className="mb-2">• Cancellations within 48 hours of check-in will be charged one night's stay</p>
-                
-                <h4 className="font-semibold mb-2">3. Check-in/Check-out</h4>
-                <p className="mb-2">• Check-in time: 3:00 PM</p>
-                <p className="mb-2">• Check-out time: 11:00 AM</p>
-                
-                <h4 className="font-semibold mb-2">4. Room Rules</h4>
-                <p className="mb-2">• No smoking in rooms</p>
-                <p className="mb-2">• Quiet hours: 10:00 PM - 7:00 AM</p>
+            {checkInDate && checkOutDate && !isDateRangeAvailable(availabilityMap, checkInDate, checkOutDate) ? (
+              <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600 font-medium mb-2">Room Not Available</p>
+                <p className="text-red-500 text-sm">This room is not available for the selected dates. Please choose different dates or check our alternative rooms below.</p>
+                {alternativeRooms.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="font-medium text-gray-700 mb-2">Alternative Available Rooms:</h4>
+                    <div className="space-y-2">
+                      {alternativeRooms.map(altRoom => (
+                        <div key={altRoom.id} className="p-3 bg-white rounded border border-gray-200">
+                          <p className="font-medium text-gray-800">{altRoom.name}</p>
+                          <p className="text-sm text-gray-600 mb-2">${altRoom.price}/night</p>
+                          <button 
+                            onClick={() => navigate(`/property/${propertyId}/room/${altRoom.id}?startDate=${format(checkInDate, 'yyyy-MM-dd')}&endDate=${format(checkOutDate, 'yyyy-MM-dd')}`)} 
+                            className="text-sm text-primary-600 hover:text-primary-700"
+                          >
+                            View Room →
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              
-              <div className="flex items-start mb-6">
-                <input
-                  type="checkbox"
-                  id="terms"
-                  checked={termsAccepted}
-                  onChange={(e) => setTermsAccepted(e.target.checked)}
-                  className="mt-1 mr-2"
-                />
-                <label htmlFor="terms" className="text-sm text-gray-600">
-                  I have read and agree to the Terms and Conditions
-                </label>
-              </div>
-            </div>
+            ) : checkInDate && checkOutDate ? (
+              <>
+                {/* Terms and Conditions */}
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-2">Terms and Conditions</h3>
+                  <div className="bg-gray-50 p-4 rounded-md text-sm text-gray-600 mb-4 h-40 overflow-y-auto">
+                    <h4 className="font-semibold mb-2">1. Booking and Payment</h4>
+                    <p className="mb-2">• Full payment is required at the time of booking</p>
+                    <p className="mb-2">• Rates are per room, per night</p>
+                    
+                    <h4 className="font-semibold mb-2">2. Cancellation Policy</h4>
+                    <p className="mb-2">• Free cancellation up to 48 hours before check-in</p>
+                    <p className="mb-2">• Cancellations within 48 hours of check-in will be charged one night's stay</p>
+                    
+                    <h4 className="font-semibold mb-2">3. Check-in/Check-out</h4>
+                    <p className="mb-2">• Check-in time: 3:00 PM</p>
+                    <p className="mb-2">• Check-out time: 11:00 AM</p>
+                    
+                    <h4 className="font-semibold mb-2">4. Room Rules</h4>
+                    <p className="mb-2">• No smoking in rooms</p>
+                    <p className="mb-2">• Quiet hours: 10:00 PM - 7:00 AM</p>
+                  </div>
+                  
+                  <div className="flex items-start mb-6">
+                    <input
+                      type="checkbox"
+                      id="terms"
+                      checked={termsAccepted}
+                      onChange={(e) => setTermsAccepted(e.target.checked)}
+                      className="mt-1 mr-2"
+                    />
+                    <label htmlFor="terms" className="text-sm text-gray-600">
+                      I have read and agree to the Terms and Conditions
+                    </label>
+                  </div>
+                </div>
 
-            {/* Book Now Button */}
-            <button
-              onClick={handleBooking}
-              disabled={!termsAccepted || !checkInDate || !checkOutDate}
-              className={`w-full py-3 px-4 rounded-lg transition-colors ${
-                termsAccepted && checkInDate && checkOutDate
-                  ? 'bg-primary-600 text-white hover:bg-primary-700'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              Book this Room
-            </button>
+                {/* Book Now Button */}
+                <button
+                  onClick={handleBooking}
+                  disabled={!termsAccepted}
+                  className={`w-full py-3 px-4 rounded-lg transition-colors ${
+                    termsAccepted
+                      ? 'bg-primary-600 text-white hover:bg-primary-700'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Book this Room
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       )}

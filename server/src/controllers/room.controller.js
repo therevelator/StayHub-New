@@ -242,6 +242,12 @@ export const getRoomAvailability = async (req, res) => {
 
     const defaultPrice = rooms[0].price_per_night;
     
+    // Get all rooms for this property to check their availability
+    const [propertyRooms] = await db.query(
+      'SELECT id, price_per_night FROM rooms WHERE property_id = (SELECT property_id FROM rooms WHERE id = ?)',
+      [roomId]
+    );
+
     // Get both availability records and bookings for the specified date range
     const [availability] = await db.query(`
       SELECT 
@@ -250,93 +256,122 @@ export const getRoomAvailability = async (req, res) => {
         reason,
         price,
         notes,
-        booking_id
+        booking_id,
+        room_id
       FROM room_availability 
-      WHERE room_id = ? 
+      WHERE room_id IN (${propertyRooms.map(r => r.id).join(',')})
       AND date >= ?
       AND date <= ?
-    `, [roomId, startDate || new Date(), endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)]);
+    `, [startDate || new Date(), endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)]);
 
-    // Get bookings that overlap with the date range
+    // Get bookings that overlap with the date range for all rooms
     const [bookings] = await db.query(`
       SELECT 
         id,
+        room_id,
         DATE_FORMAT(check_in_date, '%Y-%m-%d') as check_in_date,
         DATE_FORMAT(check_out_date, '%Y-%m-%d') as check_out_date
       FROM bookings
-      WHERE room_id = ?
+      WHERE room_id IN (${propertyRooms.map(r => r.id).join(',')})
       AND status != 'cancelled'
       AND (
         (check_in_date BETWEEN ? AND ?)
         OR (check_out_date BETWEEN ? AND ?)
         OR (check_in_date <= ? AND check_out_date >= ?)
       )
-    `, [roomId, startDate, endDate, startDate, endDate, startDate, endDate]);
+    `, [startDate, endDate, startDate, endDate, startDate, endDate]);
     
     console.log('Found bookings:', bookings);
 
     console.log('Found availability records:', availability);
 
-    // Convert to object with dates as keys
-    // First, map all availability records
-    // Initialize all dates in range with NOT_AVAILABLE status
-    const availabilityMap = {};
-    const dateRange = eachDayOfInterval({ 
-      start: new Date(startDate), 
-      end: new Date(endDate) 
-    });
+    // Create availability maps for each room
+    const roomAvailabilityMaps = {};
     
-    dateRange.forEach(date => {
-      const dateStr = format(date, 'yyyy-MM-dd');
-      availabilityMap[dateStr] = {
-        status: 'available',
-        reason: 'default availability',
-        price: defaultPrice,
-        notes: null,
-        booking_id: null
-      };
-    });
-
-    // Overlay availability records
-    availability.forEach(record => {
-      const dateStr = format(new Date(record.date), 'yyyy-MM-dd');
-      availabilityMap[dateStr] = {
-        status: record.status || 'available',
-        reason: record.reason || 'available',
-        price: parseFloat(record.price) || defaultPrice,
-        notes: record.notes,
-        booking_id: record.booking_id
-      };
-    });
-
-    // Then, overlay booking information
-    bookings.forEach(booking => {
-      console.log('Processing booking:', booking);
-      const start = new Date(booking.check_in_date);
-      const end = new Date(booking.check_out_date);
-      console.log('Parsed dates:', { start, end });
-      const dates = eachDayOfInterval({ start, end });
+    // Initialize availability maps for all rooms
+    propertyRooms.forEach(room => {
+      const dateRange = eachDayOfInterval({ 
+        start: new Date(startDate), 
+        end: new Date(endDate) 
+      });
       
-      dates.forEach(date => {
+      roomAvailabilityMaps[room.id] = {};
+      dateRange.forEach(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        availabilityMap[dateStr] = {
-          ...availabilityMap[dateStr],
-          status: 'occupied',
-          reason: 'booked',
-          booking_id: booking.id
+        roomAvailabilityMaps[room.id][dateStr] = {
+          status: 'available',
+          reason: 'default availability',
+          price: room.price_per_night,
+          notes: null,
+          booking_id: null
         };
       });
     });
 
-    console.log('Final availability map:', availabilityMap);
+    // Overlay availability records for each room
+    availability.forEach(record => {
+      const dateStr = format(new Date(record.date), 'yyyy-MM-dd');
+      if (roomAvailabilityMaps[record.room_id]) {
+        roomAvailabilityMaps[record.room_id][dateStr] = {
+          status: record.status || 'available',
+          reason: record.reason || 'available',
+          price: parseFloat(record.price) || propertyRooms.find(r => r.id === record.room_id)?.price_per_night,
+          notes: record.notes,
+          booking_id: record.booking_id
+        };
+      }
+    });
+
+    // Overlay booking information for each room
+    bookings.forEach(booking => {
+      const start = new Date(booking.check_in_date);
+      const end = new Date(booking.check_out_date);
+      const dates = eachDayOfInterval({ start, end });
+      
+      dates.forEach(date => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        if (roomAvailabilityMaps[booking.room_id] && roomAvailabilityMaps[booking.room_id][dateStr]) {
+          roomAvailabilityMaps[booking.room_id][dateStr] = {
+            ...roomAvailabilityMaps[booking.room_id][dateStr],
+            status: 'occupied',
+            reason: 'booked',
+            booking_id: booking.id
+          };
+        }
+      });
+    });
+
+    // For the requested room, return its availability map
+    // Get room details for all rooms
+    const [roomDetails] = await db.query(
+      'SELECT id, name, room_type, max_occupancy FROM rooms WHERE id IN (?)',
+      [Object.keys(roomAvailabilityMaps)]
+    );
+
+    // Create a map of room details
+    const roomDetailsMap = roomDetails.reduce((acc, room) => {
+      acc[room.id] = room;
+      return acc;
+    }, {});
 
     const responseData = {
       status: 'success',
       data: {
         default_price: defaultPrice,
-        availability: availabilityMap
+        requested_room: {
+          ...roomDetailsMap[roomId],
+          availability: roomAvailabilityMaps[roomId]
+        },
+        other_rooms: Object.entries(roomAvailabilityMaps)
+          .filter(([id]) => id !== roomId)
+          .map(([id, availability]) => ({
+            ...roomDetailsMap[id],
+            availability,
+            is_available: Object.values(availability).every(day => day.status === 'available')
+          }))
       }
     };
+    
     console.log('Sending availability response:', responseData);
     res.json(responseData);
 
@@ -705,27 +740,21 @@ export const createBooking = async (req, res) => {
     console.log('Price breakdown:', priceBreakdown);
     console.log('Total price:', totalPrice);
 
-    // Check if dates are available
+    // Check if dates are available by looking for any overlapping bookings
     const [existingBookings] = await db.query(`
       SELECT id 
       FROM bookings 
       WHERE room_id = ? 
       AND status = 'confirmed'
-      AND (
-        (check_in_date <= ? AND check_out_date > ?)
-        OR
-        (check_in_date < ? AND check_out_date >= ?)
-        OR
-        (check_in_date >= ? AND check_out_date <= ?)
+      AND NOT (
+        check_out_date <= ? -- New booking starts after existing booking ends
+        OR 
+        check_in_date >= ? -- New booking ends before existing booking starts
       )
     `, [
       roomId,
-      checkOutDate,
-      checkInDate,
-      checkOutDate,
-      checkOutDate,
-      checkInDate,
-      checkOutDate
+      checkInDate, // Existing booking must end before new booking starts
+      checkOutDate // Existing booking must start after new booking ends
     ]);
 
     if (existingBookings.length > 0) {

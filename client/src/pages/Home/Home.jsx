@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 import {
   MagnifyingGlassIcon,
   MapPinIcon,
@@ -874,7 +875,12 @@ const Home = () => {
             <div
               key={property.id}
               className="bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer group"
-              onClick={() => navigate(`/property/${property.id}`)}
+              onClick={() => {
+                const params = new URLSearchParams();
+                if (checkInDate) params.append('startDate', format(checkInDate, 'yyyy-MM-dd'));
+                if (checkOutDate) params.append('endDate', format(checkOutDate, 'yyyy-MM-dd'));
+                navigate(`/property/${property.id}?${params.toString()}`);
+              }}
             >
               <div className="relative">
                 <img
@@ -905,13 +911,22 @@ const Home = () => {
                 </p>
                 <div className="flex justify-between items-center">
                   <span className="text-primary-600 font-semibold">
-                    from ${Number(property.price).toFixed(2)}/night
-                    {searchParams.checkIn && searchParams.checkOut && <span className="text-xs block">for selected dates</span>}
+                    {searchParams.checkIn && searchParams.checkOut ? (
+                      <>
+                        ${Number(property.price).toFixed(2)}/night
+                        <span className="text-xs block">for selected dates</span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-gray-600">Select dates to see prices</span>
+                    )}
                   </span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate(`/property/${property.id}`);
+                      const params = new URLSearchParams();
+                      if (checkInDate) params.append('startDate', format(checkInDate, 'yyyy-MM-dd'));
+                      if (checkOutDate) params.append('endDate', format(checkOutDate, 'yyyy-MM-dd'));
+                      navigate(`/property/${property.id}?${params.toString()}`);
                     }}
                     className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition-colors"
                   >
