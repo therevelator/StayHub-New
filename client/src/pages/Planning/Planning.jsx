@@ -51,6 +51,7 @@ const Planning = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [tripDays, setTripDays] = useState([]);
   const [pointsOfInterest, setPointsOfInterest] = useState([]);
+  const [poisByLocality, setPoisByLocality] = useState({});
   const [sampledSearchPoints, setSampledSearchPoints] = useState([]);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
@@ -385,6 +386,73 @@ const Planning = () => {
     return R * c;
   };
 
+  // Calculate popularity score based on OSM tags
+  const calculatePopularity = (tags) => {
+    let score = 0;
+    
+    // Check for various popularity indicators
+    if (tags.stars) score += parseInt(tags.stars) || 0;
+    if (tags.rating) score += parseFloat(tags.rating) * 2 || 0;
+    if (tags.reviews) score += Math.min(parseInt(tags.reviews) / 10, 5) || 0;
+    if (tags.wikipedia) score += 5; // Has Wikipedia article
+    if (tags.wikidata) score += 3; // Has Wikidata entry
+    if (tags.website) score += 2; // Has official website
+    if (tags.description) score += 1; // Has description
+    if (tags.image || tags.image_url) score += 2; // Has images
+    
+    // Check importance tags
+    if (tags.tourism === 'attraction') score += 3;
+    if (tags.historic === 'monument') score += 2;
+    if (tags.heritage) score += 2;
+    
+    // Additional bonuses for specific types
+    const popularTypes = {
+      museum: 4,
+      castle: 4,
+      palace: 4,
+      landmark: 3,
+      viewpoint: 3,
+      artwork: 2,
+      gallery: 2,
+      theatre: 2
+    };
+    
+    Object.entries(popularTypes).forEach(([type, bonus]) => {
+      if (Object.values(tags).includes(type)) score += bonus;
+    });
+    
+    return score;
+  };
+
+  // Overpass API endpoints with fallback
+  const OVERPASS_ENDPOINTS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://lz4.overpass-api.de/api/interpreter',
+    'https://overpass.osm.ch/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter',
+    'https://overpass.openstreetmap.ru/api/interpreter'
+  ];
+
+  // Make request with fallback to different endpoints
+  const makeOverpassRequest = async (query) => {
+    let lastError;
+    
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      try {
+        const response = await axios.post(endpoint, query, {
+          timeout: 10000 // 10 second timeout
+        });
+        return response.data;
+      } catch (error) {
+        console.warn(`Failed to fetch from ${endpoint}:`, error.message);
+        lastError = error;
+        continue;
+      }
+    }
+    
+    throw lastError; // If all endpoints fail, throw the last error
+  };
+
   // Find all points of interest based on selected filters
   const findPointsOfInterest = async () => {
     if (tripDays.length < 2 || !routeCoordinates.length) {
@@ -402,23 +470,36 @@ const Planning = () => {
       let minLng = Math.min(firstDay.lng, lastDay.lng) - 0.5;
       let maxLng = Math.max(firstDay.lng, lastDay.lng) + 0.5;
 
-      // Sample points along the route to search for localities
-      const routePoints = sampleRoutePoints(routeCoordinates, 5); // Get 5 points along the route
+      // Sample more points along the route to catch smaller localities
+      const routePoints = sampleRoutePoints(routeCoordinates, 10); // Get 10 points along the route
 
-      // First find localities (cities/towns) along the route
+      // First find all localities along the route (cities, towns, villages, suburbs)
       const localityPromises = routePoints.map(async point => {
         const localityQuery = `
           [out:json][bbox:${minLat},${minLng},${maxLat},${maxLng}];
           (
-            node[place~"city|town|village"](around:5000,${point[0]},${point[1]});
+            node[place~"city|town|village|suburb|hamlet"](around:10000,${point[0]},${point[1]});
+            way[place~"city|town|village|suburb|hamlet"](around:10000,${point[0]},${point[1]});
+            relation[place~"city|town|village|suburb|hamlet"](around:10000,${point[0]},${point[1]});
           );
-          out body;
+          out body center;
         `;
         
         const response = await axios.post('https://overpass-api.de/api/interpreter', localityQuery);
         return response.data.elements
           .filter(element => element.tags?.name)
-          .slice(0, 2); // Limit to 2 closest localities per point
+          .map(element => ({
+            ...element,
+            lat: element.lat || element.center?.lat,
+            lon: element.lon || element.center?.lon,
+            distanceToRoute: calculateDistance(point[0], point[1], 
+              element.lat || element.center?.lat, 
+              element.lon || element.center?.lon
+            )
+          }))
+          .filter(element => element.lat && element.lon) // Ensure we have valid coordinates
+          .sort((a, b) => a.distanceToRoute - b.distanceToRoute)
+          .slice(0, 3); // Take 3 closest localities per point
       });
 
       const localities = (await Promise.all(localityPromises))
@@ -458,10 +539,12 @@ const Planning = () => {
             ).join('\n            ')}
           );
           out body;
+          >;
+          out count tags;
         `;
         
-        const response = await axios.post('https://overpass-api.de/api/interpreter', poiQuery);
-        return response.data.elements
+        const data = await makeOverpassRequest(poiQuery);
+        return data.elements
           .filter(element => element.tags?.name)
           .map(element => ({
             id: element.id,
@@ -470,10 +553,14 @@ const Planning = () => {
             lng: element.lon,
             type: element.tags.tourism || element.tags.historic || element.tags.natural || element.tags.leisure || element.tags.amenity || 'attraction',
             locality: locality.tags.name,
-            selected: false
+            localityType: locality.tags.place,
+            distanceToRoute: locality.distanceToRoute,
+            selected: false,
+            popularity: calculatePopularity(element.tags)
           }));
       });
 
+      // Get all POIs and group by locality
       const allPois = (await Promise.all(poiPromises))
         .flat()
         .filter((poi, index, self) => 
@@ -481,7 +568,23 @@ const Planning = () => {
           index === self.findIndex(p => p.id === poi.id)
         );
 
+      // Group POIs by locality and get top 10 for each
+      const poisByLocality = allPois.reduce((acc, poi) => {
+        if (!acc[poi.locality]) {
+          acc[poi.locality] = [];
+        }
+        acc[poi.locality].push(poi);
+        return acc;
+      }, {});
+
+      // Sort each locality's POIs by popularity and take top 10
+      Object.keys(poisByLocality).forEach(locality => {
+        poisByLocality[locality].sort((a, b) => b.popularity - a.popularity);
+        poisByLocality[locality] = poisByLocality[locality].slice(0, 10);
+      });
+
       setPointsOfInterest(allPois);
+      setPoisByLocality(poisByLocality);
     } catch (error) {
       console.error('Error finding route POIs:', error);
       Swal.fire({
@@ -731,7 +834,7 @@ const Planning = () => {
           });
 
           // Find POIs along the route
-          setTimeout(() => findRoutePointsOfInterest(), 500);
+          setTimeout(() => findPointsOfInterest(), 500);
         } else {
           console.error('No routes found in the response');
           Swal.fire({
@@ -890,7 +993,7 @@ const Planning = () => {
       // 4. Find points of interest along the route regardless of transport mode
       if (routeCoordinates.length > 0) {
         console.log('Finding POIs along the calculated route');
-        await findRoutePointsOfInterest();
+        await findPointsOfInterest();
       } else {
         console.warn('No route coordinates available for POI search');
       }
@@ -1103,10 +1206,12 @@ const Planning = () => {
                 {/* Available Points of Interest */}
                 <div className="mt-6 space-y-4 border-t pt-4">
                   <div className="flex justify-between items-center">
-                    <h4 className="text-sm font-medium">Available Attractions</h4>
+                    <h4 className="text-sm font-medium">Points of Interest by Location ({Object.values(poisByLocality).flat().length} total)</h4>
                     <button
                       onClick={() => {
-                        const selected = pointsOfInterest.filter(poi => poi.selected);
+                        const selected = Object.values(poisByLocality)
+                          .flat()
+                          .filter(poi => poi.selected);
                         if (selected.length === 0) {
                           Swal.fire({
                             title: 'No Attractions Selected',
@@ -1125,41 +1230,90 @@ const Planning = () => {
                           });
                         });
                         setTripDays(newTripDays);
-                        setPointsOfInterest(prev => prev.map(p => ({ ...p, selected: false })));
+                        // Clear selections
+                        setPoisByLocality(prev => {
+                          const updated = {};
+                          Object.entries(prev).forEach(([locality, pois]) => {
+                            updated[locality] = pois.map(p => ({ ...p, selected: false }));
+                          });
+                          return updated;
+                        });
                       }}
                       className="text-sm px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                     >
                       Add Selected to Trip
                     </button>
                   </div>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {pointsOfInterest.map((poi) => (
-                      <div 
-                        key={poi.id} 
-                        className={`bg-white p-4 rounded-lg shadow-sm border-2 transition-colors cursor-pointer ${poi.selected ? 'border-blue-500' : 'border-transparent hover:border-gray-200'}`}
-                        onClick={() => {
-                          setPointsOfInterest(prev =>
-                            prev.map(p => p.id === poi.id ? { ...p, selected: !p.selected } : p)
-                          );
-                        }}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-medium">{poi.name}</h4>
-                            <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
-                          </div>
-                          <div className={`w-4 h-4 rounded-full border-2 ${poi.selected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`} />
+                  <div className="space-y-4 max-h-[32rem] overflow-y-auto">
+                    {Object.entries(poisByLocality).map(([locality, pois]) => (
+                      <div key={locality} className="bg-white rounded-lg shadow p-4">
+                        <h3 className="text-lg font-medium mb-3 flex items-center">
+                          <BuildingOfficeIcon className="h-5 w-5 mr-2 text-gray-500" />
+                          {locality}
+                          <span className="text-sm text-gray-500 ml-2">
+                            ({Math.round(pois[0].distanceToRoute)}km from route • {pois.length} attractions)
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPoisByLocality(prev => ({
+                                ...prev,
+                                [locality]: prev[locality].map(p => ({ ...p, selected: true }))
+                              }));
+                            }}
+                            className="ml-auto text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            Select All
+                          </button>
+                        </h3>
+                        <div className="space-y-2">
+                          {pois.map((poi) => (
+                            <div 
+                              key={poi.id} 
+                              className={`bg-white p-3 rounded border transition-colors cursor-pointer ${poi.selected ? 'border-blue-500' : 'border-gray-200 hover:border-gray-300'}`}
+                              onClick={() => {
+                                setPointsOfInterest(prev =>
+                                  prev.map(p => p.id === poi.id ? { ...p, selected: !p.selected } : p)
+                                );
+                              }}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                  <div className="flex items-start justify-between">
+                                    <h4 className="font-medium flex-1">{poi.name}</h4>
+                                    <div className={`w-4 h-4 rounded-full border-2 ml-2 ${poi.selected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`} />
+                                  </div>
+                                  <p className="text-sm text-gray-600 capitalize flex items-center mt-1">
+                                    <span className="inline-block w-2 h-2 rounded-full bg-gray-400 mr-2"></span>
+                                    {poi.type}
+                                    <span className="text-xs text-gray-500 ml-2">
+                                      {Math.round(poi.distanceToRoute)}km away
+                                    </span>
+                                  </p>
+                                  {poi.popularity > 10 && (
+                                    <div className="flex items-center mt-1">
+                                      {[...Array(Math.min(5, Math.floor(poi.popularity/5)))].map((_, i) => (
+                                        <StarIcon key={i} className="h-3 w-3 text-yellow-400" />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-end space-x-2 mt-2">
+                                <a 
+                                  href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
+                                  View in Maps
+                                </a>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-2"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
-                          View in Google Maps
-                        </a>
                       </div>
                     ))}
                   </div>
