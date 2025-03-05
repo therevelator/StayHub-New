@@ -215,7 +215,15 @@ const AddPropertyPage = () => {
       });
 
       toast.success('Property created successfully!');
-      navigate('/admin/properties');
+      
+      // Navigate based on user role
+      if (user.isAdmin) {
+        navigate('/admin/properties');
+      } else if (user.isHost) {
+        navigate('/owner/properties');
+      } else {
+        navigate('/');
+      }
     } catch (error) {
       console.error('[AddPropertyPage] Error creating property:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to create property';

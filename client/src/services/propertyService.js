@@ -2,6 +2,15 @@ import api from './api';
 import { uploadMultipleImages } from './imageService';
 
 const propertyService = {
+  createProperty: async (data) => {
+    try {
+      const response = await api.post('/owner/properties', data);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating property:', error);
+      throw error;
+    }
+  },
   create: async (data, images = []) => {
     console.log('PropertyService: Creating property with data:', data);
     
@@ -167,6 +176,24 @@ const propertyService = {
       return response.data;
     } catch (error) {
       console.error('PropertyService: Error deleting property:', error);
+      throw error;
+    }
+  },
+  deleteProperty: async (id) => {
+    try {
+      const response = await api.delete(`/properties/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('PropertyService: Error deleting property:', error);
+      
+      // Add more detailed error information
+      if (error.response && error.response.data && error.response.data.message) {
+        const enhancedError = new Error(error.response.data.message);
+        enhancedError.response = error.response;
+        enhancedError.status = error.response.status;
+        throw enhancedError;
+      }
+      
       throw error;
     }
   },

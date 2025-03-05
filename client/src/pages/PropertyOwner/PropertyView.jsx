@@ -8,6 +8,9 @@ import RoomsList from '../Admin/EditProperty/components/RoomsList';
 import { toast } from 'react-hot-toast';
 import { AnalyticsSection } from '../../components/OwnerDashboard/AnalyticsSection';
 import PropertyBookings from './PropertyBookings';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
 const PropertyView = () => {
   const { propertyId } = useParams();
@@ -424,6 +427,232 @@ const PropertyView = () => {
           <Tab.Panel>
             <div className="bg-white rounded-lg shadow-lg overflow-hidden">
               <div className="p-6">
+                <div className="mb-6 flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-800">Property Analytics</h2>
+                  <div className="flex space-x-2">
+                    <select 
+                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      defaultValue="30days"
+                    >
+                      <option value="7days">Last 7 Days</option>
+                      <option value="30days">Last 30 Days</option>
+                      <option value="90days">Last 90 Days</option>
+                      <option value="year">Last Year</option>
+                    </select>
+                    <button className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Key Performance Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-blue-700 font-medium">Occupancy Rate</p>
+                        <p className="text-2xl font-bold text-blue-900">{calculateOccupancyRate()}%</p>
+                      </div>
+                      <div className="bg-blue-200 p-2 rounded-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center text-xs text-blue-700">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      <span>+5% vs last month</span>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-green-700 font-medium">Total Revenue</p>
+                        <p className="text-2xl font-bold text-green-900">${calculateTotalRevenue()}</p>
+                      </div>
+                      <div className="bg-green-200 p-2 rounded-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center text-xs text-green-700">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      <span>+12% vs last month</span>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-purple-700 font-medium">Avg. Booking Value</p>
+                        <p className="text-2xl font-bold text-purple-900">${calculateAverageDailyRate()}</p>
+                      </div>
+                      <div className="bg-purple-200 p-2 rounded-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center text-xs text-purple-700">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      <span>+3% vs last month</span>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-4 rounded-lg border border-amber-200">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm text-amber-700 font-medium">Conversion Rate</p>
+                        <p className="text-2xl font-bold text-amber-900">{calculateBookingConversionRate()}%</p>
+                      </div>
+                      <div className="bg-amber-200 p-2 rounded-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center text-xs text-amber-700">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      <span>+2% vs last month</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Revenue & Occupancy Charts */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Revenue</h3>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={calculateMonthlyRevenue()}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <Tooltip formatter={(value) => [`$${value}`, 'Revenue']} />
+                          <Bar dataKey="revenue" fill="#8884d8" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Booking Distribution</h3>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={calculateBookingDistribution()}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="percentage"
+                          >
+                            {calculateBookingDistribution().map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Room Performance */}
+                <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Room Type Performance</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Room Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bookings</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Occupancy Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {calculateRoomTypePerformance().map((room, index) => (
+                          <tr key={index}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{room.type}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{room.bookings}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${room.revenue}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${Math.min(100, room.bookings * 10)}%` }}></div>
+                              </div>
+                              <span className="text-xs text-gray-500">{Math.min(100, room.bookings * 10)}%</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                
+                {/* Additional Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Average Length of Stay</h3>
+                    <div className="flex items-center">
+                      <div className="bg-indigo-100 p-3 rounded-full mr-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-gray-800">{calculateAverageLengthOfStay()}</p>
+                        <p className="text-sm text-gray-500">Days per booking</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Revenue Per Room</h3>
+                    <div className="flex items-center">
+                      <div className="bg-emerald-100 p-3 rounded-full mr-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-gray-800">${calculateRevenuePerRoom()}</p>
+                        <p className="text-sm text-gray-500">Average per room</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Max Monthly Revenue</h3>
+                    <div className="flex items-center">
+                      <div className="bg-rose-100 p-3 rounded-full mr-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-gray-800">${calculateMaxMonthlyRevenue()}</p>
+                        <p className="text-sm text-gray-500">Highest month</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
                 <AnalyticsSection selectedProperty={property} />
               </div>
             </div>

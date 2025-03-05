@@ -10,7 +10,8 @@ import {
   HomeIcon,
   Cog6ToothIcon,
   BuildingStorefrontIcon,
-  HeartIcon
+  HeartIcon,
+  MapPinIcon
 } from '@heroicons/react/20/solid';
 
 const Header = () => {
@@ -57,6 +58,14 @@ const Header = () => {
                   >
                     <HomeIcon className="h-5 w-5 mr-2" />
                     Home
+                  </Link>
+                  
+                  <Link
+                    to="/planning"
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                  >
+                    <MapPinIcon className="h-5 w-5 mr-2" />
+                    Trip Planning
                   </Link>
 
                   {/* Navigation based on user type */}
@@ -181,6 +190,17 @@ const Header = () => {
                   <div className="flex items-center">
                     <HomeIcon className="h-5 w-5 mr-2" />
                     Home
+                  </div>
+                </Link>
+                
+                <Link
+                  to="/planning"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <div className="flex items-center">
+                    <MapPinIcon className="h-5 w-5 mr-2" />
+                    Trip Planning
                   </div>
                 </Link>
 

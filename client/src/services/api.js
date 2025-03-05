@@ -32,7 +32,7 @@ api.interceptors.response.use(
 
     // If the error is due to an invalid token and we haven't tried to refresh yet
     if ((error.response?.data?.message === 'Invalid token' || 
-         error.response?.status === 401) && 
+         (error.response?.status === 401 && error.response?.data?.message?.includes('token'))) && 
         !originalRequest._retry) {
       
       originalRequest._retry = true;

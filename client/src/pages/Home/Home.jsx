@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
@@ -7,7 +7,8 @@ import {
   HeartIcon,
   UserIcon,
   HomeIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 import { searchPhotos } from '../../services/pexels';
@@ -69,6 +70,8 @@ const Home = () => {
   const [checkOutDate, setCheckOutDate] = useState(null);
   const [searchParams, setSearchParams] = useState({});
   const [showFilters, setShowFilters] = useState(true);
+  const [selectedPOI, setSelectedPOI] = useState(null);
+  const mapRef = useRef(null);
   const [activeFilters, setActiveFilters] = useState({
     priceRange: [0, 0], // Will be updated when properties load
     rating: 0,
@@ -314,13 +317,50 @@ const Home = () => {
 
   // Load popular destinations on mount
   useEffect(() => {
-    const destinations = ['Paris', 'London', 'New York', 'Tokyo'];
+    const destinations = [
+      { name: 'Paris', lat: 48.8566, lon: 2.3522 },
+      { name: 'London', lat: 51.5074, lon: -0.1278 },
+      { name: 'New York', lat: 40.7128, lon: -74.0060 },
+      { name: 'Tokyo', lat: 35.6762, lon: 139.6503 }
+    ];
     const destinationsWithImages = destinations.map(city => ({
-      name: city,
-      image: `https://source.unsplash.com/400x300/?${city.toLowerCase()},city`
+      ...city,
+      image: `https://source.unsplash.com/400x300/?${city.name.toLowerCase()},city`
     }));
     setPopularDestinations(destinationsWithImages);
   }, []);
+  
+  // Handle POI selection
+  const handlePOIClick = (poi) => {
+    setSelectedPOI(poi.name === selectedPOI ? null : poi.name);
+    
+    // If map is available, highlight the location
+    if (mapRef.current && poi) {
+      // Center map on the POI
+      mapRef.current.setView([poi.lat, poi.lon], 13);
+      
+      // You could also add a marker or highlight effect here
+      // This depends on your map implementation (Leaflet, Google Maps, etc.)
+    }
+  };
+  
+  // Handle POI deletion
+  const handleDeletePOI = (poiName, e) => {
+    e.stopPropagation(); // Prevent triggering the POI click
+    setPopularDestinations(prev => prev.filter(poi => poi.name !== poiName));
+    
+    // If the deleted POI was selected, clear selection
+    if (selectedPOI === poiName) {
+      setSelectedPOI(null);
+    }
+  };
+  
+  // Open Google Maps with coordinates
+  const openInGoogleMaps = (poi, e) => {
+    e.stopPropagation(); // Prevent triggering the POI click
+    const url = `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lon}`;
+    window.open(url, '_blank');
+  };
 
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
@@ -835,18 +875,15 @@ const Home = () => {
               <FilterContainer onFilterChange={handleFilterChange} properties={properties} />
             </div>
             {/* Popular Destinations */}
-            {filteredProperties.length > 0 && popularDestinations.length > 0 && (
+            {popularDestinations.length > 0 && (
               <div className="mb-12">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">Popular Destinations</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {popularDestinations.map((destination) => (
                     <div 
                       key={destination.name} 
-                      className="relative h-40 rounded-lg overflow-hidden cursor-pointer group"
-                      onClick={() => {
-                        setLocation(destination.name);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
+                      className={`relative h-40 rounded-lg overflow-hidden cursor-pointer group ${selectedPOI === destination.name ? 'ring-4 ring-primary-500' : ''}`}
+                      onClick={() => handlePOIClick(destination)}
                     >
                       <img
                         src={destination.image}
@@ -856,6 +893,22 @@ const Home = () => {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                         <div className="absolute bottom-4 left-4">
                           <h3 className="text-white font-semibold text-lg">{destination.name}</h3>
+                        </div>
+                        <div className="absolute top-2 right-2 flex space-x-2">
+                          <button 
+                            onClick={(e) => openInGoogleMaps(destination, e)}
+                            className="p-1.5 bg-white/80 hover:bg-white rounded-full text-gray-700 transition-colors"
+                            title="Open in Google Maps"
+                          >
+                            <MapPinIcon className="h-4 w-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => handleDeletePOI(destination.name, e)}
+                            className="p-1.5 bg-white/80 hover:bg-red-100 rounded-full text-gray-700 hover:text-red-500 transition-colors"
+                            title="Remove destination"
+                          >
+                            <XMarkIcon className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -897,13 +950,25 @@ const Home = () => {
                   {property.name || 'Unnamed Property'}
                 </h3>
                 <p className="text-gray-600 mb-2">
-                  <MapPinIcon className="h-4 w-4 inline mr-1" />
-                  {`${property.city}, ${property.country}`}
-                  {property.distance && (
-                    <span className="ml-2 text-sm text-gray-500">
-                      ({formatDistance(property.distance)})
-                    </span>
-                  )}
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (property.latitude && property.longitude) {
+                        const url = `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
+                        window.open(url, '_blank');
+                      }
+                    }}
+                    className="inline-flex items-center hover:text-primary-600 transition-colors"
+                    title="Open in Google Maps"
+                  >
+                    <MapPinIcon className="h-4 w-4 mr-1" />
+                    {`${property.city}, ${property.country}`}
+                    {property.distance && (
+                      <span className="ml-2 text-sm text-gray-500">
+                        ({formatDistance(property.distance)})
+                      </span>
+                    )}
+                  </button>
                 </p>
                 <p className="text-gray-600 mb-4">
                   <UserIcon className="h-4 w-4 inline mr-1" />

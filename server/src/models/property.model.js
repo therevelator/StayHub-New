@@ -638,14 +638,44 @@ const deleteProperty = async (propertyId) => {
   try {
     await connection.beginTransaction();
 
-    // Delete related records (cascade will handle this automatically)
+    // First, get all rooms for this property
+    const [rooms] = await connection.query('SELECT id FROM rooms WHERE property_id = ?', [propertyId]);
+    const roomIds = rooms.map(room => room.id);
+
+    // Check if there are any active bookings for these rooms
+    if (roomIds.length > 0) {
+      const currentDate = dayjs().format('YYYY-MM-DD');
+      const [activeBookings] = await connection.query(
+        `SELECT COUNT(*) as count FROM bookings 
+         WHERE room_id IN (?) 
+         AND status != 'cancelled' 
+         AND check_out_date >= ?`, 
+        [roomIds, currentDate]
+      );
+      
+      const activeBookingsCount = activeBookings[0].count;
+      
+      if (activeBookingsCount > 0) {
+        await connection.rollback();
+        throw new Error(`Cannot delete property with active bookings. This property has ${activeBookingsCount} active booking(s).`);
+      }
+    }
+
+    // Now delete the property (cascade will handle rooms and other related records)
     await connection.query('DELETE FROM properties WHERE id = ?', [propertyId]);
+    console.log(`Property ${propertyId} deleted successfully`);
 
     await connection.commit();
     return true;
   } catch (error) {
     await connection.rollback();
     console.error('Error deleting property:', error);
+    
+    // Handle MySQL foreign key constraint errors
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      throw new Error('Cannot delete property because it has active bookings or other dependencies');
+    }
+    
     throw error;
   } finally {
     connection.release();

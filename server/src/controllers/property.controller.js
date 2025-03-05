@@ -589,10 +589,10 @@ const updatePropertyById = async (req, res) => {
     }
 
     // Check authorization
-    if (req.user.role !== 'admin' && req.user.userId !== property.host_id) {
+    if (req.user.role !== 'admin' && req.user.id !== property.host_id) {
       console.log('[PropertyController] Update authorization failed:', {
         userRole: req.user.role,
-        userId: req.user.userId,
+        userId: req.user.id,
         hostId: property.host_id
       });
       return res.status(403).json({ 
@@ -644,20 +644,20 @@ const deletePropertyById = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Only allow admin to delete properties
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        status: 'error',
-        message: 'Only administrators can delete properties' 
-      });
-    }
-
     // Check if property exists
     const property = await getProperty(id);
     if (!property) {
       return res.status(404).json({
         status: 'error',
         message: 'Property not found'
+      });
+    }
+    
+    // Allow property owners to delete their own properties
+    if (req.user.role !== 'admin' && property.host_id !== req.user.id) {
+      return res.status(403).json({ 
+        status: 'error',
+        message: 'You can only delete your own properties' 
       });
     }
 
@@ -668,6 +668,16 @@ const deletePropertyById = async (req, res) => {
     });
   } catch (error) {
     console.error('Error deleting property:', error);
+    
+    // Check for specific error messages
+    if (error.message && error.message.includes('active bookings')) {
+      return res.status(400).json({
+        status: 'error',
+        message: error.message,
+        code: 'ACTIVE_BOOKINGS'
+      });
+    }
+    
     res.status(500).json({
       status: 'error',
       message: error.message
@@ -720,7 +730,7 @@ export const getAllProperties = async (req, res) => {
     // Add user filtering only if user exists and is NOT admin
     if (req.user && req.user.role !== 'admin') {
       query += ' AND p.host_id COLLATE utf8mb4_0900_ai_ci = ? COLLATE utf8mb4_0900_ai_ci';
-      queryParams.push(req.user.userId);
+      queryParams.push(req.user.id);
     } else {
       // For public view or admin view, only show active properties
       if (!req.user || req.user.role !== 'admin') {

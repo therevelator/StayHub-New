@@ -16,6 +16,7 @@ import SearchResults from './pages/SearchResults/SearchResults';
 import EditRooms from './pages/EditRooms/EditRooms';
 import RoomPage from './pages/RoomPage/RoomPage';
 import Trips from './pages/Trips/Trips';
+import Planning from './pages/Planning/Planning';
 import AdminRoute from './components/AdminRoute';
 import PrivateRoute from './components/PrivateRoute';
 import PropertyOwnerRoute from './components/PropertyOwnerRoute';
@@ -39,10 +40,34 @@ const propertyOwnerRoutes = [
         ),
       },
       {
+        path: 'properties',
+        element: (
+          <PropertyOwnerRoute>
+            <Dashboard />
+          </PropertyOwnerRoute>
+        ),
+      },
+      {
         path: 'properties/:propertyId',
         element: (
           <PropertyOwnerRoute>
             <PropertyView />
+          </PropertyOwnerRoute>
+        ),
+      },
+      {
+        path: 'properties/add',
+        element: (
+          <PropertyOwnerRoute>
+            <AddPropertyPage />
+          </PropertyOwnerRoute>
+        ),
+      },
+      {
+        path: 'properties/:id/edit',
+        element: (
+          <PropertyOwnerRoute>
+            <EditPropertyPage />
           </PropertyOwnerRoute>
         ),
       }
@@ -62,6 +87,10 @@ export const router = createBrowserRouter([
           {
             path: '/trips',
             element: <PrivateRoute><Trips /></PrivateRoute>,
+          },
+          {
+            path: '/planning',
+            element: <Planning />,
           },
           { index: true, element: <Home /> },
           { path: 'login', element: <Login /> },

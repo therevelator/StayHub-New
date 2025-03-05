@@ -1,0 +1,506 @@
+/* Futuristic Home Styles */
+:root {
+  --primary-color: #3a86ff;
+  --secondary-color: #8338ec;
+  --accent-color: #ff006e;
+  --dark-bg: #0f172a;
+  --light-bg: #1e293b;
+  --text-color: #e2e8f0;
+  --glow-color: rgba(58, 134, 255, 0.6);
+}
+
+/* Futuristic Background */
+.futuristic-bg {
+  background: linear-gradient(135deg, var(--dark-bg) 0%, var(--light-bg) 100%);
+  color: var(--text-color);
+  min-height: 100vh;
+}
+
+/* Glowing Elements */
+.glow-effect {
+  box-shadow: 0 0 15px var(--glow-color);
+  transition: all 0.3s ease;
+}
+
+.glow-effect:hover {
+  box-shadow: 0 0 25px var(--glow-color);
+}
+
+/* Futuristic Header */
+.futuristic-header {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(58, 134, 255, 0.3);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo-glow {
+  text-shadow: 0 0 10px var(--glow-color);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* Hero Section */
+.hero-section {
+  position: relative;
+  height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.9)), url('https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80') center/cover no-repeat;
+}
+
+.hero-content {
+  text-align: center;
+  z-index: 2;
+  max-width: 800px;
+  padding: 0 2rem;
+}
+
+.hero-title {
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 20px rgba(58, 134, 255, 0.3);
+}
+
+.hero-subtitle {
+  font-size: 1.5rem;
+  margin-bottom: 2rem;
+  color: rgba(226, 232, 240, 0.8);
+}
+
+/* Futuristic Search Bar */
+.search-container {
+  max-width: 1200px;
+  margin: -3rem auto 3rem;
+  padding: 0 1rem;
+  position: relative;
+  z-index: 10;
+}
+
+.search-form {
+  background: rgba(30, 41, 59, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 15px;
+  box-shadow: 0 0 20px rgba(58, 134, 255, 0.4);
+  padding: 1.5rem;
+  border: 1px solid rgba(58, 134, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.search-form:hover {
+  box-shadow: 0 0 30px rgba(58, 134, 255, 0.6);
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.search-input-group {
+  position: relative;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(58, 134, 255, 0.2);
+}
+
+.search-input-group:hover {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(58, 134, 255, 0.4);
+}
+
+.search-input-group:focus-within {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 10px rgba(58, 134, 255, 0.3);
+}
+
+.search-input-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.9);
+  margin-bottom: 0.25rem;
+}
+
+.search-input-group input,
+.search-input-group select {
+  width: 100%;
+  height: 48px;
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  color: var(--text-color);
+  transition: border-color 0.2s ease;
+}
+
+.search-input-group input:focus,
+.search-input-group select:focus {
+  outline: none;
+}
+
+.search-input-group .react-datepicker-wrapper {
+  width: 100%;
+}
+
+.search-input-group .react-datepicker__input-container input {
+  width: 100%;
+  height: 48px;
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  color: var(--text-color);
+}
+
+.search-button {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  border: none;
+  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 15px rgba(58, 134, 255, 0.4);
+}
+
+.search-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(58, 134, 255, 0.6);
+}
+
+.search-button:active {
+  transform: translateY(0);
+}
+
+/* Voice Search Button */
+.voice-search-button {
+  position: absolute;
+  right: 60px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(135deg, var(--accent-color), var(--secondary-color));
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(255, 0, 110, 0.4);
+}
+
+.voice-search-button:hover {
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 0 15px rgba(255, 0, 110, 0.6);
+}
+
+/* Smart Stays Section */
+.smart-stays-section {
+  padding: 4rem 0;
+}
+
+/* Voice Recognition Indicator */
+.voice-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--accent-color);
+  margin-right: 8px;
+}
+
+.voice-indicator.pulse {
+  animation: pulse 1.5s infinite;
+  box-shadow: 0 0 0 rgba(255, 0, 110, 0.4);
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 0, 110, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 0, 110, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 0, 110, 0);
+  }
+}
+
+.section-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+  text-align: center;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2rem;
+}
+
+.smart-card {
+  background: rgba(30, 41, 59, 0.7);
+  border-radius: 15px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(58, 134, 255, 0.2);
+}
+
+.smart-card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 0 20px rgba(58, 134, 255, 0.4);
+  border-color: rgba(58, 134, 255, 0.4);
+}
+
+.card-image {
+  height: 200px;
+  width: 100%;
+  object-fit: cover;
+}
+
+.card-content {
+  padding: 1.5rem;
+}
+
+.card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-color);
+}
+
+.card-price {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: var(--primary-color);
+}
+
+.card-description {
+  color: rgba(226, 232, 240, 0.7);
+  margin-bottom: 1rem;
+}
+
+.card-button {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.card-button:hover {
+  box-shadow: 0 0 15px rgba(58, 134, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Tech Perks Section */
+.tech-perks-section {
+  padding: 4rem 0;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.perks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+}
+
+.perk-card {
+  background: rgba(30, 41, 59, 0.7);
+  border-radius: 15px;
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(58, 134, 255, 0.2);
+}
+
+.perk-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 0 20px rgba(58, 134, 255, 0.4);
+  border-color: rgba(58, 134, 255, 0.4);
+}
+
+.perk-icon {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 1.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(58, 134, 255, 0.2), rgba(131, 56, 236, 0.2));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.perk-icon svg {
+  width: 30px;
+  height: 30px;
+  color: var(--primary-color);
+}
+
+.perk-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-color);
+}
+
+.perk-description {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+/* Futuristic Footer */
+.futuristic-footer {
+  background: rgba(15, 23, 42, 0.9);
+  padding: 3rem 0;
+  border-top: 1px solid rgba(58, 134, 255, 0.3);
+}
+
+.footer-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+}
+
+.footer-logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: var(--primary-color);
+  text-shadow: 0 0 10px rgba(58, 134, 255, 0.4);
+}
+
+.footer-links h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text-color);
+}
+
+.footer-links ul {
+  list-style: none;
+  padding: 0;
+}
+
+.footer-links li {
+  margin-bottom: 0.5rem;
+}
+
+.footer-links a {
+  color: rgba(226, 232, 240, 0.7);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.footer-links a:hover {
+  color: var(--primary-color);
+  text-shadow: 0 0 5px rgba(58, 134, 255, 0.4);
+}
+
+.copyright {
+  text-align: center;
+  padding-top: 2rem;
+  margin-top: 2rem;
+  border-top: 1px solid rgba(58, 134, 255, 0.2);
+  color: rgba(226, 232, 240, 0.5);
+}
+
+/* Custom Datepicker Styles */
+.react-datepicker {
+  font-family: inherit;
+  border: none;
+  box-shadow: 0 0 20px rgba(58, 134, 255, 0.3);
+  border-radius: 12px;
+  background: var(--light-bg);
+}
+
+.react-datepicker__header {
+  background: var(--dark-bg);
+  border-bottom: 1px solid rgba(58, 134, 255, 0.2);
+  border-radius: 12px 12px 0 0;
+  color: var(--text-color);
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name {
+  color: var(--text-color);
+}
+
+.react-datepicker__day {
+  color: var(--text-color);
+}
+
+.react-datepicker__day--selected {
+  background-color: var(--primary-color) !important;
+  border-radius: 50%;
+}
+
+.react-datepicker__day:hover {
+  background-color: rgba(58, 134, 255, 0.3);
+  border-radius: 50%;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1024px) {
+  .search-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .hero-title {
+    font-size: 2.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .search-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .search-button {
+    margin-left: 0;
+    width: 100%;
+    border-radius: 12px;
+  }
+  
+  .hero-title {
+    font-size: 2rem;
+  }
+  
+  .hero-subtitle {
+    font-size: 1.25rem;
+  }
+}
+
+/* Error Message */
+.error-message {
+  color: var(--accent-color);
+  margin-top: 10px;
+  text-shadow: 0 0 5px rgba(255, 0, 110, 0.4);
+}
