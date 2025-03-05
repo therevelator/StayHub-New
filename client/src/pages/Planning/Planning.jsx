@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, CircleMarker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MagnifyingGlassIcon, PlusIcon, TrashIcon, MapPinIcon, ArrowPathIcon, PencilIcon, XMarkIcon, ArrowTopRightOnSquareIcon, BuildingOfficeIcon, HomeIcon, StarIcon } from '@heroicons/react/24/solid';
@@ -51,6 +51,7 @@ const Planning = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [tripDays, setTripDays] = useState([]);
   const [pointsOfInterest, setPointsOfInterest] = useState([]);
+  const [sampledSearchPoints, setSampledSearchPoints] = useState([]);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [selectedPOI, setSelectedPOI] = useState(null);
@@ -76,6 +77,7 @@ const Planning = () => {
     solo: false
   });
   const [routePOIs, setRoutePOIs] = useState([]);
+  const [poiRoutes, setPoiRoutes] = useState([]);
   const [hotels, setHotels] = useState([]);
   const [selectedHotel, setSelectedHotel] = useState(null);
   
@@ -227,7 +229,31 @@ const Planning = () => {
     
     // Center map on the POI if selected
     if (mapRef.current && poi.id !== selectedPOI) {
-      mapRef.current.setView([poi.lat, poi.lng], 15);
+      const map = mapRef.current;
+      map.setView([poi.lat, poi.lng], 16, {
+        animate: true,
+        duration: 1,
+        easeLinearity: 0.25
+      });
+
+      // Open the popup for this POI
+      const popupContent = L.popup()
+        .setLatLng([poi.lat, poi.lng])
+        .setContent(`
+          <div class="p-2">
+            <h3 class="font-medium text-lg">${poi.name}</h3>
+            <p class="text-sm text-gray-600 capitalize">${poi.type}</p>
+            <a 
+              href="https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-sm text-blue-600 hover:text-blue-800 flex items-center mt-2"
+            >
+              View in Google Maps
+            </a>
+          </div>
+        `)
+        .openOn(map)
     }
   };
   
@@ -359,274 +385,144 @@ const Planning = () => {
     return R * c;
   };
 
-  // Find points of interest along the route
-  const findRoutePointsOfInterest = async () => {
-    console.log(`Finding POIs along route with ${routeCoordinates.length} coordinates`);
-    if (tripDays.length < 2 || routeCoordinates.length === 0) {
-      console.warn('Cannot find route POIs: not enough destinations or no route coordinates');
+  // Find all points of interest based on selected filters
+  const findPointsOfInterest = async () => {
+    if (tripDays.length < 2 || !routeCoordinates.length) {
+      console.warn('Cannot find POIs: need route coordinates and at least two destinations');
       return;
     }
-    
+
     try {
-      // Create a bounding box for the entire route to limit search area
-      // This ensures we only search in the region of the route
-      let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+      // Get the bounding box from the first and last destinations
+      const firstDay = tripDays[0];
+      const lastDay = tripDays[tripDays.length - 1];
       
-      // Find the bounds of all route coordinates
-      routeCoordinates.forEach(point => {
-        minLat = Math.min(minLat, point[0]);
-        maxLat = Math.max(maxLat, point[0]);
-        minLng = Math.min(minLng, point[1]);
-        maxLng = Math.max(maxLng, point[1]);
-      });
-      
-      // Add a small buffer (0.1 degrees ~ 11km at equator, less at higher latitudes)
-      minLat -= 0.1;
-      maxLat += 0.1;
-      minLng -= 0.1;
-      maxLng += 0.1;
-      
-      console.log(`Route bounding box: [${minLat},${minLng},${maxLat},${maxLng}]`);
-      
-      // Sample points along the route to search for POIs
-      // Use more points for driving to catch more attractions
-      const numSamplePoints = hasCar ? 
-        Math.min(10, Math.max(5, Math.floor(routeCoordinates.length / 100))) : 
-        Math.min(6, Math.max(3, Math.floor(routeCoordinates.length / 150)));
-      
-      const sampledPoints = sampleRoutePoints(routeCoordinates, numSamplePoints);
-      console.log(`Sampled ${sampledPoints.length} points for POI search along route between destinations`);
-      
-      // Add the actual destination points to ensure we get POIs at destinations too
-      // But avoid duplicates by checking distance
-      for (const day of tripDays) {
-        const dayPoint = [day.location.lat, day.location.lng];
-        // Only add if not too close to existing sampled points
-        const isTooClose = sampledPoints.some(point => 
-          calculateDistance(point[0], point[1], dayPoint[0], dayPoint[1]) < 5 // 5km threshold
-        );
-        if (!isTooClose) {
-          sampledPoints.push(dayPoint);
-        }
-      }
-      
-      // For each sampled point, search for POIs
-      const poiPromises = sampledPoints.map(async point => {
-        // Search radius (km) - exactly 5km as requested
-        const radius = 5; // 5km radius from the route
-        
-        // Prioritize POIs based on selected interest if any
-        let interestFilter = '';
-        if (selectedInterest) {
-          const interestToPOITypes = {
-            nature: ['natural', 'park', 'forest', 'beach', 'mountain', 'lake', 'river', 'waterfall', 'viewpoint'],
-            culture: ['museum', 'historic', 'monument', 'castle', 'ruins', 'archaeological_site', 'theatre', 'memorial', 'artwork'],
-            food: ['restaurant', 'cafe', 'bar', 'pub', 'food', 'brewery', 'winery', 'distillery'],
-            adventure: ['theme_park', 'zoo', 'aquarium', 'adventure', 'sports', 'hiking', 'climbing', 'water_park', 'amusement'],
-            relaxation: ['spa', 'beach', 'park', 'garden', 'viewpoint', 'hot_spring', 'resort']
-          };
-          
-          const relevantTypes = interestToPOITypes[selectedInterest] || [];
-          if (relevantTypes.length > 0) {
-            interestFilter = relevantTypes.map(type => 
-              `node["${type}"](around:${radius * 1000},${point[0]},${point[1]});`
-            ).join('\n');
-          }
-        }
-        
-        // Build query based on selected categories or use defaults if none selected
-        let categoryFilters = '';
-        
-        // Check if any categories are selected
-        const hasSelectedCategories = Object.values(selectedCategories).some(arr => arr.length > 0);
-        
-        if (hasSelectedCategories) {
-          // Combine all selected category filters
-          const allFilters = [];
-          
-          Object.keys(selectedCategories).forEach(category => {
-            selectedCategories[category].forEach(filter => {
-              // Parse the filter value to get the key and value
-              const [key, value] = filter.split('=');
-              allFilters.push(`node["${key}"="${value}"](around:${radius * 1000},${point[0]},${point[1]});`);
-            });
-          });
-          
-          categoryFilters = allFilters.join('\n');
-        } else {
-          // Use default filters if no categories are selected
-          categoryFilters = `
-            node["tourism"="attraction"](around:${radius * 1000},${point[0]},${point[1]});
-            node["tourism"="museum"](around:${radius * 1000},${point[0]},${point[1]});
-            node["tourism"="viewpoint"](around:${radius * 1000},${point[0]},${point[1]});
-            node["historic"](around:${radius * 1000},${point[0]},${point[1]});
-            node["natural"](around:${radius * 1000},${point[0]},${point[1]});
-            node["leisure"="park"](around:${radius * 1000},${point[0]},${point[1]});
-          `;
-        }
-        
-        // Get POIs using Overpass API with selected categories
-        // Restrict search to the route's bounding box to avoid getting POIs from unrelated regions
-        const query = `
+      let minLat = Math.min(firstDay.lat, lastDay.lat) - 0.5;
+      let maxLat = Math.max(firstDay.lat, lastDay.lat) + 0.5;
+      let minLng = Math.min(firstDay.lng, lastDay.lng) - 0.5;
+      let maxLng = Math.max(firstDay.lng, lastDay.lng) + 0.5;
+
+      // Sample points along the route to search for localities
+      const routePoints = sampleRoutePoints(routeCoordinates, 5); // Get 5 points along the route
+
+      // First find localities (cities/towns) along the route
+      const localityPromises = routePoints.map(async point => {
+        const localityQuery = `
           [out:json][bbox:${minLat},${minLng},${maxLat},${maxLng}];
           (
-            ${categoryFilters}
-            ${interestFilter}
+            node[place~"city|town|village"](around:5000,${point[0]},${point[1]});
           );
           out body;
         `;
         
-        const response = await axios.post('https://overpass-api.de/api/interpreter', query);
-        
-        if (response.data && response.data.elements) {
-          // Process and filter POIs - only include POIs with names
-          const pois = response.data.elements
-            .filter(element => element.tags && element.tags.name)
-            .map(element => {
-              // Determine if this POI matches the selected interest
-              let isPrioritized = false;
-              if (selectedInterest) {
-                const interestToPOITypes = {
-                  nature: ['natural', 'park', 'forest', 'beach', 'mountain', 'lake', 'river', 'waterfall', 'viewpoint'],
-                  culture: ['museum', 'historic', 'monument', 'castle', 'ruins', 'archaeological_site', 'theatre', 'memorial', 'artwork'],
-                  food: ['restaurant', 'cafe', 'bar', 'pub', 'food', 'brewery', 'winery', 'distillery'],
-                  adventure: ['theme_park', 'zoo', 'aquarium', 'adventure', 'sports', 'hiking', 'climbing', 'water_park', 'amusement'],
-                  relaxation: ['spa', 'beach', 'park', 'garden', 'viewpoint', 'hot_spring', 'resort']
-                };
-                
-                const relevantTypes = interestToPOITypes[selectedInterest] || [];
-                const poiType = element.tags.tourism || element.tags.historic || element.tags.amenity || element.tags.natural || '';
-                const poiName = element.tags.name || '';
-                
-                isPrioritized = relevantTypes.some(type => 
-                  poiType.toLowerCase().includes(type) || 
-                  poiName.toLowerCase().includes(type)
-                );
-              }
-              
-              // Determine if this is a popular attraction
-              const isPopular = element.tags.tourism === 'attraction' || 
-                               element.tags.historic === 'monument' || 
-                               element.tags.historic === 'castle' ||
-                               element.tags.wikidata ||
-                               element.tags.wikipedia;
-              
-              return {
-                id: `route-poi-${element.id}`,
-                name: element.tags.name,
-                lat: element.lat,
-                lng: element.lon,
-                type: element.tags.tourism || element.tags.historic || element.tags.natural || element.tags.amenity || 'attraction',
-                description: element.tags.description || '',
-                isPrioritized,
-                isPopular
-              };
-            })
-            .slice(0, 8); // Increased limit to 8 POIs per point
-          
-          // Sort to prioritize popular attractions and those matching the selected interest
-          pois.sort((a, b) => {
-            // First prioritize popular attractions
-            if (a.isPopular && !b.isPopular) return -1;
-            if (!a.isPopular && b.isPopular) return 1;
-            
-            // Then prioritize by selected interest
-            if (a.isPrioritized && !b.isPrioritized) return -1;
-            if (!a.isPrioritized && b.isPrioritized) return 1;
-            
-            return 0;
-          });
-          
-          return pois;
-        }
-        
-        return [];
+        const response = await axios.post('https://overpass-api.de/api/interpreter', localityQuery);
+        return response.data.elements
+          .filter(element => element.tags?.name)
+          .slice(0, 2); // Limit to 2 closest localities per point
       });
-      
-      // Wait for all POI searches to complete
-      const allRoutePOIs = (await Promise.all(poiPromises)).flat();
-      console.log(`Found ${allRoutePOIs.length} POIs along the route before deduplication`);
-      
-      // Remove duplicates based on ID
-      const uniquePOIs = [];
-      const seenIds = new Set();
-      
-      for (const poi of allRoutePOIs) {
-        if (!seenIds.has(poi.id)) {
-          seenIds.add(poi.id);
-          uniquePOIs.push(poi);
-        }
+
+      const localities = (await Promise.all(localityPromises))
+        .flat()
+        .filter((locality, index, self) => 
+          // Remove duplicates based on name
+          index === self.findIndex(l => l.tags.name === locality.tags.name)
+        );
+
+      // Build category queries
+      const categoryQueries = [];
+      Object.entries(selectedCategories).forEach(([category, values]) => {
+        values.forEach(value => {
+          const [key, val] = value.split('=');
+          categoryQueries.push(`node["${key}"="${val}"];`);
+        });
+      });
+
+      if (categoryQueries.length === 0) {
+        // Default tourist attractions if no filters selected
+        categoryQueries.push(
+          'node["tourism"~"attraction|museum|viewpoint|gallery|artwork"];',
+          'node["historic"~"monument|memorial|ruins|archaeological_site|castle"];',
+          'node["natural"~"beach|cave_entrance|peak|volcano|waterfall"];',
+          'node["leisure"~"park|garden|nature_reserve"];',
+          'node["amenity"~"theatre|cinema|arts_centre"];'
+        );
       }
-      
-      // Sort by popularity, prioritized status, and distance to route
-      uniquePOIs.sort((a, b) => {
-        // First prioritize popular attractions
-        if (a.isPopular && !b.isPopular) return -1;
-        if (!a.isPopular && b.isPopular) return 1;
-        // Then prioritize those matching the selected interest
-        if (a.isPrioritized && !b.isPrioritized) return -1;
-        if (!a.isPrioritized && b.isPrioritized) return 1;
-        return 0;
+
+      // Find POIs near each locality
+      const poiPromises = localities.map(async locality => {
+        const poiQuery = `
+          [out:json];
+          (
+            ${categoryQueries.map(q => 
+              q.replace(';', `(around:5000,${locality.lat},${locality.lon});`)
+            ).join('\n            ')}
+          );
+          out body;
+        `;
+        
+        const response = await axios.post('https://overpass-api.de/api/interpreter', poiQuery);
+        return response.data.elements
+          .filter(element => element.tags?.name)
+          .map(element => ({
+            id: element.id,
+            name: element.tags.name,
+            lat: element.lat,
+            lng: element.lon,
+            type: element.tags.tourism || element.tags.historic || element.tags.natural || element.tags.leisure || element.tags.amenity || 'attraction',
+            locality: locality.tags.name,
+            selected: false
+          }));
       });
-      
-      // Calculate the minimum distance from each POI to the route
-      // This helps us verify that POIs are actually near the route
-      const poisWithDistance = uniquePOIs.map(poi => {
-        // Find minimum distance to any point on the route
-        let minDistance = Infinity;
-        for (const routePoint of routeCoordinates) {
-          const distance = calculateDistance(poi.lat, poi.lng, routePoint[0], routePoint[1]);
-          minDistance = Math.min(minDistance, distance);
-        }
-        return { ...poi, distanceToRoute: minDistance };
-      });
-      
-      // Filter POIs that are actually within 5km of the route
-      const nearRoutePOIs = poisWithDistance.filter(poi => poi.distanceToRoute <= 5);
-      
-      // Sort by distance to route (closest first)
-      nearRoutePOIs.sort((a, b) => a.distanceToRoute - b.distanceToRoute);
-      
-      // Show more POIs when driving
-      const poiLimit = hasCar ? 25 : 15;
-      console.log(`Found ${nearRoutePOIs.length} POIs within 5km of the route (showing up to ${poiLimit})`);
-      setRoutePOIs(nearRoutePOIs.slice(0, poiLimit));
+
+      const allPois = (await Promise.all(poiPromises))
+        .flat()
+        .filter((poi, index, self) => 
+          // Remove duplicates based on ID
+          index === self.findIndex(p => p.id === poi.id)
+        );
+
+      setPointsOfInterest(allPois);
     } catch (error) {
       console.error('Error finding route POIs:', error);
+      Swal.fire({
+        title: 'Error',
+        text: 'Failed to find points of interest along the route',
+        icon: 'error'
+      });
     }
   };
-  
+
   // Helper function to sample points along the route
   const sampleRoutePoints = (route, count) => {
     if (!route || route.length === 0) {
       console.warn('Cannot sample empty route');
       return [];
     }
-    
+
     console.log(`Sampling ${count} points from route with ${route.length} coordinates`);
-    
+
     // If route is very short, just return a subset or all points
     if (route.length <= count) {
       return [...route];
     }
-    
+
     if (route.length <= 3) {
       const midIndex = Math.floor(route.length / 2);
       return [route[midIndex]];
     }
-    
+
     const points = [];
-    
+
     // Always include a point near the start (but not the exact start to avoid duplicating destination POIs)
     if (route.length > 10) {
       const startIndex = Math.max(1, Math.floor(route.length * 0.1));
       points.push(route[startIndex]);
     }
-    
+
     // For routes with multiple segments (like between 3+ destinations), sample from each segment
     // Divide the route into (count-2) segments and take a point from each
     const segmentSize = route.length / (count);
-    
+
     // Add evenly distributed points along the route
     for (let i = 1; i < count - 1; i++) {
       const index = Math.floor(i * segmentSize);
@@ -634,7 +530,7 @@ const Planning = () => {
         points.push(route[index]);
       }
     }
-    
+
     // Always include a point near the end (but not the exact end)
     if (route.length > 10) {
       const endIndex = Math.min(route.length - 2, Math.floor(route.length * 0.9));
@@ -642,7 +538,7 @@ const Planning = () => {
         points.push(route[endIndex]);
       }
     }
-    
+
     console.log(`Sampled ${points.length} points along route between destinations`);
     return points;
   };
@@ -662,7 +558,7 @@ const Planning = () => {
             guests: 2 // Default to 2 guests
           }
         });
-        
+
         if (response.data.status === 'success') {
           // Process hotels
           const hotels = response.data.data.map(hotel => ({
@@ -675,16 +571,16 @@ const Planning = () => {
               hotel.longitude
             )
           }));
-          
+
           return hotels;
         }
-        
+
         return [];
       });
-      
+
       // Wait for all hotel searches to complete
       const allHotels = await Promise.all(hotelsPromises);
-      
+
       // Flatten the array and sort by distance within each day
       const flattenedHotels = allHotels.flat().sort((a, b) => {
         if (a.dayIndex !== b.dayIndex) {
@@ -692,10 +588,27 @@ const Planning = () => {
         }
         return a.distance - b.distance;
       });
-      
+
       setHotels(flattenedHotels);
     } catch (error) {
       console.error('Error finding hotels:', error);
+    }
+  };
+
+  // Calculate route to a POI
+  const calculatePOIRoute = async (startPoint, poi) => {
+    try {
+      const response = await axios.get(
+        `https://router.project-osrm.org/route/v1/${transportMode}/${startPoint[0]},${startPoint[1]};${poi.lat},${poi.lng}?overview=full&geometries=geojson`
+      );
+
+      if (response.data.routes && response.data.routes[0]) {
+        return response.data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error calculating POI route:', error);
+      return null;
     }
   };
 
@@ -710,19 +623,54 @@ const Planning = () => {
       });
       return;
     }
-    
+
     // Log all destinations for debugging
     console.log('Generating plan with destinations:', tripDays.map((day, index) => `Day ${index + 1}: ${day.location.name}`));
-    
+
     setIsGeneratingPlan(true);
     setRoutePOIs([]); // Clear existing route POIs
-    
+
     try {
       // 1. Generate route between all locations in order
-      const waypoints = tripDays.map(day => `${day.location.lat},${day.location.lng}`).join(';');
+      // Log each location's coordinates
+      tripDays.forEach(day => {
+        console.log(`Location ${day.location.name}:`, {
+          lat: day.location.lat,
+          lng: day.location.lng,
+          original: day.location
+        });
+      });
+
+      // Validate coordinates
+      const invalidLocation = tripDays.find(day => {
+        const lat = parseFloat(day.location.lat);
+        const lng = parseFloat(day.location.lng);
+        return isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180;
+      });
+
+      if (invalidLocation) {
+        console.error('Invalid coordinates found:', invalidLocation);
+        Swal.fire({
+          title: 'Invalid Coordinates',
+          text: `Invalid coordinates found for location: ${invalidLocation.location.name}`,
+          icon: 'error'
+        });
+        setIsGeneratingPlan(false);
+        return;
+      }
+
+      // OSRM API expects coordinates in format: longitude,latitude
+      const waypoints = tripDays.map(day => [
+        parseFloat(day.location.lng).toFixed(6),
+        parseFloat(day.location.lat).toFixed(6)
+      ].join(',')).join(';');
+      
+      // Clear any existing routes
+      setRouteCoordinates([]);
+      setPoiRoutes([]);
       console.log(`Calculating ${transportMode} route between ${tripDays.length} waypoints:`, waypoints);
       console.log(`Destinations: ${tripDays.map(day => day.location.name).join(' → ')}`);
-      
+
       // For OSRM API, we need to ensure we have valid coordinates
       if (!waypoints.match(/^(-?\d+\.\d+,-?\d+\.\d+;)+(-?\d+\.\d+,-?\d+\.\d+)$/)) {
         console.error('Invalid waypoints format:', waypoints);
@@ -734,34 +682,42 @@ const Planning = () => {
         setIsGeneratingPlan(false);
         return;
       }
-      
+
       try {
+        // Waypoints are already in the correct format
+        const formattedWaypoints = waypoints;
+
         const routeResponse = await axios.get(
-          `https://router.project-osrm.org/route/v1/${transportMode}/${waypoints}?overview=full&geometries=geojson`
+          `https://router.project-osrm.org/route/v1/${transportMode}/${formattedWaypoints}?overview=full&geometries=geojson`
         );
-        
+
         console.log('Route response received');
-        
+
         if (routeResponse.data.routes && routeResponse.data.routes.length > 0) {
           // Extract route coordinates
           const route = routeResponse.data.routes[0].geometry.coordinates;
           console.log(`Route has ${route.length} coordinates`);
-          
+          console.log('First few route coordinates:', route.slice(0, 3));
+          console.log('Last few route coordinates:', route.slice(-3));
+
           // Get route distance and duration
           const distance = (routeResponse.data.routes[0].distance / 1000).toFixed(1); // km
           const duration = Math.round(routeResponse.data.routes[0].duration / 60); // minutes
           console.log(`Route distance: ${distance}km, duration: ${duration} minutes`);
-          
+
           // Convert from [lng, lat] to [lat, lng] for Leaflet
+          // OSRM returns [lng, lat], Leaflet needs [lat, lng]
           const leafletCoordinates = route.map(point => [point[1], point[0]]);
+          console.log('First few Leaflet coordinates:', leafletCoordinates.slice(0, 3));
+          console.log('Last few Leaflet coordinates:', leafletCoordinates.slice(-3));
           setRouteCoordinates(leafletCoordinates);
-          
+
           // Center map on the route
           if (mapRef.current && leafletCoordinates.length > 0) {
             const bounds = L.latLngBounds(leafletCoordinates);
             mapRef.current.fitBounds(bounds, { padding: [50, 50] });
           }
-          
+
           // Show success message with route info
           Swal.fire({
             title: 'Route Calculated',
@@ -773,7 +729,7 @@ const Planning = () => {
             timer: 5000,
             timerProgressBar: true
           });
-          
+
           // Find POIs along the route
           setTimeout(() => findRoutePointsOfInterest(), 500);
         } else {
@@ -787,10 +743,10 @@ const Planning = () => {
       } catch (error) {
         console.error('Error fetching route:', error);
       }
-      
+
       // 2. Find points of interest for each destination location
       const allPOIs = [];
-      
+
       // Process each destination to find POIs
       for (const day of tripDays) {
         try {
@@ -804,7 +760,7 @@ const Planning = () => {
               adventure: ['theme_park', 'zoo', 'aquarium', 'adventure', 'sports', 'hiking', 'climbing'],
               relaxation: ['spa', 'beach', 'park', 'garden', 'viewpoint']
             };
-            
+
             const relevantTypes = interestToPOITypes[selectedInterest] || [];
             if (relevantTypes.length > 0) {
               interestFilter = relevantTypes.map(type => 
@@ -812,18 +768,18 @@ const Planning = () => {
               ).join('\n');
             }
           }
-          
+
           // Use Overpass API to find points of interest
           // Build query based on selected categories or use defaults if none selected
           let categoryFilters = '';
-          
+
           // Check if any categories are selected
           const hasSelectedCategories = Object.values(selectedCategories).some(arr => arr.length > 0);
-          
+
           if (hasSelectedCategories) {
             // Combine all selected category filters
             const allFilters = [];
-            
+
             Object.keys(selectedCategories).forEach(category => {
               selectedCategories[category].forEach(filter => {
                 // Parse the filter value to get the key and value
@@ -831,7 +787,7 @@ const Planning = () => {
                 allFilters.push(`node["${key}"="${value}"](around:5000,${day.location.lat},${day.location.lng});`);
               });
             });
-            
+
             categoryFilters = allFilters.join('\n');
           } else {
             // Use default filters if no categories are selected
@@ -842,7 +798,7 @@ const Planning = () => {
               node["leisure"="park"](around:5000,${day.location.lat},${day.location.lng});
             `;
           }
-          
+
           const query = `
             [out:json];
             (
@@ -851,13 +807,13 @@ const Planning = () => {
             );
             out body;
           `;
-          
+
           const overpassResponse = await axios.post(
             'https://overpass-api.de/api/interpreter',
             query,
             { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
           );
-          
+
           if (overpassResponse.data && overpassResponse.data.elements) {
             const pois = overpassResponse.data.elements
               .filter(element => element.tags && element.tags.name)
@@ -872,17 +828,17 @@ const Planning = () => {
                     adventure: ['theme_park', 'zoo', 'aquarium', 'adventure', 'sports', 'hiking', 'climbing'],
                     relaxation: ['spa', 'beach', 'park', 'garden', 'viewpoint']
                   };
-                  
+
                   const relevantTypes = interestToPOITypes[selectedInterest] || [];
                   const poiType = element.tags.tourism || element.tags.historic || element.tags.amenity || '';
                   const poiName = element.tags.name || '';
-                  
+
                   isPrioritized = relevantTypes.some(type => 
                     poiType.toLowerCase().includes(type) || 
                     poiName.toLowerCase().includes(type)
                   );
                 }
-                
+
                 return {
                   id: element.id,
                   name: element.tags.name,
@@ -894,26 +850,43 @@ const Planning = () => {
                 };
               })
               .slice(0, 10); // Limit to 10 POIs per location
-            
+
             // Sort to prioritize POIs that match the selected interest
             pois.sort((a, b) => {
               if (a.isPrioritized && !b.isPrioritized) return -1;
               if (!a.isPrioritized && b.isPrioritized) return 1;
               return 0;
             });
+
+            // Clear previous POI routes when adding new ones
+            setPoiRoutes([]);
             
+            // Calculate routes to each POI
+            const newPOIRoutes = [];
+            for (const poi of pois) {
+              const startPoint = [day.location.lat, day.location.lng];
+              const route = await calculatePOIRoute(startPoint, poi);
+              if (route) {
+                newPOIRoutes.push({
+                  poiId: poi.id,
+                  coordinates: route,
+                  dayId: day.id
+                });
+              }
+            }
+            setPoiRoutes(newPOIRoutes);
             allPOIs.push(...pois);
           }
         } catch (error) {
           console.error(`Error finding POIs for ${day.location.name}:`, error);
         }
       }
-      
+
       setPointsOfInterest(allPOIs);
-      
+
       // 3. Find hotels for each day
       await findHotelsForTrip();
-      
+
       // 4. Find points of interest along the route regardless of transport mode
       if (routeCoordinates.length > 0) {
         console.log('Finding POIs along the calculated route');
@@ -921,7 +894,7 @@ const Planning = () => {
       } else {
         console.warn('No route coordinates available for POI search');
       }
-      
+
       Swal.fire({
         title: 'Trip Plan Generated!',
         text: `Found ${allPOIs.length} points of interest across your trip destinations.`,
@@ -1096,6 +1069,101 @@ const Planning = () => {
               <div className="mt-6 border-t pt-4">
                 <h3 className="text-sm font-medium text-gray-700 mb-3">Point of Interest Categories</h3>
                 <p className="text-xs text-gray-500 mb-4">Select categories to customize your trip recommendations</p>
+                
+                {/* Category Filters */}
+                <div className="space-y-4">
+                  {Object.entries(categoryOptions).map(([category, options]) => (
+                    <div key={category} className="space-y-2">
+                      <h4 className="text-sm font-medium capitalize">{category}</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {options.map(option => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setSelectedCategories(prev => ({
+                                ...prev,
+                                [category]: prev[category].includes(option.value)
+                                  ? prev[category].filter(v => v !== option.value)
+                                  : [...prev[category], option.value]
+                              }));
+                              findPointsOfInterest();
+                            }}
+                            className={`text-xs px-2 py-1 rounded-full ${selectedCategories[category].includes(option.value)
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Available Points of Interest */}
+                <div className="mt-6 space-y-4 border-t pt-4">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-sm font-medium">Available Attractions</h4>
+                    <button
+                      onClick={() => {
+                        const selected = pointsOfInterest.filter(poi => poi.selected);
+                        if (selected.length === 0) {
+                          Swal.fire({
+                            title: 'No Attractions Selected',
+                            text: 'Please select some attractions to add to your trip.',
+                            icon: 'info'
+                          });
+                          return;
+                        }
+                        // Add selected POIs to trip plan
+                        const newTripDays = [...tripDays];
+                        selected.forEach(poi => {
+                          newTripDays.push({
+                            ...poi,
+                            type: 'poi',
+                            date: null
+                          });
+                        });
+                        setTripDays(newTripDays);
+                        setPointsOfInterest(prev => prev.map(p => ({ ...p, selected: false })));
+                      }}
+                      className="text-sm px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                      Add Selected to Trip
+                    </button>
+                  </div>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {pointsOfInterest.map((poi) => (
+                      <div 
+                        key={poi.id} 
+                        className={`bg-white p-4 rounded-lg shadow-sm border-2 transition-colors cursor-pointer ${poi.selected ? 'border-blue-500' : 'border-transparent hover:border-gray-200'}`}
+                        onClick={() => {
+                          setPointsOfInterest(prev =>
+                            prev.map(p => p.id === poi.id ? { ...p, selected: !p.selected } : p)
+                          );
+                        }}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-medium">{poi.name}</h4>
+                            <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
+                          </div>
+                          <div className={`w-4 h-4 rounded-full border-2 ${poi.selected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`} />
+                        </div>
+                        <a 
+                          href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-2"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
+                          View in Google Maps
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 
                 {/* Tourism & Attractions */}
                 <div className="mb-4">
@@ -1412,6 +1480,16 @@ const Planning = () => {
                                   <>
                                     <p className="font-medium">{poi.name}</p>
                                     <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
+                                    <a 
+                                      href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
+                                      View in Google Maps
+                                    </a>
                                   </>
                                 )}
                               </div>
@@ -1521,148 +1599,94 @@ const Planning = () => {
           
           {/* Map Section */}
           <div className="lg:col-span-2 bg-white rounded-xl shadow-lg overflow-hidden">
-            <MapContainer
-              center={[45.9432, 24.9668]} // Default to Romania center
-              zoom={6}
-              style={{ height: "600px", width: "100%" }}
+            <MapContainer 
+              center={[routeCoordinates[0]?.[0] || 0, routeCoordinates[0]?.[1] || 0]} 
+              zoom={13} 
+              style={{ height: '500px', width: '100%' }}
+              ref={mapRef}
             >
               <TileLayer
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               />
               
-              {/* Show trip days markers */}
-              {tripDays.map((day, index) => (
-                <Marker 
-                  key={day.id} 
-                  position={[day.location.lat, day.location.lng]}
-                  icon={createCustomIcon('blue')}
+              {/* Display route */}
+              {routeCoordinates.length > 0 && (
+                <Polyline
+                  positions={routeCoordinates}
+                  color="#3b82f6"
+                  weight={4}
+                  opacity={0.7}
+                />
+              )}
+
+              {/* Display POI routes */}
+              {poiRoutes.map((route, index) => (
+                <Polyline
+                  key={`route-${route.poiId}-${index}`}
+                  positions={route.coordinates}
+                  color="#EF4444"
+                  weight={3}
+                  opacity={0.6}
+                  dashArray="5, 10"
+                />
+              ))}
+
+              {/* Display Search Points */}
+              {sampledSearchPoints.map((point, index) => (
+                <CircleMarker
+                  key={`search-point-${index}`}
+                  center={[point[0], point[1]]}
+                  radius={8}
+                  fillColor="#3B82F6"
+                  fillOpacity={0.6}
+                  color="#2563EB"
+                  weight={2}
                 >
                   <Popup>
-                    <div className="p-2 min-w-[200px]">
-                      <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                        Day {index + 1}
-                      </span>
-                      <h3 className="font-semibold mt-1">{day.location.name}</h3>
-                      {day.location.city && day.location.country && (
-                        <p className="text-sm text-gray-600">{day.location.city}, {day.location.country}</p>
-                      )}
+                    <div className="text-sm">
+                      Search Point {index + 1}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Looking for attractions near this point
+                      </p>
                     </div>
                   </Popup>
-                </Marker>
+                </CircleMarker>
               ))}
-                            {/* Show route points of interest */}
-              {routePOIs.map(poi => (
-                <Marker 
-                  key={poi.id} 
-                  position={[poi.lat, poi.lng]}
-                  icon={createCustomIcon(poi.isPopular ? 'yellow' : 'blue')}
-                  eventHandlers={{
-                    click: () => {
-                      setSelectedPOI(poi.id);
-                    }
-                  }}
-                >
-                  <Popup>
-                    <div className="p-2 min-w-[200px]">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold">{poi.name}</h3>
-                        {poi.isPopular && (
-                          <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                            Popular
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
-                      {poi.description && <p className="text-xs mt-1">{poi.description}</p>}
-                      <div className="mt-2 flex justify-end">
-                        <button 
-                          onClick={() => openInGoogleMaps(poi)}
-                          className="flex items-center text-sm text-blue-600 hover:text-blue-800"
-                          title="Open in Google Maps"
-                        >
-                          <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-1" />
-                          Google Maps
-                        </button>
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
-              
-              {/* Show points of interest */}
+
+              {/* Display POIs */}
               {pointsOfInterest.map(poi => (
                 <Marker 
                   key={poi.id} 
                   position={[poi.lat, poi.lng]}
-                  icon={createCustomIcon(selectedPOI === poi.id ? 'green' : 'red')}
+                  icon={createCustomIcon('#EF4444')}
                   eventHandlers={{
-                    click: () => {
-                      setSelectedPOI(poi.id);
-                    }
+                    click: () => handlePOIClick(poi)
                   }}
                 >
                   <Popup>
-                    <div className="p-2 min-w-[200px]">
-                      <h3 className="font-semibold">{poi.name}</h3>
-                      <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
-                      {poi.distanceToRoute && (
-                        <p className="text-xs mt-1">
-                          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                            {poi.distanceToRoute.toFixed(1)}km from route
-                          </span>
+                    <div className="space-y-2">
+                      <h3 className="font-medium">{poi.name}</h3>
+                      <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
+                      {poi.locality && (
+                        <p className="text-xs text-gray-500">
+                          Located in {poi.locality}
+                          {poi.distanceToRoute && ` (${poi.distanceToRoute.toFixed(1)}km from route)`}
                         </p>
                       )}
-                      <div className="mt-2 flex justify-end">
-                        <button 
-                          onClick={() => openInGoogleMaps(poi)}
-                          className="flex items-center text-sm text-blue-600 hover:text-blue-800"
-                          title="Open in Google Maps"
-                        >
-                          <ArrowTopRightOnSquareIcon className="h-4 w-4 mr-1" />
-                          Google Maps
-                        </button>
-                      </div>
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
+                      >
+                        <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
+                        View in Google Maps
+                      </a>
                     </div>
                   </Popup>
                 </Marker>
               ))}
-              
-              {/* Show route line with different styles based on transport mode */}
-              {routeCoordinates.length > 0 && (
-                <>
-                  {/* Main route line */}
-                  <Polyline 
-                    positions={routeCoordinates}
-                    color={transportMode === "driving" ? "blue" : (transportMode === "cycling" ? "green" : "purple")}
-                    weight={4}
-                    opacity={0.8}
-                    dashArray={transportMode === "walking" ? "5, 10" : null}
-                  />
-                  
-                  {/* 5km buffer visualization around the route (commented out as it might be visually cluttered) */}
-                  {/* routeCoordinates.length > 0 && (
-                    routeCoordinates.filter((_, i) => i % 20 === 0).map((point, i) => (
-                      <Circle 
-                        key={`buffer-${i}`}
-                        center={point}
-                        radius={5000}
-                        pathOptions={{ color: 'rgba(0, 0, 255, 0.1)', weight: 1, fillOpacity: 0.05 }}
-                      />
-                    ))
-                  ) */}
-                </>
-              )}
-              
-              {/* Fit map to markers */}
-              {tripDays.length > 0 && (
-                <MapController 
-                  locations={tripDays.map(day => ({ lat: day.location.lat, lng: day.location.lng }))} 
-                />
-              )}
-              
-              {/* Store map reference */}
-              <div ref={(el) => { mapRef.current = el?._map || null; }} />
             </MapContainer>
           </div>
         </div>
