@@ -1,8 +1,26 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, CircleMarker, useMap } from 'react-leaflet';
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+  CircleMarker,
+  useMap,
+} from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MagnifyingGlassIcon, PlusIcon, TrashIcon, MapPinIcon, ArrowPathIcon, PencilIcon, XMarkIcon, ArrowTopRightOnSquareIcon, BuildingOfficeIcon, HomeIcon, StarIcon, SparklesIcon } from '@heroicons/react/24/solid';
+import {
+  MagnifyingGlassIcon,
+  PlusIcon,
+  TrashIcon,
+  MapPinIcon,
+  ArrowPathIcon,
+  PencilIcon,
+  XMarkIcon,
+  ArrowTopRightOnSquareIcon,
+  BuildingOfficeIcon,
+} from '@heroicons/react/24/solid';
 import { format } from 'date-fns';
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -11,37 +29,41 @@ import api from '../../services/api';
 // Fix Leaflet default marker icon issue
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
 // Custom marker icons
 const createCustomIcon = (color) => {
-  // Add yellow for popular attractions
-  const iconColor = ['blue', 'red', 'green', 'yellow'].includes(color) ? color : 'blue';
-  
+  const iconColor = ['blue', 'red', 'green', 'yellow'].includes(color)
+    ? color
+    : 'blue';
+
   return new L.Icon({
     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${iconColor}.png`,
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
     iconSize: [25, 41],
     iconAnchor: [12, 41],
     popupAnchor: [1, -34],
-    shadowSize: [41, 41]
+    shadowSize: [41, 41],
   });
 };
 
 // Map controller to fit bounds
 const MapController = ({ locations }) => {
   const map = useMap();
-  
+
   useEffect(() => {
     if (locations && locations.length > 0) {
-      const bounds = L.latLngBounds(locations.map(loc => [loc.lat, loc.lng]));
+      const bounds = L.latLngBounds(locations.map((loc) => [loc.lat, loc.lng]));
       map.fitBounds(bounds, { padding: [50, 50] });
     }
   }, [locations, map]);
-  
+
   return null;
 };
 
@@ -59,7 +81,7 @@ const Planning = () => {
   const [editingPOI, setEditingPOI] = useState(null);
   const [newPOIName, setNewPOIName] = useState('');
   const mapRef = useRef(null);
-  
+
   // Trip preferences
   const [hasCar, setHasCar] = useState(false);
   const [interests, setInterests] = useState({
@@ -67,7 +89,7 @@ const Planning = () => {
     culture: false,
     food: false,
     adventure: false,
-    relaxation: false
+    relaxation: false,
   });
   const [selectedInterest, setSelectedInterest] = useState(null);
   const [tripStyle, setTripStyle] = useState({
@@ -75,7 +97,7 @@ const Planning = () => {
     luxury: false,
     family: false,
     romantic: false,
-    solo: false
+    solo: false,
   });
   const [routePOIs, setRoutePOIs] = useState([]);
   const [poiRoutes, setPoiRoutes] = useState([]);
@@ -84,7 +106,8 @@ const Planning = () => {
   const [mapLocations, setMapLocations] = useState([]);
   const [isUsingAiForPoi, setIsUsingAiForPoi] = useState(false);
   const [isProcessingAiPoi, setIsProcessingAiPoi] = useState(false);
-  
+  const [ollamaModel, setOllamaModel] = useState('llama3.2:latest');
+
   // POI Category selections
   const [selectedCategories, setSelectedCategories] = useState({
     tourism: [],
@@ -92,12 +115,15 @@ const Planning = () => {
     historic: [],
     leisure: [],
     entertainment: [],
-    sports: []
+    sports: [],
   });
-  
+
   // Transportation mode selection
   const [transportMode, setTransportMode] = useState('driving'); // Default to driving
-  
+
+  // POI distance from route selection
+  const [poiDistance, setPoiDistance] = useState(10); // Default to 10km
+
   // POI Category options
   const categoryOptions = {
     tourism: [
@@ -109,7 +135,7 @@ const Planning = () => {
       { value: 'tourism=aquarium', label: 'Aquariums' },
       { value: 'tourism=viewpoint', label: 'Scenic Viewpoints' },
       { value: 'tourism=information', label: 'Tourist Information' },
-      { value: 'tourism=hotel', label: 'Hotels & Accommodations' }
+      { value: 'tourism=hotel', label: 'Hotels & Accommodations' },
     ],
     natural: [
       { value: 'natural=peak', label: 'Mountains & Peaks' },
@@ -118,7 +144,7 @@ const Planning = () => {
       { value: 'natural=beach', label: 'Beaches' },
       { value: 'natural=cave_entrance', label: 'Caves' },
       { value: 'natural=geyser', label: 'Geysers' },
-      { value: 'natural=hot_spring', label: 'Hot Springs' }
+      { value: 'natural=hot_spring', label: 'Hot Springs' },
     ],
     historic: [
       { value: 'historic=castle', label: 'Castles' },
@@ -127,7 +153,7 @@ const Planning = () => {
       { value: 'historic=memorial', label: 'Memorials' },
       { value: 'historic=ruins', label: 'Ruins' },
       { value: 'historic=fort', label: 'Fortresses' },
-      { value: 'historic=church', label: 'Religious Landmarks' }
+      { value: 'historic=church', label: 'Religious Landmarks' },
     ],
     leisure: [
       { value: 'leisure=park', label: 'Public Parks' },
@@ -135,14 +161,14 @@ const Planning = () => {
       { value: 'leisure=nature_reserve', label: 'Nature Reserves' },
       { value: 'leisure=stadium', label: 'Stadiums' },
       { value: 'leisure=playground', label: 'Playgrounds' },
-      { value: 'leisure=marina', label: 'Marinas' }
+      { value: 'leisure=marina', label: 'Marinas' },
     ],
     entertainment: [
       { value: 'amenity=theatre', label: 'Theatres' },
       { value: 'amenity=cinema', label: 'Cinemas' },
       { value: 'amenity=casino', label: 'Casinos' },
       { value: 'amenity=nightclub', label: 'Nightclubs' },
-      { value: 'amenity=bar', label: 'Bars & Pubs' }
+      { value: 'amenity=bar', label: 'Bars & Pubs' },
     ],
     sports: [
       { value: 'sport=skiing', label: 'Skiing' },
@@ -150,30 +176,30 @@ const Planning = () => {
       { value: 'leisure=pitch', label: 'Sports Fields' },
       { value: 'leisure=fitness_centre', label: 'Fitness Centers' },
       { value: 'leisure=golf_course', label: 'Golf Courses' },
-      { value: 'leisure=sports_centre', label: 'Sports Centers' }
-    ]
+      { value: 'leisure=sports_centre', label: 'Sports Centers' },
+    ],
   };
-  
+
   // Search for locations using OpenCage
   const searchLocation = useCallback(async (query) => {
     if (!query) {
       setSearchResults([]);
       return;
     }
-    
+
     setIsSearching(true);
     try {
       const response = await fetch(
         `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}&limit=5`
       );
       const data = await response.json();
-      
+
       if (data.results) {
-        const locations = data.results.map(result => ({
+        const locations = data.results.map((result) => ({
           name: result.formatted,
           lat: result.geometry.lat,
           lng: result.geometry.lng,
-          components: result.components
+          components: result.components,
         }));
         setSearchResults(locations);
       }
@@ -194,7 +220,7 @@ const Planning = () => {
       setSearchResults([]);
     }
   };
-  
+
   // Debug function to log current trip days
   const logTripDays = () => {
     console.log('Current trip days:', tripDays);
@@ -204,7 +230,7 @@ const Planning = () => {
   const handleLocationSelect = (location) => {
     setSearchQuery('');
     setSearchResults([]);
-    
+
     // Add the selected location to trip days
     const newDay = {
       id: Date.now(),
@@ -213,44 +239,44 @@ const Planning = () => {
         lat: location.lat,
         lng: location.lng,
         city: location.components.city || location.components.town || location.components.village || '',
-        country: location.components.country || ''
+        country: location.components.country || '',
       },
       date: format(new Date(), 'yyyy-MM-dd'),
-      pointsOfInterest: []
+      pointsOfInterest: [],
     };
-    
+
     setTripDays([...tripDays, newDay]);
   };
 
   // Handle day removal
   const handleRemoveDay = (dayId) => {
-    setTripDays(tripDays.filter(day => day.id !== dayId));
+    setTripDays(tripDays.filter((day) => day.id !== dayId));
   };
-  
+
   // Effect to update mapLocations when tripDays change
   useEffect(() => {
     if (tripDays.length > 0) {
-      const locations = tripDays.map(day => ({
+      const locations = tripDays.map((day) => ({
         lat: day.location.lat,
-        lng: day.location.lng
+        lng: day.location.lng,
       }));
-      
+
       // Update the mapLocations state
       setMapLocations(locations);
     }
   }, [tripDays]);
-  
+
   // Handle POI click to highlight on map
   const handlePOIClick = (poi) => {
     setSelectedPOI(poi.id === selectedPOI ? null : poi.id);
-    
+
     // Center map on the POI if selected
     if (mapRef.current && poi.id !== selectedPOI) {
       const map = mapRef.current;
       map.setView([poi.lat, poi.lng], 16, {
         animate: true,
         duration: 1,
-        easeLinearity: 0.25
+        easeLinearity: 0.25,
       });
 
       // Open the popup for this POI
@@ -270,56 +296,56 @@ const Planning = () => {
             </a>
           </div>
         `)
-        .openOn(map)
+        .openOn(map);
     }
   };
-  
+
   // Handle POI deletion
   const handleDeletePOI = (e, poiId) => {
     e.stopPropagation(); // Prevent triggering the POI click
-    setPointsOfInterest(prev => prev.filter(poi => poi.id !== poiId));
-    
+    setPointsOfInterest((prev) => prev.filter((poi) => poi.id !== poiId));
+
     // If the deleted POI was selected, clear selection
     if (selectedPOI === poiId) {
       setSelectedPOI(null);
     }
-    
+
     // If the deleted POI was being edited, clear editing state
     if (editingPOI === poiId) {
       setEditingPOI(null);
     }
   };
-  
+
   // Handle POI edit
   const handleEditPOI = (e, poi) => {
     e.stopPropagation(); // Prevent triggering the POI click
     setEditingPOI(poi.id);
     setNewPOIName(poi.name);
   };
-  
+
   // Handle save POI name
   const handleSavePOI = (e, poiId) => {
     e.stopPropagation(); // Prevent triggering the POI click
-    
+
     if (newPOIName.trim()) {
-      setPointsOfInterest(prev => 
-        prev.map(poi => 
+      setPointsOfInterest((prev) =>
+        prev.map((poi) =>
           poi.id === poiId ? { ...poi, name: newPOIName.trim() } : poi
         )
       );
     }
-    
+
     setEditingPOI(null);
     setNewPOIName('');
   };
-  
+
   // Handle cancel edit
   const handleCancelEdit = (e) => {
     e.stopPropagation(); // Prevent triggering the POI click
     setEditingPOI(null);
     setNewPOIName('');
   };
-  
+
   // Open Google Maps with coordinates
   const openInGoogleMaps = (poi) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`;
@@ -328,84 +354,84 @@ const Planning = () => {
 
   // Handle interest checkbox change
   const handleInterestChange = (interest) => {
-    setInterests(prev => ({
+    setInterests((prev) => ({
       ...prev,
-      [interest]: !prev[interest]
+      [interest]: !prev[interest],
     }));
   };
 
   // Handle trip style checkbox change
   const handleTripStyleChange = (style) => {
-    setTripStyle(prev => ({
+    setTripStyle((prev) => ({
       ...prev,
-      [style]: !prev[style]
+      [style]: !prev[style],
     }));
   };
 
   // Handle car checkbox change
   const handleCarChange = () => {
-    setHasCar(prev => !prev);
-    
+    setHasCar((prev) => !prev);
+
     // Refresh route POIs with new car setting if we have a route
     if (routeCoordinates.length > 0) {
       setTimeout(() => findRoutePointsOfInterest(), 100);
     }
   };
-  
+
   // Handle category selection change
   const handleCategoryChange = (category, value) => {
-    setSelectedCategories(prev => {
+    setSelectedCategories((prev) => {
       const currentSelections = [...prev[category]];
-      
+
       // Toggle selection
       const newState = currentSelections.includes(value)
         ? {
             ...prev,
-            [category]: currentSelections.filter(item => item !== value)
+            [category]: currentSelections.filter((item) => item !== value),
           }
         : {
             ...prev,
-            [category]: [...currentSelections, value]
+            [category]: [...currentSelections, value],
           };
-      
+
       // Schedule a refresh of route POIs if we have a route
       setTimeout(() => {
         if (tripDays.length >= 2 && routeCoordinates.length > 0) {
           findRoutePointsOfInterest();
         }
       }, 100);
-      
+
       return newState;
     });
-    
+
     // Find points of interest along the route if we have at least 2 destinations and route coordinates
     if (tripDays.length >= 2 && routeCoordinates.length > 0) {
       findRoutePointsOfInterest();
     }
   };
-  
+
   // Handle hotel selection
   const handleHotelSelect = (hotel) => {
     setSelectedHotel(hotel.id === selectedHotel?.id ? null : hotel);
   };
-  
+
   // Calculate distance between two points using the Haversine formula
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Earth's radius in kilometers
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
 
   // Calculate popularity score based on OSM tags
   const calculatePopularity = (tags) => {
     let score = 0;
-    
+
     // Check for various popularity indicators
     if (tags.stars) score += parseInt(tags.stars) || 0;
     if (tags.rating) score += parseFloat(tags.rating) * 2 || 0;
@@ -415,12 +441,12 @@ const Planning = () => {
     if (tags.website) score += 2; // Has official website
     if (tags.description) score += 1; // Has description
     if (tags.image || tags.image_url) score += 2; // Has images
-    
+
     // Check importance tags
     if (tags.tourism === 'attraction') score += 3;
     if (tags.historic === 'monument') score += 2;
     if (tags.heritage) score += 2;
-    
+
     // Additional bonuses for specific types
     const popularTypes = {
       museum: 4,
@@ -430,13 +456,13 @@ const Planning = () => {
       viewpoint: 3,
       artwork: 2,
       gallery: 2,
-      theatre: 2
+      theatre: 2,
     };
-    
+
     Object.entries(popularTypes).forEach(([type, bonus]) => {
       if (Object.values(tags).includes(type)) score += bonus;
     });
-    
+
     return score;
   };
 
@@ -446,17 +472,17 @@ const Planning = () => {
     'https://lz4.overpass-api.de/api/interpreter',
     'https://overpass.osm.ch/api/interpreter',
     'https://overpass.openstreetmap.fr/api/interpreter',
-    'https://overpass.openstreetmap.ru/api/interpreter'
+    'https://overpass.openstreetmap.ru/api/interpreter',
   ];
 
   // Make request with fallback to different endpoints
   const makeOverpassRequest = async (query) => {
     let lastError;
-    
+
     for (const endpoint of OVERPASS_ENDPOINTS) {
       try {
         const response = await axios.post(endpoint, query, {
-          timeout: 10000 // 10 second timeout
+          timeout: 10000, // 10 second timeout
         });
         return response.data;
       } catch (error) {
@@ -465,12 +491,302 @@ const Planning = () => {
         continue;
       }
     }
-    
+
     throw lastError; // If all endpoints fail, throw the last error
   };
 
-  // Find all points of interest based on selected filters
-  const findPointsOfInterest = async () => {
+  // Find points of interest using Ollama AI
+  const findPointsOfInterestWithOllama = async () => {
+    if (tripDays.length < 2) {
+      console.warn('Cannot find POIs: need at least two destinations');
+      setIsGeneratingPlan(false);
+      return;
+    }
+
+    // Check if we have route coordinates
+    if (!routeCoordinates || routeCoordinates.length === 0) {
+      console.warn('No route coordinates available for Ollama POI search');
+      setIsGeneratingPlan(false);
+      return;
+    }
+
+    setIsProcessingAiPoi(true);
+
+    try {
+      // Get the locations from trip days
+      const locations = tripDays.map((day) => ({
+        name: day.location.name,
+        lat: day.location.lat,
+        lng: day.location.lng,
+      }));
+
+      // Collect all selected filters from the expandable sections
+      const filtersByCategory = {};
+
+      // Process all category filters
+      Object.entries(selectedCategories).forEach(([category, values]) => {
+        if (values.length > 0) {
+          filtersByCategory[category] = values.map((v) => {
+            const [key, val] = v.split('=');
+            return val; // Just get the value part (e.g., 'museum' from 'tourism=museum')
+          });
+        }
+      });
+
+      // Create an interests string
+      const interests = Object.values(filtersByCategory)
+        .flat()
+        .join(', ');
+
+      const prompt = `
+        I'm planning a trip with the following destinations: 
+        ${locations
+          .map((loc, i) => `${i + 1}. ${loc.name} (${loc.lat}, ${loc.lng})`)
+          .join('\n')}
+        
+        I'm traveling by ${transportMode}.
+        
+        ${interests ? `I'm interested in: ${interests}` : ''}
+        ${selectedInterest ? `My main interest is: ${selectedInterest}` : ''}
+        ${tripStyle ? `My trip style is: ${tripStyle}` : ''}
+        
+        Please suggest 15-20 interesting points of interest along or near this route that match my interests.
+        IMPORTANT: Only include places that are within ${poiDistance} km of the route I'll be traveling.
+        
+        For each point of interest, provide:
+        1. Name
+        2. Type (museum, park, historic site, etc.)
+        3. Precise latitude and longitude
+        4. A brief description (1-2 sentences)
+        5. Locality (city or town name)
+        
+        Format your response as a JSON array with objects containing these fields:
+        [{"name": "...", "type": "...", "lat": 00.000000, "lng": 00.000000, "description": "...", "locality": "..."}]
+        
+        Make sure all points are real places that actually exist, with accurate coordinates, and are within ${poiDistance} km of my route. RETURN ONLY JSON.
+      `;
+
+      console.log('Sending request to Ollama with prompt:', prompt);
+
+      // Call Ollama API
+      const response = await axios.post('http://localhost:11434/api/generate', {
+        model: ollamaModel,
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          num_predict: 4096, // Ensure we get a complete response
+        },
+      });
+
+      // Parse the response
+      const responseText = response.data.response;
+      console.log('Received response from Ollama:', responseText);
+
+      // Extract JSON from the response - try multiple approaches
+      let poisFromAi = [];
+
+      try {
+        // First try: direct JSON parsing
+        try {
+          poisFromAi = JSON.parse(responseText.trim());
+          console.log('Successfully parsed JSON directly');
+        } catch (parseError) {
+          console.log('Direct JSON parsing failed, trying regex extraction');
+
+          // Second try: regex extraction
+          const jsonMatch = responseText.match(/\[\s*\{.*\}\s*\]/s);
+          if (!jsonMatch) {
+            throw new Error('Could not find JSON pattern in response');
+          }
+
+          const jsonStr = jsonMatch[0];
+          poisFromAi = JSON.parse(jsonStr);
+          console.log('Successfully parsed JSON using regex extraction');
+        }
+
+        // Validate the parsed data
+        if (!Array.isArray(poisFromAi) || poisFromAi.length === 0) {
+          throw new Error('Parsed result is not a valid array or is empty');
+        }
+
+        // Check if the first item has the expected structure
+        const firstPoi = poisFromAi[0];
+        if (
+          !firstPoi.name ||
+          !firstPoi.type ||
+          typeof firstPoi.lat !== 'number' ||
+          typeof firstPoi.lng !== 'number'
+        ) {
+          console.warn('POI data may be malformed:', firstPoi);
+          // Continue anyway, we'll clean it up later
+        }
+      } catch (error) {
+        console.error('JSON parsing failed:', error);
+        throw new Error(`Failed to parse Ollama response: ${error.message}`);
+      }
+
+      // Process and add IDs to POIs
+      const processedPois = poisFromAi.map((poi) => ({
+        ...poi,
+        id: `ai-${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`,
+        isAiGenerated: true,
+        selected: false,
+        popularity: 0.8,
+        locality: poi.locality || 'Unknown',
+        location: {
+          name: poi.name,
+          lat: poi.lat,
+          lng: poi.lng,
+          city: poi.locality,
+          country: '',
+        },
+        type: 'poi',
+      }));
+
+      // Set the POIs to state
+      setPointsOfInterest(processedPois);
+
+      // Insert POIs between trip days instead of adding them as separate days
+      const actualDays = tripDays.filter((day) => day.type !== 'poi');
+
+      // Sort POIs by their proximity to the route
+      const sortedPois = [...processedPois];
+
+      // Create a new array with days and POIs interspersed
+      const newTripDays = [];
+      if (actualDays.length > 0) {
+        newTripDays.push(actualDays[0]);
+      }
+
+      for (let i = 1; i < actualDays.length; i++) {
+        const poisToAdd = sortedPois.splice(0, Math.min(2, sortedPois.length));
+        newTripDays.push(...poisToAdd);
+        newTripDays.push(actualDays[i]);
+      }
+
+      if (sortedPois.length > 0) {
+        newTripDays.push(...sortedPois);
+      }
+
+      setTripDays(newTripDays);
+
+      Swal.fire({
+        title: 'AI Points of Interest',
+        text: `Added ${processedPois.length} points of interest to your trip`,
+        icon: 'success',
+      });
+    } catch (error) {
+      console.error('Error finding POIs with Ollama:', error);
+
+      // Try a simplified prompt as a fallback
+      try {
+        console.log('Trying simplified prompt as fallback...');
+
+        const simplifiedPrompt = `
+          I need points of interest between ${tripDays[0].location.name} and ${tripDays[tripDays.length - 1].location.name}.
+          Only include places that are within ${poiDistance} km of the route I'll be traveling.
+          Please provide 10 interesting tourist attractions as a JSON array with these fields:
+          [{"name": "...", "type": "...", "lat": 00.000000, "lng": 00.000000, "description": "...", "locality": "..."}]
+          RETURN ONLY JSON.
+        `;
+
+        const fallbackResponse = await axios.post('http://localhost:11434/api/generate', {
+          model: ollamaModel,
+          prompt: simplifiedPrompt,
+          stream: false,
+          options: {
+            temperature: 0.7,
+            num_predict: 2048,
+          },
+        });
+
+        const fallbackText = fallbackResponse.data.response;
+        let fallbackPois = [];
+
+        try {
+          fallbackPois = JSON.parse(fallbackText.trim());
+        } catch (parseError) {
+          const jsonMatch = fallbackText.match(/\[\s*\{.*\}\s*\]/s);
+          if (jsonMatch) {
+            fallbackPois = JSON.parse(jsonMatch[0]);
+          } else {
+            throw new Error('Could not parse fallback response');
+          }
+        }
+
+        if (Array.isArray(fallbackPois) && fallbackPois.length > 0) {
+          const processedPois = fallbackPois.map((poi) => ({
+            ...poi,
+            id: `ai-fallback-${Date.now()}-${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
+            isAiGenerated: true,
+            selected: false,
+            popularity: 0.7,
+            locality: poi.locality || 'Unknown',
+            location: {
+              name: poi.name,
+              lat: poi.lat,
+              lng: poi.lng,
+              city: poi.locality || 'Unknown',
+              country: '',
+            },
+            type: 'poi',
+          }));
+
+          setPointsOfInterest(processedPois);
+
+          // Insert POIs between trip days instead of adding them as separate days
+          const actualDays = tripDays.filter((day) => day.type !== 'poi');
+          const sortedPois = [...processedPois];
+          const newTripDays = [];
+          if (actualDays.length > 0) {
+            newTripDays.push(actualDays[0]);
+          }
+
+          for (let i = 1; i < actualDays.length; i++) {
+            const poisToAdd = sortedPois.splice(0, Math.min(2, sortedPois.length));
+            newTripDays.push(...poisToAdd);
+            newTripDays.push(actualDays[i]);
+          }
+
+          if (sortedPois.length > 0) {
+            newTripDays.push(...sortedPois);
+          }
+
+          setTripDays(newTripDays);
+
+          Swal.fire({
+            title: 'AI Points of Interest (Fallback)',
+            text: `Added ${processedPois.length} points of interest to your trip`,
+            icon: 'info',
+          });
+
+          return; // Successfully used fallback
+        }
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+      }
+
+      // If we reach here, both main and fallback attempts failed
+      Swal.fire({
+        title: 'Error',
+        text: 'Failed to find points of interest using AI. Falling back to traditional search.',
+        icon: 'error',
+      });
+
+      // Fall back to traditional search as a last resort
+      findPointsOfInterestTraditional();
+    } finally {
+      setIsProcessingAiPoi(false);
+    }
+  };
+
+  // Find all points of interest based on selected filters using traditional method
+  const findPointsOfInterestTraditional = async () => {
     if (tripDays.length < 2 || !routeCoordinates.length) {
       console.warn('Cannot find POIs: need route coordinates and at least two destinations');
       return;
@@ -480,17 +796,17 @@ const Planning = () => {
       // Get the bounding box from the first and last destinations
       const firstDay = tripDays[0];
       const lastDay = tripDays[tripDays.length - 1];
-      
-      let minLat = Math.min(firstDay.lat, lastDay.lat) - 0.5;
-      let maxLat = Math.max(firstDay.lat, lastDay.lat) + 0.5;
-      let minLng = Math.min(firstDay.lng, lastDay.lng) - 0.5;
-      let maxLng = Math.max(firstDay.lng, lastDay.lng) + 0.5;
+
+      let minLat = Math.min(firstDay.location.lat, lastDay.location.lat) - 0.5;
+      let maxLat = Math.max(firstDay.location.lat, lastDay.location.lat) + 0.5;
+      let minLng = Math.min(firstDay.location.lng, lastDay.location.lng) - 0.5;
+      let maxLng = Math.max(firstDay.location.lng, lastDay.location.lng) + 0.5;
 
       // Sample more points along the route to catch smaller localities
       const routePoints = sampleRoutePoints(routeCoordinates, 10); // Get 10 points along the route
 
-      // First find all localities along the route (cities, towns, villages, suburbs)
-      const localityPromises = routePoints.map(async point => {
+      // Find all localities along the route (cities, towns, villages, suburbs)
+      const localityPromises = routePoints.map(async (point) => {
         const localityQuery = `
           [out:json][bbox:${minLat},${minLng},${maxLat},${maxLng}];
           (
@@ -500,35 +816,37 @@ const Planning = () => {
           );
           out body center;
         `;
-        
+
         const response = await axios.post('https://overpass-api.de/api/interpreter', localityQuery);
         return response.data.elements
-          .filter(element => element.tags?.name)
-          .map(element => ({
+          .filter((element) => element.tags?.name)
+          .map((element) => ({
             ...element,
             lat: element.lat || element.center?.lat,
             lon: element.lon || element.center?.lon,
-            distanceToRoute: calculateDistance(point[0], point[1], 
-              element.lat || element.center?.lat, 
+            distanceToRoute: calculateDistance(
+              point[0],
+              point[1],
+              element.lat || element.center?.lat,
               element.lon || element.center?.lon
-            )
+            ),
           }))
-          .filter(element => element.lat && element.lon) // Ensure we have valid coordinates
+          .filter((element) => element.lat && element.lon) // Ensure we have valid coordinates
           .sort((a, b) => a.distanceToRoute - b.distanceToRoute)
           .slice(0, 3); // Take 3 closest localities per point
       });
 
       const localities = (await Promise.all(localityPromises))
         .flat()
-        .filter((locality, index, self) => 
+        .filter((locality, index, self) =>
           // Remove duplicates based on name
-          index === self.findIndex(l => l.tags.name === locality.tags.name)
+          index === self.findIndex((l) => l.tags.name === locality.tags.name)
         );
 
       // Build category queries
       const categoryQueries = [];
       Object.entries(selectedCategories).forEach(([category, values]) => {
-        values.forEach(value => {
+        values.forEach((value) => {
           const [key, val] = value.split('=');
           categoryQueries.push(`node["${key}"="${val}"];`);
         });
@@ -546,11 +864,11 @@ const Planning = () => {
       }
 
       // Find POIs near each locality
-      const poiPromises = localities.map(async locality => {
+      const poiPromises = localities.map(async (locality) => {
         const poiQuery = `
           [out:json];
           (
-            ${categoryQueries.map(q => 
+            ${categoryQueries.map((q) =>
               q.replace(';', `(around:5000,${locality.lat},${locality.lon});`)
             ).join('\n            ')}
           );
@@ -558,30 +876,36 @@ const Planning = () => {
           >;
           out count tags;
         `;
-        
+
         const data = await makeOverpassRequest(poiQuery);
         return data.elements
-          .filter(element => element.tags?.name)
-          .map(element => ({
+          .filter((element) => element.tags?.name)
+          .map((element) => ({
             id: element.id,
             name: element.tags.name,
             lat: element.lat,
             lng: element.lon,
-            type: element.tags.tourism || element.tags.historic || element.tags.natural || element.tags.leisure || element.tags.amenity || 'attraction',
+            type:
+              element.tags.tourism ||
+              element.tags.historic ||
+              element.tags.natural ||
+              element.tags.leisure ||
+              element.tags.amenity ||
+              'attraction',
             locality: locality.tags.name,
             localityType: locality.tags.place,
             distanceToRoute: locality.distanceToRoute,
             selected: false,
-            popularity: calculatePopularity(element.tags)
+            popularity: calculatePopularity(element.tags),
           }));
       });
 
       // Get all POIs and group by locality
       const allPois = (await Promise.all(poiPromises))
         .flat()
-        .filter((poi, index, self) => 
+        .filter((poi, index, self) =>
           // Remove duplicates based on ID
-          index === self.findIndex(p => p.id === poi.id)
+          index === self.findIndex((p) => p.id === poi.id)
         );
 
       // Group POIs by locality and get top 10 for each
@@ -594,7 +918,7 @@ const Planning = () => {
       }, {});
 
       // Sort each locality's POIs by popularity and take top 10
-      Object.keys(poisByLocality).forEach(locality => {
+      Object.keys(poisByLocality).forEach((locality) => {
         poisByLocality[locality].sort((a, b) => b.popularity - a.popularity);
         poisByLocality[locality] = poisByLocality[locality].slice(0, 10);
       });
@@ -606,7 +930,7 @@ const Planning = () => {
       Swal.fire({
         title: 'Error',
         text: 'Failed to find points of interest along the route',
-        icon: 'error'
+        icon: 'error',
       });
     }
   };
@@ -640,12 +964,12 @@ const Planning = () => {
 
     // For routes with multiple segments (like between 3+ destinations), sample from each segment
     // Divide the route into (count-2) segments and take a point from each
-    const segmentSize = route.length / (count);
+    const segmentSize = route.length / count;
 
     // Add evenly distributed points along the route
     for (let i = 1; i < count - 1; i++) {
       const index = Math.floor(i * segmentSize);
-      if (index > 0 && index < route.length - 1 && !points.some(p => p[0] === route[index][0] && p[1] === route[index][1])) {
+      if (index > 0 && index < route.length - 1 && !points.some((p) => p[0] === route[index][0] && p[1] === route[index][1])) {
         points.push(route[index]);
       }
     }
@@ -653,7 +977,7 @@ const Planning = () => {
     // Always include a point near the end (but not the exact end)
     if (route.length > 10) {
       const endIndex = Math.min(route.length - 2, Math.floor(route.length * 0.9));
-      if (!points.some(p => p[0] === route[endIndex][0] && p[1] === route[endIndex][1])) {
+      if (!points.some((p) => p[0] === route[endIndex][0] && p[1] === route[endIndex][1])) {
         points.push(route[endIndex]);
       }
     }
@@ -674,13 +998,13 @@ const Planning = () => {
             lon: day.location.lng,
             radius: 25, // 25km radius
             type: 'hotel', // Only get hotels
-            guests: 2 // Default to 2 guests
-          }
+            guests: 2, // Default to 2 guests
+          },
         });
 
         if (response.data.status === 'success') {
           // Process hotels
-          const hotels = response.data.data.map(hotel => ({
+          const hotels = response.data.data.map((hotel) => ({
             ...hotel,
             dayIndex: index,
             distance: calculateDistance(
@@ -688,7 +1012,7 @@ const Planning = () => {
               day.location.lng,
               hotel.latitude,
               hotel.longitude
-            )
+            ),
           }));
 
           return hotels;
@@ -701,12 +1025,14 @@ const Planning = () => {
       const allHotels = await Promise.all(hotelsPromises);
 
       // Flatten the array and sort by distance within each day
-      const flattenedHotels = allHotels.flat().sort((a, b) => {
-        if (a.dayIndex !== b.dayIndex) {
-          return a.dayIndex - b.dayIndex;
-        }
-        return a.distance - b.distance;
-      });
+      const flattenedHotels = allHotels
+        .flat()
+        .sort((a, b) => {
+          if (a.dayIndex !== b.dayIndex) {
+            return a.dayIndex - b.dayIndex;
+          }
+          return a.distance - b.distance;
+        });
 
       setHotels(flattenedHotels);
     } catch (error) {
@@ -722,7 +1048,10 @@ const Planning = () => {
       );
 
       if (response.data.routes && response.data.routes[0]) {
-        return response.data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+        return response.data.routes[0].geometry.coordinates.map((coord) => [
+          coord[1],
+          coord[0],
+        ]);
       }
       return null;
     } catch (error) {
@@ -738,30 +1067,17 @@ const Planning = () => {
       Swal.fire({
         title: 'Not enough destinations',
         text: 'Please add at least two destinations to generate a plan',
-        icon: 'warning'
+        icon: 'warning',
       });
       return;
     }
-
-    // Log all destinations for debugging
-    console.log('Generating plan with destinations:', tripDays.map((day, index) => `Day ${index + 1}: ${day.location.name}`));
 
     setIsGeneratingPlan(true);
     setRoutePOIs([]); // Clear existing route POIs
 
     try {
-      // 1. Generate route between all locations in order
-      // Log each location's coordinates
-      tripDays.forEach(day => {
-        console.log(`Location ${day.location.name}:`, {
-          lat: day.location.lat,
-          lng: day.location.lng,
-          original: day.location
-        });
-      });
-
       // Validate coordinates
-      const invalidLocation = tripDays.find(day => {
+      const invalidLocation = tripDays.find((day) => {
         const lat = parseFloat(day.location.lat);
         const lng = parseFloat(day.location.lng);
         return isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180;
@@ -772,23 +1088,25 @@ const Planning = () => {
         Swal.fire({
           title: 'Invalid Coordinates',
           text: `Invalid coordinates found for location: ${invalidLocation.location.name}`,
-          icon: 'error'
+          icon: 'error',
         });
         setIsGeneratingPlan(false);
         return;
       }
 
       // OSRM API expects coordinates in format: longitude,latitude
-      const waypoints = tripDays.map(day => [
-        parseFloat(day.location.lng).toFixed(6),
-        parseFloat(day.location.lat).toFixed(6)
-      ].join(',')).join(';');
-      
+      const waypoints = tripDays
+        .map((day) =>
+          [
+            parseFloat(day.location.lng).toFixed(6),
+            parseFloat(day.location.lat).toFixed(6),
+          ].join(',')
+        )
+        .join(';');
+
       // Clear any existing routes
       setRouteCoordinates([]);
       setPoiRoutes([]);
-      console.log(`Calculating ${transportMode} route between ${tripDays.length} waypoints:`, waypoints);
-      console.log(`Destinations: ${tripDays.map(day => day.location.name).join(' → ')}`);
 
       // For OSRM API, we need to ensure we have valid coordinates
       if (!waypoints.match(/^(-?\d+\.\d+,-?\d+\.\d+;)+(-?\d+\.\d+,-?\d+\.\d+)$/)) {
@@ -796,39 +1114,27 @@ const Planning = () => {
         Swal.fire({
           title: 'Invalid Coordinates',
           text: 'Some destinations have invalid coordinates. Please try different locations.',
-          icon: 'error'
+          icon: 'error',
         });
         setIsGeneratingPlan(false);
         return;
       }
 
       try {
-        // Waypoints are already in the correct format
-        const formattedWaypoints = waypoints;
-
         const routeResponse = await axios.get(
-          `https://router.project-osrm.org/route/v1/${transportMode}/${formattedWaypoints}?overview=full&geometries=geojson`
+          `https://router.project-osrm.org/route/v1/${transportMode}/${waypoints}?overview=full&geometries=geojson`
         );
-
-        console.log('Route response received');
 
         if (routeResponse.data.routes && routeResponse.data.routes.length > 0) {
           // Extract route coordinates
           const route = routeResponse.data.routes[0].geometry.coordinates;
-          console.log(`Route has ${route.length} coordinates`);
-          console.log('First few route coordinates:', route.slice(0, 3));
-          console.log('Last few route coordinates:', route.slice(-3));
 
           // Get route distance and duration
           const distance = (routeResponse.data.routes[0].distance / 1000).toFixed(1); // km
           const duration = Math.round(routeResponse.data.routes[0].duration / 60); // minutes
-          console.log(`Route distance: ${distance}km, duration: ${duration} minutes`);
 
           // Convert from [lng, lat] to [lat, lng] for Leaflet
-          // OSRM returns [lng, lat], Leaflet needs [lat, lng]
-          const leafletCoordinates = route.map(point => [point[1], point[0]]);
-          console.log('First few Leaflet coordinates:', leafletCoordinates.slice(0, 3));
-          console.log('Last few Leaflet coordinates:', leafletCoordinates.slice(-3));
+          const leafletCoordinates = route.map((point) => [point[1], point[0]]);
           setRouteCoordinates(leafletCoordinates);
 
           // Center map on the route
@@ -837,196 +1143,25 @@ const Planning = () => {
             mapRef.current.fitBounds(bounds, { padding: [50, 50] });
           }
 
-          // Show success message with route info
-          Swal.fire({
-            title: 'Route Calculated',
-            html: `<p>Route between ${tripDays.length} destinations calculated successfully!</p>
-                  <p>Distance: <b>${distance} km</b></p>
-                  <p>Estimated travel time: <b>${duration} minutes</b></p>
-                  <p>Now finding points of interest along your route...</p>`,
-            icon: 'success',
-            timer: 5000,
-            timerProgressBar: true
-          });
+          // Set isUsingAiForPoi to true to always use AI for POIs
+          setIsUsingAiForPoi(true);
 
-          // Find POIs along the route
-          setTimeout(() => findPointsOfInterest(), 500);
+          // Find POIs along the route using AI
+          findPointsOfInterestWithOllama();
         } else {
           console.error('No routes found in the response');
           Swal.fire({
             title: 'Route Calculation Failed',
             text: 'Could not calculate a route between the destinations. Please try different locations or transport mode.',
-            icon: 'error'
+            icon: 'error',
           });
         }
       } catch (error) {
         console.error('Error fetching route:', error);
+        setIsGeneratingPlan(false);
       }
-
-      // 2. Find points of interest for each destination location
-      const allPOIs = [];
-
-      // Process each destination to find POIs
-      for (const day of tripDays) {
-        try {
-          // Prioritize POIs based on selected interest if any
-          let interestFilter = '';
-          if (selectedInterest) {
-            const interestToPOITypes = {
-              nature: ['natural', 'park', 'forest', 'beach', 'mountain', 'lake', 'river'],
-              culture: ['museum', 'historic', 'monument', 'castle', 'ruins', 'archaeological_site', 'theatre'],
-              food: ['restaurant', 'cafe', 'bar', 'pub', 'food'],
-              adventure: ['theme_park', 'zoo', 'aquarium', 'adventure', 'sports', 'hiking', 'climbing'],
-              relaxation: ['spa', 'beach', 'park', 'garden', 'viewpoint']
-            };
-
-            const relevantTypes = interestToPOITypes[selectedInterest] || [];
-            if (relevantTypes.length > 0) {
-              interestFilter = relevantTypes.map(type => 
-                `node["${type}"](around:5000,${day.location.lat},${day.location.lng});`
-              ).join('\n');
-            }
-          }
-
-          // Use Overpass API to find points of interest
-          // Build query based on selected categories or use defaults if none selected
-          let categoryFilters = '';
-
-          // Check if any categories are selected
-          const hasSelectedCategories = Object.values(selectedCategories).some(arr => arr.length > 0);
-
-          if (hasSelectedCategories) {
-            // Combine all selected category filters
-            const allFilters = [];
-
-            Object.keys(selectedCategories).forEach(category => {
-              selectedCategories[category].forEach(filter => {
-                // Parse the filter value to get the key and value
-                const [key, value] = filter.split('=');
-                allFilters.push(`node["${key}"="${value}"](around:5000,${day.location.lat},${day.location.lng});`);
-              });
-            });
-
-            categoryFilters = allFilters.join('\n');
-          } else {
-            // Use default filters if no categories are selected
-            categoryFilters = `
-              node["tourism"="attraction"](around:5000,${day.location.lat},${day.location.lng});
-              node["tourism"="museum"](around:5000,${day.location.lat},${day.location.lng});
-              node["historic"](around:5000,${day.location.lat},${day.location.lng});
-              node["leisure"="park"](around:5000,${day.location.lat},${day.location.lng});
-            `;
-          }
-
-          const query = `
-            [out:json];
-            (
-              ${categoryFilters}
-              ${interestFilter}
-            );
-            out body;
-          `;
-
-          const overpassResponse = await axios.post(
-            'https://overpass-api.de/api/interpreter',
-            query,
-            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-          );
-
-          if (overpassResponse.data && overpassResponse.data.elements) {
-            const pois = overpassResponse.data.elements
-              .filter(element => element.tags && element.tags.name)
-              .map(element => {
-                // Determine if this POI matches the selected interest
-                let isPrioritized = false;
-                if (selectedInterest) {
-                  const interestToPOITypes = {
-                    nature: ['natural', 'park', 'forest', 'beach', 'mountain', 'lake', 'river'],
-                    culture: ['museum', 'historic', 'monument', 'castle', 'ruins', 'archaeological_site', 'theatre'],
-                    food: ['restaurant', 'cafe', 'bar', 'pub', 'food'],
-                    adventure: ['theme_park', 'zoo', 'aquarium', 'adventure', 'sports', 'hiking', 'climbing'],
-                    relaxation: ['spa', 'beach', 'park', 'garden', 'viewpoint']
-                  };
-
-                  const relevantTypes = interestToPOITypes[selectedInterest] || [];
-                  const poiType = element.tags.tourism || element.tags.historic || element.tags.amenity || '';
-                  const poiName = element.tags.name || '';
-
-                  isPrioritized = relevantTypes.some(type => 
-                    poiType.toLowerCase().includes(type) || 
-                    poiName.toLowerCase().includes(type)
-                  );
-                }
-
-                return {
-                  id: element.id,
-                  name: element.tags.name,
-                  type: element.tags.tourism || element.tags.historic || element.tags.amenity || 'attraction',
-                  lat: element.lat,
-                  lng: element.lon,
-                  dayId: day.id,
-                  isPrioritized
-                };
-              })
-              .slice(0, 10); // Limit to 10 POIs per location
-
-            // Sort to prioritize POIs that match the selected interest
-            pois.sort((a, b) => {
-              if (a.isPrioritized && !b.isPrioritized) return -1;
-              if (!a.isPrioritized && b.isPrioritized) return 1;
-              return 0;
-            });
-
-            // Clear previous POI routes when adding new ones
-            setPoiRoutes([]);
-            
-            // Calculate routes to each POI
-            const newPOIRoutes = [];
-            for (const poi of pois) {
-              const startPoint = [day.location.lat, day.location.lng];
-              const route = await calculatePOIRoute(startPoint, poi);
-              if (route) {
-                newPOIRoutes.push({
-                  poiId: poi.id,
-                  coordinates: route,
-                  dayId: day.id
-                });
-              }
-            }
-            setPoiRoutes(newPOIRoutes);
-            allPOIs.push(...pois);
-          }
-        } catch (error) {
-          console.error(`Error finding POIs for ${day.location.name}:`, error);
-        }
-      }
-
-      setPointsOfInterest(allPOIs);
-
-      // 3. Find hotels for each day
-      await findHotelsForTrip();
-
-      // 4. Find points of interest along the route regardless of transport mode
-      if (routeCoordinates.length > 0) {
-        console.log('Finding POIs along the calculated route');
-        await findPointsOfInterest();
-      } else {
-        console.warn('No route coordinates available for POI search');
-      }
-
-      Swal.fire({
-        title: 'Trip Plan Generated!',
-        text: `Found ${allPOIs.length} points of interest across your trip destinations.`,
-        icon: 'success'
-      });
     } catch (error) {
-      console.error('Error generating plan:', error);
-      Swal.fire({
-        title: 'Error',
-        text: 'Failed to generate trip plan. Please try again.',
-        icon: 'error'
-      });
-    } finally {
+      console.error('Error in generatePlan:', error);
       setIsGeneratingPlan(false);
     }
   };
@@ -1041,7 +1176,7 @@ const Planning = () => {
             Add destinations for each day of your trip, then get recommendations for points of interest and optimal routes.
           </p>
         </div>
-        
+
         {/* Main Content - Three Column Layout */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           {/* Left Panel: Search and Trip Days */}
@@ -1049,26 +1184,27 @@ const Planning = () => {
             {/* Search Bar */}
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-4">
               <div className="relative">
-              <div className="flex flex-col gap-3">
-                <div className="flex-1 flex items-center gap-2 p-2 border rounded-lg focus-within:ring-2 focus-within:ring-blue-500">
-                  <MagnifyingGlassIcon className="h-5 w-5 text-gray-500" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    placeholder="Search for a location (e.g., Paris, Bucharest)"
-                    className="w-full outline-none text-gray-700"
-                  />
+                <div className="flex flex-col gap-3">
+                  <div className="flex-1 flex items-center gap-2 p-2 border rounded-lg focus-within:ring-2 focus-within:ring-blue-500">
+                    <MagnifyingGlassIcon className="h-5 w-5 text-gray-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={handleSearchChange}
+                      placeholder="Search for a location (e.g., Paris, Bucharest)"
+                      className="w-full outline-none text-gray-700"
+                    />
+                  </div>
+                  <button
+                    onClick={() => searchLocation(searchQuery)}
+                    disabled={isSearching || searchQuery.length < 3}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSearching ? 'Searching...' : 'Search'}
+                  </button>
                 </div>
-                <button
-                  onClick={() => searchLocation(searchQuery)}
-                  disabled={isSearching || searchQuery.length < 3}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSearching ? 'Searching...' : 'Search'}
-                </button>
               </div>
-              
+
               {/* Search Results Dropdown */}
               {searchResults.length > 0 && (
                 <div className="absolute z-50 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-60 overflow-auto">
@@ -1084,26 +1220,24 @@ const Planning = () => {
                 </div>
               )}
             </div>
-            
-            </div>
-            
+
             {/* Trip Days */}
             {tripDays.length > 0 && (
               <div className="mt-4 border-t pt-4">
                 <h2 className="text-lg font-semibold mb-2">Trip Days</h2>
                 <div className="space-y-3">
-                  {tripDays.map((day, index) => (
+                  {tripDays.map((day) => (
                     <div key={day.id} className="border-b pb-2">
                       <div className="flex justify-between items-center">
                         <div>
                           <div className="flex items-center">
                             <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                              Day {index + 1}
+                              Destination
                             </span>
                             <h3 className="font-medium">{day.location.name}</h3>
                           </div>
                           <p className="text-sm text-gray-600 mt-1">
-                            {day.location.city && day.location.country 
+                            {day.location.city && day.location.country
                               ? `${day.location.city}, ${day.location.country}`
                               : day.location.country || 'Location details not available'}
                           </p>
@@ -1118,7 +1252,7 @@ const Planning = () => {
                       </div>
                     </div>
                   ))}
-                  
+
                   <button
                     onClick={generatePlan}
                     disabled={tripDays.length < 2 || isGeneratingPlan}
@@ -1140,13 +1274,13 @@ const Planning = () => {
               </div>
             )}
           </div>
-          
+
           {/* Center Panel: Map */}
           <div className="md:col-span-6">
             <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-              <MapContainer 
-                center={[routeCoordinates[0]?.[0] || 0, routeCoordinates[0]?.[1] || 0]} 
-                zoom={13} 
+              <MapContainer
+                center={[routeCoordinates[0]?.[0] || 0, routeCoordinates[0]?.[1] || 0]}
+                zoom={13}
                 style={{ height: '700px', width: '100%' }}
                 ref={mapRef}
               >
@@ -1154,7 +1288,7 @@ const Planning = () => {
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 />
-                
+
                 {/* Display route */}
                 {routeCoordinates.length > 0 && (
                   <Polyline
@@ -1200,13 +1334,13 @@ const Planning = () => {
                 ))}
 
                 {/* Display POIs */}
-                {pointsOfInterest.map(poi => (
-                  <Marker 
-                    key={poi.id} 
+                {pointsOfInterest.map((poi) => (
+                  <Marker
+                    key={poi.id}
                     position={[poi.lat, poi.lng]}
                     icon={createCustomIcon('#EF4444')}
                     eventHandlers={{
-                      click: () => handlePOIClick(poi)
+                      click: () => handlePOIClick(poi),
                     }}
                   >
                     <Popup>
@@ -1219,7 +1353,7 @@ const Planning = () => {
                             {poi.distanceToRoute && ` (${poi.distanceToRoute.toFixed(1)}km from route)`}
                           </p>
                         )}
-                        <a 
+                        <a
                           href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -1232,7 +1366,7 @@ const Planning = () => {
                     </Popup>
                   </Marker>
                 ))}
-                
+
                 {/* Display Trip Days */}
                 {tripDays.map((day, index) => (
                   <Marker
@@ -1249,7 +1383,7 @@ const Planning = () => {
                           {day.location.name}
                         </h3>
                         <p className="text-sm text-gray-600">
-                          {day.location.city && day.location.country 
+                          {day.location.city && day.location.country
                             ? `${day.location.city}, ${day.location.country}`
                             : day.location.country || 'Location details not available'}
                         </p>
@@ -1257,19 +1391,19 @@ const Planning = () => {
                     </Popup>
                   </Marker>
                 ))}
-                
+
                 {/* Map controller to update bounds */}
                 <MapController locations={mapLocations} />
               </MapContainer>
             </div>
           </div>
-          
+
           {/* Right Panel: Filters and Options */}
           <div className="md:col-span-3 space-y-6">
             {/* Trip Preferences */}
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-4">
               <h2 className="text-lg font-semibold mb-2">Trip Preferences</h2>
-              
+
               {/* Interests */}
               <div className="mb-3">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Trip Interests</h3>
@@ -1279,8 +1413,8 @@ const Planning = () => {
                       key={interest}
                       onClick={() => setSelectedInterest(interest === selectedInterest ? null : interest)}
                       className={`px-3 py-1.5 rounded-full text-sm ${
-                        interest === selectedInterest 
-                          ? 'bg-blue-600 text-white' 
+                        interest === selectedInterest
+                          ? 'bg-blue-600 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
@@ -1289,7 +1423,7 @@ const Planning = () => {
                   ))}
                 </div>
               </div>
-              
+
               {/* Trip Style */}
               <div className="mb-3">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Trip Style</h3>
@@ -1307,7 +1441,7 @@ const Planning = () => {
                   ))}
                 </div>
               </div>
-              
+
               <div className="mb-3">
                 <label className="flex items-center cursor-pointer">
                   <input
@@ -1319,16 +1453,37 @@ const Planning = () => {
                   <span className="ml-2 text-sm text-gray-700 font-medium">I have a car</span>
                 </label>
                 {tripDays.length < 2 && (
-                  <p className="text-xs text-gray-500 mt-1 ml-6">Add at least two destinations to see tourist attractions along the route</p>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">
+                    Add at least two destinations to see tourist attractions along the route
+                  </p>
                 )}
                 {tripDays.length >= 2 && (
-                  <p className="text-xs text-blue-600 mt-1 ml-6">Showing tourist attractions between destinations</p>
+                  <p className="text-xs text-blue-600 mt-1 ml-6">
+                    Showing tourist attractions between destinations
+                  </p>
                 )}
               </div>
-              
+
               {/* Generate Plan Button */}
               {tripDays.length >= 2 && (
                 <div className="mt-4">
+                  <div className="mb-3">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isUsingAiForPoi}
+                        onChange={() => setIsUsingAiForPoi(!isUsingAiForPoi)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 font-medium">Use AI for points of interest</span>
+                    </label>
+                    <p className="text-xs text-gray-500 mt-1 ml-6">
+                      {isUsingAiForPoi
+                        ? "Using Ollama to find interesting places along your route"
+                        : "Using traditional search for points of interest"}
+                    </p>
+                  </div>
+
                   <button
                     onClick={generatePlan}
                     disabled={isGeneratingPlan}
@@ -1341,7 +1496,7 @@ const Planning = () => {
                       </>
                     ) : (
                       <>
-                        Calculate {transportMode.charAt(0).toUpperCase() + transportMode.slice(1)} Route with {tripDays.length} Destinations
+                        Calculate Route with {tripDays.length} Destinations
                       </>
                     )}
                   </button>
@@ -1350,7 +1505,7 @@ const Planning = () => {
                   </p>
                 </div>
               )}
-              
+
               <div className="mb-3">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Transportation Mode</h3>
                 <div className="flex flex-wrap gap-3">
@@ -1368,340 +1523,198 @@ const Planning = () => {
                   ))}
                 </div>
               </div>
-              
-              {/* Category Selection Dropdowns */}
-              <div className="mt-6 border-t pt-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Point of Interest Categories</h3>
-                <p className="text-xs text-gray-500 mb-4">Select categories to customize your trip recommendations</p>
-                
-                {/* Category Filters */}
-                <div className="space-y-4">
-                  {Object.entries(categoryOptions).map(([category, options]) => (
-                    <div key={category} className="space-y-2">
-                      <h4 className="text-sm font-medium capitalize">{category}</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {options.map(option => (
-                          <button
-                            key={option.value}
-                            onClick={() => {
-                              setSelectedCategories(prev => ({
-                                ...prev,
-                                [category]: prev[category].includes(option.value)
-                                  ? prev[category].filter(v => v !== option.value)
-                                  : [...prev[category], option.value]
-                              }));
-                              findPointsOfInterest();
-                            }}
-                            className={`text-xs px-2 py-1 rounded-full ${selectedCategories[category].includes(option.value)
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
 
-                {/* Available Points of Interest */}
-                <div className="mt-6 space-y-4 border-t pt-4">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-sm font-medium">Points of Interest by Location ({Object.values(poisByLocality).flat().length} total)</h4>
-                    <button
-                      onClick={() => {
-                        const selected = Object.values(poisByLocality)
-                          .flat()
-                          .filter(poi => poi.selected);
-                        if (selected.length === 0) {
-                          Swal.fire({
-                            title: 'No Attractions Selected',
-                            text: 'Please select some attractions to add to your trip.',
-                            icon: 'info'
-                          });
-                          return;
-                        }
-                        // Add selected POIs to trip plan
-                        const newTripDays = [...tripDays];
-                        selected.forEach(poi => {
-                          newTripDays.push({
-                            ...poi,
-                            type: 'poi',
-                            date: null
-                          });
-                        });
-                        setTripDays(newTripDays);
-                        // Clear selections
-                        setPoisByLocality(prev => {
-                          const updated = {};
-                          Object.entries(prev).forEach(([locality, pois]) => {
-                            updated[locality] = pois.map(p => ({ ...p, selected: false }));
-                          });
-                          return updated;
-                        });
-                      }}
-                      className="text-sm px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    >
-                      Add Selected to Trip
-                    </button>
-                  </div>
-                  <div className="space-y-4 max-h-[32rem] overflow-y-auto">
-                    {Object.entries(poisByLocality).map(([locality, pois]) => (
-                      <div key={locality} className="bg-white rounded-lg shadow p-4">
-                        <h3 className="text-lg font-medium mb-3 flex items-center">
-                          <BuildingOfficeIcon className="h-5 w-5 mr-2 text-gray-500" />
-                          {locality}
-                          <span className="text-sm text-gray-500 ml-2">
-                            ({Math.round(pois[0].distanceToRoute)}km from route • {pois.length} attractions)
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPoisByLocality(prev => ({
-                                ...prev,
-                                [locality]: prev[locality].map(p => ({ ...p, selected: true }))
-                              }));
-                            }}
-                            className="ml-auto text-xs text-blue-600 hover:text-blue-800"
-                          >
-                            Select All
-                          </button>
-                        </h3>
-                        <div className="space-y-2">
-                          {pois.map((poi) => (
-                            <div 
-                              key={poi.id} 
-                              className={`bg-white p-3 rounded border transition-colors cursor-pointer ${poi.selected ? 'border-blue-500' : 'border-gray-200 hover:border-gray-300'}`}
-                              onClick={() => {
-                                setPointsOfInterest(prev =>
-                                  prev.map(p => p.id === poi.id ? { ...p, selected: !p.selected } : p)
-                                );
-                              }}
-                            >
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <div className="flex items-start justify-between">
-                                    <h4 className="font-medium flex-1">{poi.name}</h4>
-                                    <div className={`w-4 h-4 rounded-full border-2 ml-2 ${poi.selected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`} />
-                                  </div>
-                                  <p className="text-sm text-gray-600 capitalize flex items-center mt-1">
-                                    <span className="inline-block w-2 h-2 rounded-full bg-gray-400 mr-2"></span>
-                                    {poi.type}
-                                    <span className="text-xs text-gray-500 ml-2">
-                                      {Math.round(poi.distanceToRoute)}km away
-                                    </span>
-                                  </p>
-                                  {poi.popularity > 10 && (
-                                    <div className="flex items-center mt-1">
-                                      {[...Array(Math.min(5, Math.floor(poi.popularity/5)))].map((_, i) => (
-                                        <StarIcon key={i} className="h-3 w-3 text-yellow-400" />
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-end space-x-2 mt-2">
-                                <a 
-                                  href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
-                                  onClick={e => e.stopPropagation()}
-                                >
-                                  <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
-                                  View in Maps
-                                </a>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
+              <div className="mb-3">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">POI Distance from Route</h3>
+                <select
+                  value={poiDistance}
+                  onChange={(e) => setPoiDistance(Number(e.target.value))}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                >
+                  <option value={10}>10 km</option>
+                  <option value={25}>25 km</option>
+                  <option value={50}>50 km</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Maximum distance of points of interest from your route</p>
+              </div>
+
+              {/* Category Selection Dropdowns */}
+              <div className="mb-4">
                 {/* Tourism & Attractions */}
-                <div className="mb-4">
-                  <details className="bg-white rounded-lg shadow-sm border">
-                    <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                      <span>Tourism & Attractions</span>
-                      <span className="text-xs text-blue-600">{selectedCategories.tourism.length} selected</span>
-                    </summary>
-                    <div className="px-4 py-3 border-t">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {categoryOptions.tourism.map(option => (
-                          <label key={option.value} className="flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedCategories.tourism.includes(option.value)}
-                              onChange={() => handleCategoryChange('tourism', option.value)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                          </label>
-                        ))}
-                      </div>
+                <details className="bg-white rounded-lg shadow-sm border">
+                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
+                    <span>Tourism & Attractions</span>
+                    <span className="text-xs text-blue-600">{selectedCategories.tourism.length} selected</span>
+                  </summary>
+                  <div className="px-4 py-3 border-t">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {categoryOptions.tourism.map((option) => (
+                        <label key={option.value} className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.tourism.includes(option.value)}
+                            onChange={() => handleCategoryChange('tourism', option.value)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))}
                     </div>
-                  </details>
-                </div>
-                
+                  </div>
+                </details>
+              </div>
+              <div className="mb-4">
                 {/* Natural Attractions */}
-                <div className="mb-4">
-                  <details className="bg-white rounded-lg shadow-sm border">
-                    <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                      <span>Natural Attractions</span>
-                      <span className="text-xs text-blue-600">{selectedCategories.natural.length} selected</span>
-                    </summary>
-                    <div className="px-4 py-3 border-t">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {categoryOptions.natural.map(option => (
-                          <label key={option.value} className="flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedCategories.natural.includes(option.value)}
-                              onChange={() => handleCategoryChange('natural', option.value)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                          </label>
-                        ))}
-                      </div>
+                <details className="bg-white rounded-lg shadow-sm border">
+                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
+                    <span>Natural Attractions</span>
+                    <span className="text-xs text-blue-600">{selectedCategories.natural.length} selected</span>
+                  </summary>
+                  <div className="px-4 py-3 border-t">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {categoryOptions.natural.map((option) => (
+                        <label key={option.value} className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.natural.includes(option.value)}
+                            onChange={() => handleCategoryChange('natural', option.value)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))}
                     </div>
-                  </details>
-                </div>
-                
+                  </div>
+                </details>
+              </div>
+              <div className="mb-4">
                 {/* Cultural & Historical Sites */}
-                <div className="mb-4">
-                  <details className="bg-white rounded-lg shadow-sm border">
-                    <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                      <span>Cultural & Historical Sites</span>
-                      <span className="text-xs text-blue-600">{selectedCategories.historic.length} selected</span>
-                    </summary>
-                    <div className="px-4 py-3 border-t">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {categoryOptions.historic.map(option => (
-                          <label key={option.value} className="flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedCategories.historic.includes(option.value)}
-                              onChange={() => handleCategoryChange('historic', option.value)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                          </label>
-                        ))}
-                      </div>
+                <details className="bg-white rounded-lg shadow-sm border">
+                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
+                    <span>Cultural & Historical Sites</span>
+                    <span className="text-xs text-blue-600">{selectedCategories.historic.length} selected</span>
+                  </summary>
+                  <div className="px-4 py-3 border-t">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {categoryOptions.historic.map((option) => (
+                        <label key={option.value} className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.historic.includes(option.value)}
+                            onChange={() => handleCategoryChange('historic', option.value)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))}
                     </div>
-                  </details>
-                </div>
-                
+                  </div>
+                </details>
+              </div>
+              <div className="mb-4">
                 {/* Recreational & Leisure */}
-                <div className="mb-4">
-                  <details className="bg-white rounded-lg shadow-sm border">
-                    <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                      <span>Recreational & Leisure</span>
-                      <span className="text-xs text-blue-600">{selectedCategories.leisure.length} selected</span>
-                    </summary>
-                    <div className="px-4 py-3 border-t">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {categoryOptions.leisure.map(option => (
-                          <label key={option.value} className="flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedCategories.leisure.includes(option.value)}
-                              onChange={() => handleCategoryChange('leisure', option.value)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                          </label>
-                        ))}
-                      </div>
+                <details className="bg-white rounded-lg shadow-sm border">
+                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
+                    <span>Recreational & Leisure</span>
+                    <span className="text-xs text-blue-600">{selectedCategories.leisure.length} selected</span>
+                  </summary>
+                  <div className="px-4 py-3 border-t">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {categoryOptions.leisure.map((option) => (
+                        <label key={option.value} className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.leisure.includes(option.value)}
+                            onChange={() => handleCategoryChange('leisure', option.value)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))}
                     </div>
-                  </details>
-                </div>
-                
+                  </div>
+                </details>
+              </div>
+              <div className="mb-4">
                 {/* Entertainment & Nightlife */}
-                <div className="mb-4">
-                  <details className="bg-white rounded-lg shadow-sm border">
-                    <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                      <span>Entertainment & Nightlife</span>
-                      <span className="text-xs text-blue-600">{selectedCategories.entertainment.length} selected</span>
-                    </summary>
-                    <div className="px-4 py-3 border-t">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {categoryOptions.entertainment.map(option => (
-                          <label key={option.value} className="flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedCategories.entertainment.includes(option.value)}
-                              onChange={() => handleCategoryChange('entertainment', option.value)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                          </label>
-                        ))}
-                      </div>
+                <details className="bg-white rounded-lg shadow-sm border">
+                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
+                    <span>Entertainment & Nightlife</span>
+                    <span className="text-xs text-blue-600">{selectedCategories.entertainment.length} selected</span>
+                  </summary>
+                  <div className="px-4 py-3 border-t">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {categoryOptions.entertainment.map((option) => (
+                        <label key={option.value} className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.entertainment.includes(option.value)}
+                            onChange={() => handleCategoryChange('entertainment', option.value)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))}
                     </div>
-                  </details>
-                </div>
-                
+                  </div>
+                </details>
+              </div>
+              <div className="mb-4">
                 {/* Sports & Outdoor Activities */}
-                <div className="mb-4">
-                  <details className="bg-white rounded-lg shadow-sm border">
-                    <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                      <span>Sports & Outdoor Activities</span>
-                      <span className="text-xs text-blue-600">{selectedCategories.sports.length} selected</span>
-                    </summary>
-                    <div className="px-4 py-3 border-t">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {categoryOptions.sports.map(option => (
-                          <label key={option.value} className="flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedCategories.sports.includes(option.value)}
-                              onChange={() => handleCategoryChange('sports', option.value)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                          </label>
-                        ))}
-                      </div>
+                <details className="bg-white rounded-lg shadow-sm border">
+                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
+                    <span>Sports & Outdoor Activities</span>
+                    <span className="text-xs text-blue-600">{selectedCategories.sports.length} selected</span>
+                  </summary>
+                  <div className="px-4 py-3 border-t">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {categoryOptions.sports.map((option) => (
+                        <label key={option.value} className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCategories.sports.includes(option.value)}
+                            onChange={() => handleCategoryChange('sports', option.value)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))}
                     </div>
-                  </details>
-                </div>
+                  </div>
+                </details>
               </div>
             </div>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Trip Days List */}
           <div className="space-y-4">
             <div className="bg-white p-6 rounded-lg shadow-lg">
               <h2 className="text-xl font-semibold mb-4 flex items-center">
                 <MapPinIcon className="h-5 w-5 mr-2 text-blue-600" />
-                Your Trip Days
+                Your Destinations & Points of Interest
               </h2>
-              
+
               {tripDays.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No destinations added yet.</p>
-                  <p className="text-sm mt-2">Search and add locations to plan your trip.</p>
+                  <p className="text-sm mt-2">Search and add locations to plan your route.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {tripDays.map((day, index) => (
+                  {tripDays.map((day) => (
                     <div key={day.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="flex items-center">
                             <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                              Day {index + 1}
+                              Destination
                             </span>
                             <h3 className="font-medium">{day.location.name}</h3>
                           </div>
                           <p className="text-sm text-gray-600 mt-1">
-                            {day.location.city && day.location.country 
+                            {day.location.city && day.location.country
                               ? `${day.location.city}, ${day.location.country}`
                               : day.location.country || 'Location details not available'}
                           </p>
@@ -1716,7 +1729,7 @@ const Planning = () => {
                       </div>
                     </div>
                   ))}
-                  
+
                   <button
                     onClick={generatePlan}
                     disabled={tripDays.length < 2 || isGeneratingPlan}
@@ -1737,7 +1750,7 @@ const Planning = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Route Points of Interest */}
             {routePOIs.length > 0 && (
               <div className="bg-white p-6 rounded-lg shadow-lg">
@@ -1748,15 +1761,16 @@ const Planning = () => {
                 <p className="text-sm text-gray-600 mb-4">
                   Points of interest within 5km of your route ({routePOIs.length} found)
                 </p>
-                
+
                 <div className="space-y-3">
-                  {routePOIs.map(poi => (
-                    <div 
-                      key={poi.id} 
+                  {routePOIs.map((poi) => (
+                    <div
+                      key={poi.id}
                       className={`text-sm border-l-2 ${
-                        selectedPOI === poi.id ? 'border-green-500 bg-green-50' : 
-                        poi.distanceToRoute <= 1 ? 'border-purple-500' : 
-                        poi.isPopular ? 'border-yellow-500' : 'border-blue-500'
+                        selectedPOI === poi.id ? 'border-green-500 bg-green-50'
+                          : poi.distanceToRoute <= 1 ? 'border-purple-500'
+                          : poi.isPopular ? 'border-yellow-500'
+                          : 'border-blue-500'
                       } pl-3 py-2 pr-2 rounded-r flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors`}
                       onClick={() => handlePOIClick(poi)}
                     >
@@ -1777,7 +1791,7 @@ const Planning = () => {
                         <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
                       </div>
                       <div className="flex space-x-1">
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             openInGoogleMaps(poi);
@@ -1793,18 +1807,18 @@ const Planning = () => {
                 </div>
               </div>
             )}
-            
+
             {/* Points of Interest */}
             {pointsOfInterest.length > 0 && (
               <div className="bg-white p-6 rounded-lg shadow-lg">
                 <h2 className="text-xl font-semibold mb-4">Points of Interest</h2>
-                
+
                 <div className="space-y-6">
                   {tripDays.map((day, index) => {
-                    const dayPOIs = pointsOfInterest.filter(poi => poi.dayId === day.id);
-                    
+                    const dayPOIs = pointsOfInterest.filter((poi) => poi.dayId === day.id);
+
                     if (dayPOIs.length === 0) return null;
-                    
+
                     return (
                       <div key={day.id} className="space-y-3">
                         <h3 className="font-medium flex items-center">
@@ -1813,11 +1827,11 @@ const Planning = () => {
                           </span>
                           {day.location.city || day.location.name}
                         </h3>
-                        
+
                         <div className="grid grid-cols-1 gap-2">
-                          {dayPOIs.map(poi => (
-                            <div 
-                              key={poi.id} 
+                          {dayPOIs.map((poi) => (
+                            <div
+                              key={poi.id}
                               className={`text-sm border-l-2 ${selectedPOI === poi.id ? 'border-green-500 bg-green-50' : 'border-blue-500'} pl-3 py-2 pr-2 rounded-r flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors`}
                               onClick={() => handlePOIClick(poi)}
                             >
@@ -1835,7 +1849,7 @@ const Planning = () => {
                                   <>
                                     <p className="font-medium">{poi.name}</p>
                                     <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
-                                    <a 
+                                    <a
                                       href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
@@ -1851,95 +1865,39 @@ const Planning = () => {
                               <div className="flex space-x-1">
                                 {editingPOI === poi.id ? (
                                   <>
-                                    <button 
+                                    <button
                                       onClick={(e) => handleSavePOI(e, poi.id)}
                                       className="p-1 text-green-600 hover:text-green-800"
                                       title="Save changes"
                                     >
                                       <PlusIcon className="h-4 w-4" />
                                     </button>
-                                    <button 
-                                      onClick={(e) => handleCancelEdit(e)}
-                                      className="p-1 text-gray-600 hover:text-gray-800"
-                                      title="Cancel"
+                                    <button
+                                      onClick={handleCancelEdit}
+                                      className="p-1 text-red-600 hover:text-red-800"
+                                      title="Cancel editing"
                                     >
                                       <XMarkIcon className="h-4 w-4" />
                                     </button>
                                   </>
                                 ) : (
                                   <>
-                                    <button 
+                                    <button
                                       onClick={(e) => handleEditPOI(e, poi)}
                                       className="p-1 text-blue-600 hover:text-blue-800"
-                                      title="Edit point of interest"
+                                      title="Edit"
                                     >
                                       <PencilIcon className="h-4 w-4" />
                                     </button>
-                                    <button 
+                                    <button
                                       onClick={(e) => handleDeletePOI(e, poi.id)}
                                       className="p-1 text-red-600 hover:text-red-800"
-                                      title="Delete point of interest"
+                                      title="Delete"
                                     >
                                       <TrashIcon className="h-4 w-4" />
                                     </button>
                                   </>
                                 )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            
-            {/* Hotels Section */}
-            {hotels.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow-lg">
-                <h2 className="text-xl font-semibold mb-4 flex items-center">
-                  <BuildingOfficeIcon className="h-5 w-5 mr-2 text-blue-600" />
-                  Recommended Hotels
-                </h2>
-                
-                <div className="space-y-6">
-                  {tripDays.map((day, index) => {
-                    const dayHotels = hotels.filter(hotel => hotel.dayIndex === index);
-                    
-                    if (dayHotels.length === 0) return null;
-                    
-                    return (
-                      <div key={`hotels-day-${index}`} className="space-y-3">
-                        <h3 className="font-medium flex items-center">
-                          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                            Day {index + 1}
-                          </span>
-                          {day.location.city || day.location.name}
-                        </h3>
-                        
-                        <div className="grid grid-cols-1 gap-3">
-                          {dayHotels.slice(0, 3).map(hotel => (
-                            <div 
-                              key={hotel.id} 
-                              className={`border rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow ${
-                                selectedHotel?.id === hotel.id ? 'border-blue-500 bg-blue-50' : ''
-                              }`}
-                              onClick={() => handleHotelSelect(hotel)}
-                            >
-                              <div className="flex justify-between">
-                                <div>
-                                  <h4 className="font-medium">{hotel.name}</h4>
-                                  <p className="text-sm text-gray-600">{hotel.city}, {hotel.country}</p>
-                                  <p className="text-xs text-gray-500 mt-1">{hotel.distance.toFixed(1)} km from destination</p>
-                                </div>
-                                <div className="text-right">
-                                  {hotel.rooms && hotel.rooms.length > 0 && (
-                                    <p className="text-sm font-semibold text-blue-600">
-                                      From ${Math.min(...hotel.rooms.map(r => r.price_per_night || 999))}/night
-                                    </p>
-                                  )}
-                                </div>
                               </div>
                             </div>
                           ))}
