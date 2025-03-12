@@ -67,6 +67,23 @@ const MapController = ({ locations }) => {
   return null;
 };
 
+// Component to handle map click events
+const MapEvents = ({ onClick }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+
+    map.on('click', onClick);
+
+    return () => {
+      map.off('click', onClick);
+    };
+  }, [map, onClick]);
+
+  return null;
+};
+
 const Planning = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -105,6 +122,7 @@ const Planning = () => {
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [mapLocations, setMapLocations] = useState([]);
   const [isUsingAiForPoi, setIsUsingAiForPoi] = useState(false);
+  const [isMapClickMode, setIsMapClickMode] = useState(false);
   const [isProcessingAiPoi, setIsProcessingAiPoi] = useState(false);
   const [ollamaModel, setOllamaModel] = useState('llama3.2:latest');
 
@@ -123,6 +141,257 @@ const Planning = () => {
 
   // POI distance from route selection
   const [poiDistance, setPoiDistance] = useState(10); // Default to 10km
+
+  // Overpass API endpoints with fallback
+  const OVERPASS_ENDPOINTS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://lz4.overpass-api.de/api/interpreter',
+    'https://overpass.osm.ch/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter',
+    'https://overpass.openstreetmap.ru/api/interpreter',
+  ];
+
+  // Make request with fallback to different endpoints
+  const makeOverpassRequest = async (query) => {
+    let lastError;
+
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      try {
+        const response = await axios.post(endpoint, query, {
+          timeout: 10000, // 10 second timeout
+        });
+        return response.data;
+      } catch (error) {
+        console.warn(`Failed to fetch from ${endpoint}:`, error.message);
+        lastError = error;
+        continue;
+      }
+    }
+
+    throw lastError; // If all endpoints fail, throw the last error
+  };
+
+  // Calculate popularity score based on OSM tags
+  const calculatePopularity = (tags) => {
+    let score = 0;
+
+    // Check for various popularity indicators
+    if (tags.stars) score += parseInt(tags.stars) || 0;
+    if (tags.rating) score += parseFloat(tags.rating) * 2 || 0;
+    if (tags.reviews) score += Math.min(parseInt(tags.reviews) / 10, 5) || 0;
+    if (tags.wikipedia) score += 5; // Has Wikipedia article
+    if (tags.wikidata) score += 3; // Has Wikidata entry
+    if (tags.website) score += 2; // Has official website
+    if (tags.description) score += 1; // Has description
+    if (tags.image || tags.image_url) score += 2; // Has images
+
+    // Check importance tags
+    if (tags.tourism === 'attraction') score += 3;
+    if (tags.historic === 'monument') score += 2;
+    if (tags.heritage) score += 2;
+
+    // Additional bonuses for specific types
+    const popularTypes = {
+      museum: 4,
+      castle: 4,
+      palace: 4,
+      landmark: 3,
+      viewpoint: 3,
+      artwork: 2,
+      gallery: 2,
+      theatre: 2,
+    };
+
+    Object.entries(popularTypes).forEach(([type, bonus]) => {
+      if (Object.values(tags).includes(type)) score += bonus;
+    });
+
+    return score;
+  };
+
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+
+    // Clear results if query is too short
+    if (query.length < 3) {
+      setSearchResults([]);
+      return;
+    }
+
+    // Automatically search as user types
+    searchLocation(query);
+  };
+
+  // Handle map click events
+  const handleMapClick = useCallback((e) => {
+    if (!isMapClickMode) return;
+
+    const { lat, lng } = e.latlng;
+    setIsSearching(true);
+
+    // Reverse geocode the clicked location
+    axios
+      .get(
+        `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}&language=en`
+      )
+      .then((response) => {
+        if (response.data.results.length > 0) {
+          const result = response.data.results[0];
+          const location = {
+            name: result.formatted,
+            lat,
+            lng,
+            components: result.components,
+          };
+          handleLocationSelect(location);
+        }
+      })
+      .catch((error) => {
+        console.error('Error reverse geocoding:', error);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to get location information. Please try again.',
+          icon: 'error',
+        });
+      })
+      .finally(() => {
+        setIsSearching(false);
+        setIsMapClickMode(false);
+      });
+  }, [isMapClickMode]);
+
+  // Handle location selection
+  const handleLocationSelect = (location) => {
+    setSearchQuery('');
+    setSearchResults([]);
+
+    // Add the selected location to trip days
+    const newDay = {
+      id: Date.now(),
+      location: {
+        name: location.name,
+        lat: location.lat,
+        lng: location.lng,
+        city: location.components.city || location.components.town || location.components.village || '',
+        country: location.components.country || '',
+      },
+      date: format(new Date(), 'yyyy-MM-dd'),
+      pointsOfInterest: [],
+    };
+
+    setTripDays([...tripDays, newDay]);
+  };
+
+  // Handle day removal
+  const handleRemoveDay = (dayId) => {
+    setTripDays(tripDays.filter((day) => day.id !== dayId));
+    // Also remove any POIs associated with this day
+    setPointsOfInterest(pointsOfInterest.filter((poi) => poi.dayId !== dayId));
+  };
+
+  // Handle POI click
+  const handlePOIClick = (poi) => {
+    if (editingPOI) {
+      // If currently editing, save changes first
+      handleCancelEdit();
+    }
+
+    setSelectedPOI(selectedPOI === poi.id ? null : poi.id);
+
+    // If the POI has coordinates, pan the map to it
+    if (poi.lat && poi.lng && mapRef.current) {
+      const map = mapRef.current;
+      // Ensure coordinates are numbers
+      const lat = typeof poi.lat === 'number' ? poi.lat : parseFloat(poi.lat);
+      const lng = typeof poi.lng === 'number' ? poi.lng : parseFloat(poi.lng);
+      map.panTo([lat, lng]);
+      map.setZoom(15);
+    }
+  };
+
+  // Handle POI deletion
+  const handleDeletePOI = (e, poiId) => {
+    e.stopPropagation();
+    setPointsOfInterest(pointsOfInterest.filter((poi) => poi.id !== poiId));
+    if (selectedPOI === poiId) {
+      setSelectedPOI(null);
+    }
+    if (editingPOI === poiId) {
+      setEditingPOI(null);
+    }
+  };
+
+  // Handle POI editing
+  const handleEditPOI = (e, poi) => {
+    e.stopPropagation();
+    setEditingPOI(poi.id);
+    setNewPOIName(poi.name);
+  };
+
+  // Handle saving edited POI
+  const handleSavePOI = (e, poiId) => {
+    e.stopPropagation();
+    if (newPOIName.trim()) {
+      setPointsOfInterest(
+        pointsOfInterest.map((poi) =>
+          poi.id === poiId ? { ...poi, name: newPOIName.trim() } : poi
+        )
+      );
+      setEditingPOI(null);
+      setNewPOIName('');
+    }
+  };
+
+  // Handle canceling POI edit
+  const handleCancelEdit = (e) => {
+    if (e) e.stopPropagation();
+    setEditingPOI(null);
+    setNewPOIName('');
+  };
+
+  // Handle interest selection
+  const handleInterestChange = (interest) => {
+    setInterests({
+      ...interests,
+      [interest]: !interests[interest],
+    });
+  };
+
+  // Handle trip style selection
+  const handleTripStyleChange = (style) => {
+    setTripStyle({
+      ...tripStyle,
+      [style]: !tripStyle[style],
+    });
+  };
+
+  // Handle car availability toggle
+  const handleCarChange = () => {
+    setHasCar(!hasCar);
+    if (!hasCar) {
+      setTransportMode('driving');
+    }
+  };
+
+  // Handle category selection
+  const handleCategoryChange = (category, value) => {
+    const currentValues = selectedCategories[category];
+    const newValues = currentValues.includes(value)
+      ? currentValues.filter((v) => v !== value)
+      : [...currentValues, value];
+
+    setSelectedCategories({
+      ...selectedCategories,
+      [category]: newValues,
+    });
+  };
+
+  // Handle hotel selection
+  const handleHotelSelect = (hotel) => {
+    setSelectedHotel(selectedHotel === hotel.id ? null : hotel.id);
+  };
 
   // POI Category options
   const categoryOptions = {
@@ -182,7 +451,7 @@ const Planning = () => {
 
   // Search for locations using OpenCage
   const searchLocation = useCallback(async (query) => {
-    if (!query) {
+    if (!query || query.length < 3) {
       setSearchResults([]);
       return;
     }
@@ -210,47 +479,94 @@ const Planning = () => {
     }
   }, []);
 
-  // Handle search input change
-  const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-    if (value.length > 2) {
-      searchLocation(value);
-    } else {
-      setSearchResults([]);
-    }
-  };
+  // Find POIs in the current map bounds
+  const findPOIsInMapBounds = useCallback(() => {
+    if (!mapRef.current) return;
+    
+    const map = mapRef.current;
+    const bounds = map.getBounds();
+    const north = bounds.getNorth();
+    const south = bounds.getSouth();
+    const east = bounds.getEast();
+    const west = bounds.getWest();
+    
+    // Show loading state
+    setIsSearching(true);
+    
+    // Construct Overpass query for POIs in the bounding box
+    const overpassQuery = `
+      [out:json];
+      (
+        node["tourism"](${south},${west},${north},${east});
+        node["historic"](${south},${west},${north},${east});
+        node["natural"](${south},${west},${north},${east});
+        node["leisure"](${south},${west},${north},${east});
+      );
+      out body;
+      >;
+      out skel qt;
+    `;
+    
+    // Make request to Overpass API
+    makeOverpassRequest(overpassQuery)
+      .then(data => {
+        if (data && data.elements) {
+          // Process the POIs
+          const pois = data.elements.map(element => {
+            // Ensure coordinates are properly formatted as numbers
+            const lat = typeof element.lat === 'number' ? element.lat : parseFloat(element.lat);
+            const lng = typeof element.lon === 'number' ? element.lon : parseFloat(element.lon);
+            
+            return {
+              id: `osm-${element.id}`,
+              name: element.tags.name || `Unnamed ${element.tags.tourism || element.tags.historic || element.tags.natural || element.tags.leisure}`,
+              type: element.tags.tourism || element.tags.historic || element.tags.natural || element.tags.leisure,
+              lat: lat,
+              lng: lng,
+              tags: element.tags,
+              popularity: calculatePopularity(element.tags),
+              selected: false,
+              location: {
+                name: element.tags.name || 'Unnamed Location',
+                lat: lat,
+                lng: lng,
+                city: element.tags.city || '',
+                country: element.tags.country || '',
+              }
+            };
+          });
+          
+          // Update state with found POIs
+          setPointsOfInterest(prevPois => {
+            // Combine with existing POIs, avoiding duplicates
+            const existingIds = new Set(prevPois.map(p => p.id));
+            const newPois = pois.filter(p => !existingIds.has(p.id));
+            return [...prevPois, ...newPois];
+          });
+          
+          Swal.fire({
+            title: 'Points of Interest Found',
+            text: `Found ${pois.length} points of interest in the current map view`,
+            icon: 'success'
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching POIs from Overpass:', error);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to find points of interest in the current area',
+          icon: 'error'
+        });
+      })
+      .finally(() => {
+        setIsSearching(false);
+      });
+  }, [mapRef, makeOverpassRequest, calculatePopularity]);
 
   // Debug function to log current trip days
   const logTripDays = () => {
     console.log('Current trip days:', tripDays);
-  };
-
-  // Handle location selection
-  const handleLocationSelect = (location) => {
-    setSearchQuery('');
-    setSearchResults([]);
-
-    // Add the selected location to trip days
-    const newDay = {
-      id: Date.now(),
-      location: {
-        name: location.name,
-        lat: location.lat,
-        lng: location.lng,
-        city: location.components.city || location.components.town || location.components.village || '',
-        country: location.components.country || '',
-      },
-      date: format(new Date(), 'yyyy-MM-dd'),
-      pointsOfInterest: [],
-    };
-
-    setTripDays([...tripDays, newDay]);
-  };
-
-  // Handle day removal
-  const handleRemoveDay = (dayId) => {
-    setTripDays(tripDays.filter((day) => day.id !== dayId));
   };
 
   // Effect to update mapLocations when tripDays change
@@ -266,153 +582,23 @@ const Planning = () => {
     }
   }, [tripDays]);
 
-  // Handle POI click to highlight on map
-  const handlePOIClick = (poi) => {
-    setSelectedPOI(poi.id === selectedPOI ? null : poi.id);
-
-    // Center map on the POI if selected
-    if (mapRef.current && poi.id !== selectedPOI) {
-      const map = mapRef.current;
-      map.setView([poi.lat, poi.lng], 16, {
-        animate: true,
-        duration: 1,
-        easeLinearity: 0.25,
-      });
-
-      // Open the popup for this POI
-      const popupContent = L.popup()
-        .setLatLng([poi.lat, poi.lng])
-        .setContent(`
-          <div class="p-2">
-            <h3 class="font-medium text-lg">${poi.name}</h3>
-            <p class="text-sm text-gray-600 capitalize">${poi.type}</p>
-            <a 
-              href="https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-sm text-blue-600 hover:text-blue-800 flex items-center mt-2"
-            >
-              View in Google Maps
-            </a>
-          </div>
-        `)
-        .openOn(map);
+  // Modify the openInGoogleMaps function to handle both POIs and locations properly
+  const openInGoogleMaps = (item) => {
+    let url;
+    // Check if it's a POI (has lat/lng directly) or a location (has lat/lng in location property)
+    if (item.lat && item.lng) {
+      // It's a POI
+      url = `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`;
+    } else if (item.location && item.location.lat && item.location.lng) {
+      // It's a location object
+      url = `https://www.google.com/maps/search/?api=1&query=${item.location.lat},${item.location.lng}`;
+    } else {
+      // Fallback to name-based search
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        item.name || item.location?.name || 'Unknown location'
+      )}`;
     }
-  };
-
-  // Handle POI deletion
-  const handleDeletePOI = (e, poiId) => {
-    e.stopPropagation(); // Prevent triggering the POI click
-    setPointsOfInterest((prev) => prev.filter((poi) => poi.id !== poiId));
-
-    // If the deleted POI was selected, clear selection
-    if (selectedPOI === poiId) {
-      setSelectedPOI(null);
-    }
-
-    // If the deleted POI was being edited, clear editing state
-    if (editingPOI === poiId) {
-      setEditingPOI(null);
-    }
-  };
-
-  // Handle POI edit
-  const handleEditPOI = (e, poi) => {
-    e.stopPropagation(); // Prevent triggering the POI click
-    setEditingPOI(poi.id);
-    setNewPOIName(poi.name);
-  };
-
-  // Handle save POI name
-  const handleSavePOI = (e, poiId) => {
-    e.stopPropagation(); // Prevent triggering the POI click
-
-    if (newPOIName.trim()) {
-      setPointsOfInterest((prev) =>
-        prev.map((poi) =>
-          poi.id === poiId ? { ...poi, name: newPOIName.trim() } : poi
-        )
-      );
-    }
-
-    setEditingPOI(null);
-    setNewPOIName('');
-  };
-
-  // Handle cancel edit
-  const handleCancelEdit = (e) => {
-    e.stopPropagation(); // Prevent triggering the POI click
-    setEditingPOI(null);
-    setNewPOIName('');
-  };
-
-  // Open Google Maps with coordinates
-  const openInGoogleMaps = (poi) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`;
     window.open(url, '_blank');
-  };
-
-  // Handle interest checkbox change
-  const handleInterestChange = (interest) => {
-    setInterests((prev) => ({
-      ...prev,
-      [interest]: !prev[interest],
-    }));
-  };
-
-  // Handle trip style checkbox change
-  const handleTripStyleChange = (style) => {
-    setTripStyle((prev) => ({
-      ...prev,
-      [style]: !prev[style],
-    }));
-  };
-
-  // Handle car checkbox change
-  const handleCarChange = () => {
-    setHasCar((prev) => !prev);
-
-    // Refresh route POIs with new car setting if we have a route
-    if (routeCoordinates.length > 0) {
-      setTimeout(() => findRoutePointsOfInterest(), 100);
-    }
-  };
-
-  // Handle category selection change
-  const handleCategoryChange = (category, value) => {
-    setSelectedCategories((prev) => {
-      const currentSelections = [...prev[category]];
-
-      // Toggle selection
-      const newState = currentSelections.includes(value)
-        ? {
-            ...prev,
-            [category]: currentSelections.filter((item) => item !== value),
-          }
-        : {
-            ...prev,
-            [category]: [...currentSelections, value],
-          };
-
-      // Schedule a refresh of route POIs if we have a route
-      setTimeout(() => {
-        if (tripDays.length >= 2 && routeCoordinates.length > 0) {
-          findRoutePointsOfInterest();
-        }
-      }, 100);
-
-      return newState;
-    });
-
-    // Find points of interest along the route if we have at least 2 destinations and route coordinates
-    if (tripDays.length >= 2 && routeCoordinates.length > 0) {
-      findRoutePointsOfInterest();
-    }
-  };
-
-  // Handle hotel selection
-  const handleHotelSelect = (hotel) => {
-    setSelectedHotel(hotel.id === selectedHotel?.id ? null : hotel);
   };
 
   // Calculate distance between two points using the Haversine formula
@@ -426,73 +612,6 @@ const Planning = () => {
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
-  };
-
-  // Calculate popularity score based on OSM tags
-  const calculatePopularity = (tags) => {
-    let score = 0;
-
-    // Check for various popularity indicators
-    if (tags.stars) score += parseInt(tags.stars) || 0;
-    if (tags.rating) score += parseFloat(tags.rating) * 2 || 0;
-    if (tags.reviews) score += Math.min(parseInt(tags.reviews) / 10, 5) || 0;
-    if (tags.wikipedia) score += 5; // Has Wikipedia article
-    if (tags.wikidata) score += 3; // Has Wikidata entry
-    if (tags.website) score += 2; // Has official website
-    if (tags.description) score += 1; // Has description
-    if (tags.image || tags.image_url) score += 2; // Has images
-
-    // Check importance tags
-    if (tags.tourism === 'attraction') score += 3;
-    if (tags.historic === 'monument') score += 2;
-    if (tags.heritage) score += 2;
-
-    // Additional bonuses for specific types
-    const popularTypes = {
-      museum: 4,
-      castle: 4,
-      palace: 4,
-      landmark: 3,
-      viewpoint: 3,
-      artwork: 2,
-      gallery: 2,
-      theatre: 2,
-    };
-
-    Object.entries(popularTypes).forEach(([type, bonus]) => {
-      if (Object.values(tags).includes(type)) score += bonus;
-    });
-
-    return score;
-  };
-
-  // Overpass API endpoints with fallback
-  const OVERPASS_ENDPOINTS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://lz4.overpass-api.de/api/interpreter',
-    'https://overpass.osm.ch/api/interpreter',
-    'https://overpass.openstreetmap.fr/api/interpreter',
-    'https://overpass.openstreetmap.ru/api/interpreter',
-  ];
-
-  // Make request with fallback to different endpoints
-  const makeOverpassRequest = async (query) => {
-    let lastError;
-
-    for (const endpoint of OVERPASS_ENDPOINTS) {
-      try {
-        const response = await axios.post(endpoint, query, {
-          timeout: 10000, // 10 second timeout
-        });
-        return response.data;
-      } catch (error) {
-        console.warn(`Failed to fetch from ${endpoint}:`, error.message);
-        lastError = error;
-        continue;
-      }
-    }
-
-    throw lastError; // If all endpoints fail, throw the last error
   };
 
   // Find points of interest using Ollama AI
@@ -627,24 +746,31 @@ const Planning = () => {
       }
 
       // Process and add IDs to POIs
-      const processedPois = poisFromAi.map((poi) => ({
-        ...poi,
-        id: `ai-${Date.now()}-${Math.random()
-          .toString(36)
-          .substr(2, 9)}`,
-        isAiGenerated: true,
-        selected: false,
-        popularity: 0.8,
-        locality: poi.locality || 'Unknown',
-        location: {
-          name: poi.name,
-          lat: poi.lat,
-          lng: poi.lng,
-          city: poi.locality,
-          country: '',
-        },
-        type: 'poi',
-      }));
+      const processedPois = poisFromAi.map((poi) => {
+        // Ensure coordinates are numbers
+        const lat = typeof poi.lat === 'number' ? poi.lat : parseFloat(poi.lat);
+        const lng = typeof poi.lng === 'number' ? poi.lng : parseFloat(poi.lng);
+        
+        return {
+          ...poi,
+          id: `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          isAiGenerated: true,
+          selected: false,
+          popularity: 0.8,
+          locality: poi.locality || 'Unknown',
+          // Ensure lat and lng are properly set as numbers
+          lat: lat,
+          lng: lng,
+          location: {
+            name: poi.name,
+            lat: lat,
+            lng: lng,
+            city: poi.locality,
+            country: '',
+          },
+          type: 'poi',
+        };
+      });
 
       // Set the POIs to state
       setPointsOfInterest(processedPois);
@@ -718,24 +844,31 @@ const Planning = () => {
         }
 
         if (Array.isArray(fallbackPois) && fallbackPois.length > 0) {
-          const processedPois = fallbackPois.map((poi) => ({
-            ...poi,
-            id: `ai-fallback-${Date.now()}-${Math.random()
-              .toString(36)
-              .substr(2, 9)}`,
-            isAiGenerated: true,
-            selected: false,
-            popularity: 0.7,
-            locality: poi.locality || 'Unknown',
-            location: {
-              name: poi.name,
-              lat: poi.lat,
-              lng: poi.lng,
-              city: poi.locality || 'Unknown',
-              country: '',
-            },
-            type: 'poi',
-          }));
+          const processedPois = fallbackPois.map((poi) => {
+            // Ensure coordinates are numbers
+            const lat = typeof poi.lat === 'number' ? poi.lat : parseFloat(poi.lat);
+            const lng = typeof poi.lng === 'number' ? poi.lng : parseFloat(poi.lng);
+            
+            return {
+              ...poi,
+              id: `ai-fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              isAiGenerated: true,
+              selected: false,
+              popularity: 0.7,
+              locality: poi.locality || 'Unknown',
+              // Ensure lat and lng are properly set as numbers
+              lat: lat,
+              lng: lng,
+              location: {
+                name: poi.name,
+                lat: lat,
+                lng: lng,
+                city: poi.locality || 'Unknown',
+                country: '',
+              },
+              type: 'poi',
+            };
+          });
 
           setPointsOfInterest(processedPois);
 
@@ -1185,40 +1318,38 @@ const Planning = () => {
             <div className="bg-white p-6 rounded-lg shadow-lg space-y-4">
               <div className="relative">
                 <div className="flex flex-col gap-3">
-                  <div className="flex-1 flex items-center gap-2 p-2 border rounded-lg focus-within:ring-2 focus-within:ring-blue-500">
-                    <MagnifyingGlassIcon className="h-5 w-5 text-gray-500" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={handleSearchChange}
-                      placeholder="Search for a location (e.g., Paris, Bucharest)"
-                      className="w-full outline-none text-gray-700"
-                    />
+                  <div className="relative flex-1">
+                    <div className="flex items-center gap-2 p-2 border rounded-lg focus-within:ring-2 focus-within:ring-blue-500">
+                      <MagnifyingGlassIcon className="h-5 w-5 text-gray-500" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={handleSearchChange}
+                        placeholder="Search for a location (e.g., Paris, Bucharest)"
+                        className="w-full outline-none text-gray-700"
+                      />
+                      {isSearching && (
+                        <ArrowPathIcon className="h-4 w-4 text-gray-400 animate-spin" />
+                      )}
+                    </div>
+
+                    {/* Search Results Dropdown */}
+                    {searchResults.length > 0 && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-60 overflow-auto">
+                        {searchResults.map((result, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleLocationSelect(result)}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+                          >
+                            {result.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <button
-                    onClick={() => searchLocation(searchQuery)}
-                    disabled={isSearching || searchQuery.length < 3}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSearching ? 'Searching...' : 'Search'}
-                  </button>
                 </div>
               </div>
-
-              {/* Search Results Dropdown */}
-              {searchResults.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-60 overflow-auto">
-                  {searchResults.map((result, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleLocationSelect(result)}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
-                    >
-                      {result.name}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Trip Days */}
@@ -1227,24 +1358,33 @@ const Planning = () => {
                 <h2 className="text-lg font-semibold mb-2">Trip Days</h2>
                 <div className="space-y-3">
                   {tripDays.map((day) => (
-                    <div key={day.id} className="border-b pb-2">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="flex items-center">
-                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
+                    <div key={day.id} className="border-b pb-3 mb-3 last:border-b-0 last:mb-0 last:pb-0">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 mr-3 min-w-0">
+                          <div className="flex items-center flex-wrap gap-2 mb-1">
+                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full flex-shrink-0">
                               Destination
                             </span>
-                            <h3 className="font-medium">{day.location.name}</h3>
+                            <h3 className="font-medium truncate">{day.location.name}</h3>
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {day.location.city && day.location.country
-                              ? `${day.location.city}, ${day.location.country}`
-                              : day.location.country || 'Location details not available'}
-                          </p>
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-sm text-gray-600 truncate">
+                              {day.location.city && day.location.country
+                                ? `${day.location.city}, ${day.location.country}`
+                                : day.location.country || 'Location details not available'}
+                            </p>
+                            <button
+                              onClick={() => openInGoogleMaps(day)}
+                              className="text-blue-600 hover:text-blue-800 ml-2 flex-shrink-0"
+                              title="View in Google Maps"
+                            >
+                              <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                         <button
                           onClick={() => handleRemoveDay(day.id)}
-                          className="text-red-500 hover:text-red-700"
+                          className="text-red-500 hover:text-red-700 flex-shrink-0 p-1"
                           title="Remove this day"
                         >
                           <TrashIcon className="h-5 w-5" />
@@ -1278,123 +1418,157 @@ const Planning = () => {
           {/* Center Panel: Map */}
           <div className="md:col-span-6">
             <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-              <MapContainer
-                center={[routeCoordinates[0]?.[0] || 0, routeCoordinates[0]?.[1] || 0]}
-                zoom={13}
-                style={{ height: '700px', width: '100%' }}
-                ref={mapRef}
-              >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                />
-
-                {/* Display route */}
-                {routeCoordinates.length > 0 && (
-                  <Polyline
-                    positions={routeCoordinates}
-                    color="#3b82f6"
-                    weight={4}
-                    opacity={0.7}
-                  />
+              <div className="relative">
+                <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+                  <button
+                    onClick={() => setIsMapClickMode(!isMapClickMode)}
+                    className={`p-2 rounded-lg shadow-md ${isMapClickMode ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}
+                    title={isMapClickMode ? 'Cancel adding location' : 'Click on map to add location'}
+                  >
+                    <MapPinIcon className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={findPOIsInMapBounds}
+                    className="p-2 bg-white text-gray-700 rounded-lg shadow-md hover:bg-gray-50"
+                    title="Find points of interest in current map view"
+                    disabled={isSearching}
+                  >
+                    <MagnifyingGlassIcon className="h-5 w-5" />
+                  </button>
+                </div>
+                {isMapClickMode && (
+                  <div className="absolute top-4 left-4 z-10 bg-white p-3 rounded-lg shadow-md">
+                    <p className="text-sm font-medium">Click anywhere on the map to add a location</p>
+                  </div>
                 )}
-
-                {/* Display POI routes */}
-                {poiRoutes.map((route, index) => (
-                  <Polyline
-                    key={`route-${route.poiId}-${index}`}
-                    positions={route.coordinates}
-                    color="#EF4444"
-                    weight={3}
-                    opacity={0.6}
-                    dashArray="5, 10"
+                <MapContainer
+                  center={[routeCoordinates[0]?.[0] || 51.505, routeCoordinates[0]?.[1] || -0.09]}
+                  zoom={13}
+                  style={{ height: '700px', width: '100%' }}
+                  ref={mapRef}
+                >
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   />
-                ))}
 
-                {/* Display Search Points */}
-                {sampledSearchPoints.map((point, index) => (
-                  <CircleMarker
-                    key={`search-point-${index}`}
-                    center={[point[0], point[1]]}
-                    radius={8}
-                    fillColor="#3B82F6"
-                    fillOpacity={0.6}
-                    color="#2563EB"
-                    weight={2}
-                  >
-                    <Popup>
-                      <div className="text-sm">
-                        Search Point {index + 1}
-                        <p className="text-xs text-gray-500 mt-1">
-                          Looking for attractions near this point
-                        </p>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                ))}
+                  {/* Display route */}
+                  {routeCoordinates.length > 0 && (
+                    <Polyline
+                      positions={routeCoordinates}
+                      color="#3b82f6"
+                      weight={4}
+                      opacity={0.7}
+                    />
+                  )}
 
-                {/* Display POIs */}
-                {pointsOfInterest.map((poi) => (
-                  <Marker
-                    key={poi.id}
-                    position={[poi.lat, poi.lng]}
-                    icon={createCustomIcon('#EF4444')}
-                    eventHandlers={{
-                      click: () => handlePOIClick(poi),
-                    }}
-                  >
-                    <Popup>
-                      <div className="space-y-2">
-                        <h3 className="font-medium">{poi.name}</h3>
-                        <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
-                        {poi.locality && (
-                          <p className="text-xs text-gray-500">
-                            Located in {poi.locality}
-                            {poi.distanceToRoute && ` (${poi.distanceToRoute.toFixed(1)}km from route)`}
+                  {/* Display POI routes */}
+                  {poiRoutes.map((route, index) => (
+                    <Polyline
+                      key={`route-${route.poiId}-${index}`}
+                      positions={route.coordinates}
+                      color="#EF4444"
+                      weight={3}
+                      opacity={0.6}
+                      dashArray="5, 10"
+                    />
+                  ))}
+
+                  {/* Display Search Points */}
+                  {sampledSearchPoints.map((point, index) => (
+                    <CircleMarker
+                      key={`search-point-${index}`}
+                      center={[point[0], point[1]]}
+                      radius={8}
+                      fillColor="#3B82F6"
+                      fillOpacity={0.6}
+                      color="#2563EB"
+                      weight={2}
+                    >
+                      <Popup>
+                        <div className="text-sm">
+                          Search Point {index + 1}
+                          <p className="text-xs text-gray-500 mt-1">
+                            Looking for attractions near this point
                           </p>
-                        )}
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
-                        >
-                          <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
-                          View in Google Maps
-                        </a>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                        </div>
+                      </Popup>
+                    </CircleMarker>
+                  ))}
 
-                {/* Display Trip Days */}
-                {tripDays.map((day, index) => (
-                  <Marker
-                    key={day.id}
-                    position={[day.location.lat, day.location.lng]}
-                    icon={createCustomIcon('#3b82f6')}
-                  >
-                    <Popup>
-                      <div className="space-y-2">
-                        <h3 className="font-medium flex items-center">
-                          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                            Day {index + 1}
-                          </span>
-                          {day.location.name}
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          {day.location.city && day.location.country
-                            ? `${day.location.city}, ${day.location.country}`
-                            : day.location.country || 'Location details not available'}
-                        </p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                  {/* Display POIs */}
+                  {pointsOfInterest.map((poi) => {
+                    // Skip POIs with invalid coordinates
+                    if (!poi.lat || !poi.lng || isNaN(parseFloat(poi.lat)) || isNaN(parseFloat(poi.lng))) {
+                      return null;
+                    }
+                    
+                    // Ensure coordinates are numbers
+                    const lat = typeof poi.lat === 'number' ? poi.lat : parseFloat(poi.lat);
+                    const lng = typeof poi.lng === 'number' ? poi.lng : parseFloat(poi.lng);
+                    
+                    return (
+                      <Marker
+                        key={poi.id}
+                        position={[lat, lng]}
+                        icon={createCustomIcon('red')}
+                        eventHandlers={{
+                          click: () => handlePOIClick(poi),
+                        }}
+                      >
+                        <Popup>
+                          <div className="space-y-2">
+                            <h3 className="font-medium">{poi.name}</h3>
+                            <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
+                            {poi.locality && (
+                              <p className="text-xs text-gray-500">
+                                Located in {poi.locality}
+                                {poi.distanceToRoute && ` (${poi.distanceToRoute.toFixed(1)}km from route)`}
+                              </p>
+                            )}
+                            <button
+                              onClick={() => openInGoogleMaps(poi)}
+                              className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
+                            >
+                              <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
+                              View in Google Maps
+                            </button>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  })}
 
-                {/* Map controller to update bounds */}
-                <MapController locations={mapLocations} />
-              </MapContainer>
+                  {/* Display Trip Days */}
+                  {tripDays.map((day, index) => (
+                    <Marker
+                      key={day.id}
+                      position={[day.location.lat, day.location.lng]}
+                      icon={createCustomIcon('#3b82f6')}
+                    >
+                      <Popup>
+                        <div className="space-y-2">
+                          <h3 className="font-medium flex items-center">
+                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
+                              Day {index + 1}
+                            </span>
+                            {day.location.name}
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            {day.location.city && day.location.country
+                              ? `${day.location.city}, ${day.location.country}`
+                              : day.location.country || 'Location details not available'}
+                          </p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+
+                  {/* Map controller to update bounds */}
+                  <MapController locations={mapLocations} />
+                  <MapEvents onClick={handleMapClick} />
+                </MapContainer>
+              </div>
             </div>
           </div>
 
@@ -1684,12 +1858,8 @@ const Planning = () => {
                 </details>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Trip Days List */}
-          <div className="space-y-4">
+            {/* Your Destinations & Points of Interest */}
             <div className="bg-white p-6 rounded-lg shadow-lg">
               <h2 className="text-xl font-semibold mb-4 flex items-center">
                 <MapPinIcon className="h-5 w-5 mr-2 text-blue-600" />
@@ -1702,213 +1872,230 @@ const Planning = () => {
                   <p className="text-sm mt-2">Search and add locations to plan your route.</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {tripDays.map((day) => (
-                    <div key={day.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div key={day.id} className="border rounded-lg p-3 hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center">
-                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
+                        <div className="flex-1 mr-2 min-w-0">
+                          <div className="flex items-center flex-wrap gap-1 mb-1">
+                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0">
                               Destination
                             </span>
-                            <h3 className="font-medium">{day.location.name}</h3>
+                            <h3 className="font-medium text-sm truncate">{day.location.name}</h3>
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {day.location.city && day.location.country
-                              ? `${day.location.city}, ${day.location.country}`
-                              : day.location.country || 'Location details not available'}
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-600 truncate">
+                              {day.location.city && day.location.country
+                                ? `${day.location.city}, ${day.location.country}`
+                                : day.location.country || 'Location details not available'}
+                            </p>
+                            <button
+                              onClick={() => openInGoogleMaps(day)}
+                              className="text-blue-600 hover:text-blue-800 ml-1 flex-shrink-0"
+                              title="View in Google Maps"
+                            >
+                              <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+                            </button>
+                          </div>
                         </div>
                         <button
                           onClick={() => handleRemoveDay(day.id)}
-                          className="text-red-500 hover:text-red-700"
+                          className="text-red-500 hover:text-red-700 flex-shrink-0"
                           title="Remove this day"
                         >
-                          <TrashIcon className="h-5 w-5" />
+                          <TrashIcon className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
                   ))}
 
-                  <button
-                    onClick={generatePlan}
-                    disabled={tripDays.length < 2 || isGeneratingPlan}
-                    className="w-full mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                  >
-                    {isGeneratingPlan ? (
-                      <>
-                        <ArrowPathIcon className="h-5 w-5 mr-2 animate-spin" />
-                        Generating Plan...
-                      </>
-                    ) : (
-                      <>
-                        <PlusIcon className="h-5 w-5 mr-2" />
-                        Generate Trip Plan
-                      </>
-                    )}
-                  </button>
+                  {tripDays.length >= 2 && (
+                    <button
+                      onClick={generatePlan}
+                      disabled={isGeneratingPlan}
+                      className="w-full mt-3 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                      {isGeneratingPlan ? (
+                        <>
+                          <ArrowPathIcon className="h-4 w-4 mr-1 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <PlusIcon className="h-4 w-4 mr-1" />
+                          Generate Trip Plan
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
+          </div>
+        </div>
 
-            {/* Route Points of Interest */}
-            {routePOIs.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow-lg">
-                <h2 className="text-xl font-semibold mb-4 flex items-center">
-                  <MapPinIcon className="h-5 w-5 mr-2 text-blue-600" />
-                  Tourist Attractions Along Your Route
-                </h2>
-                <p className="text-sm text-gray-600 mb-4">
-                  Points of interest within 5km of your route ({routePOIs.length} found)
-                </p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 hidden">
+          {/* This section is now hidden as we moved it to the right panel */}
+        </div>
 
-                <div className="space-y-3">
-                  {routePOIs.map((poi) => (
-                    <div
-                      key={poi.id}
-                      className={`text-sm border-l-2 ${
-                        selectedPOI === poi.id ? 'border-green-500 bg-green-50'
-                          : poi.distanceToRoute <= 1 ? 'border-purple-500'
-                          : poi.isPopular ? 'border-yellow-500'
-                          : 'border-blue-500'
-                      } pl-3 py-2 pr-2 rounded-r flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors`}
-                      onClick={() => handlePOIClick(poi)}
-                    >
-                      <div>
-                        <div className="flex items-center">
-                          <p className="font-medium">{poi.name}</p>
-                          {poi.isPopular && (
-                            <span className="ml-2 bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                              Popular
-                            </span>
-                          )}
-                          {poi.distanceToRoute && (
-                            <span className="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                              {poi.distanceToRoute.toFixed(1)}km
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3">
+          {/* Route Points of Interest */}
+          {routePOIs.length > 0 && (
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+              <h2 className="text-xl font-semibold mb-4 flex items-center">
+                <MapPinIcon className="h-5 w-5 mr-2 text-blue-600" />
+                Tourist Attractions Along Your Route
+              </h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Points of interest within 5km of your route ({routePOIs.length} found)
+              </p>
+
+              <div className="space-y-3">
+                {routePOIs.map((poi) => (
+                  <div
+                    key={poi.id}
+                    className={`text-sm border-l-2 ${
+                      selectedPOI === poi.id ? 'border-green-500 bg-green-50'
+                        : poi.distanceToRoute <= 1 ? 'border-purple-500'
+                        : poi.isPopular ? 'border-yellow-500'
+                        : 'border-blue-500'
+                    } pl-3 py-2 pr-2 rounded-r flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors`}
+                    onClick={() => handlePOIClick(poi)}
+                  >
+                    <div>
+                      <div className="flex items-center">
+                        <p className="font-medium">{poi.name}</p>
+                        {poi.isPopular && (
+                          <span className="ml-2 bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded-full">
+                            Popular
+                          </span>
+                        )}
+                        {poi.distanceToRoute && (
+                          <span className="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full">
+                            {poi.distanceToRoute.toFixed(1)}km
+                          </span>
+                        )}
                       </div>
-                      <div className="flex space-x-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openInGoogleMaps(poi);
-                          }}
-                          className="p-1 text-blue-600 hover:text-blue-800"
-                          title="Open in Google Maps"
-                        >
-                          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-                        </button>
+                      <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
+                    </div>
+                    <div className="flex space-x-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openInGoogleMaps(poi);
+                        }}
+                        className="p-1 text-blue-600 hover:text-blue-800"
+                        title="Open in Google Maps"
+                      >
+                        <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Points of Interest */}
+          {pointsOfInterest.length > 0 && (
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+              <h2 className="text-xl font-semibold mb-4">Points of Interest</h2>
+
+              <div className="space-y-6">
+                {tripDays.map((day, index) => {
+                  const dayPOIs = pointsOfInterest.filter((poi) => poi.dayId === day.id);
+
+                  if (dayPOIs.length === 0) return null;
+
+                  return (
+                    <div key={day.id} className="space-y-3">
+                      <h3 className="font-medium flex items-center">
+                        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
+                          Day {index + 1}
+                        </span>
+                        {day.location.city || day.location.name}
+                      </h3>
+
+                      <div className="grid grid-cols-1 gap-2">
+                        {dayPOIs.map((poi) => (
+                          <div
+                            key={poi.id}
+                            className={`text-sm border-l-2 ${selectedPOI === poi.id ? 'border-green-500 bg-green-50' : 'border-blue-500'} pl-3 py-2 pr-2 rounded-r flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors`}
+                            onClick={() => handlePOIClick(poi)}
+                          >
+                            <div>
+                              {editingPOI === poi.id ? (
+                                <input
+                                  type="text"
+                                  value={newPOIName}
+                                  onChange={(e) => setNewPOIName(e.target.value)}
+                                  className="w-full p-1 border rounded"
+                                  onClick={(e) => e.stopPropagation()}
+                                  autoFocus
+                                />
+                              ) : (
+                                <>
+                                  <p className="font-medium">{poi.name}</p>
+                                  <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
+                                  <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
+                                    View in Google Maps
+                                  </a>
+                                </>
+                              )}
+                            </div>
+                            <div className="flex space-x-1">
+                              {editingPOI === poi.id ? (
+                                <>
+                                  <button
+                                    onClick={(e) => handleSavePOI(e, poi.id)}
+                                    className="p-1 text-green-600 hover:text-green-800"
+                                    title="Save changes"
+                                  >
+                                    <PlusIcon className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={handleCancelEdit}
+                                    className="p-1 text-red-600 hover:text-red-800"
+                                    title="Cancel editing"
+                                  >
+                                    <XMarkIcon className="h-4 w-4" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={(e) => handleEditPOI(e, poi)}
+                                    className="p-1 text-blue-600 hover:text-blue-800"
+                                    title="Edit"
+                                  >
+                                    <PencilIcon className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleDeletePOI(e, poi.id)}
+                                    className="p-1 text-red-600 hover:text-red-800"
+                                    title="Delete"
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            )}
-
-            {/* Points of Interest */}
-            {pointsOfInterest.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow-lg">
-                <h2 className="text-xl font-semibold mb-4">Points of Interest</h2>
-
-                <div className="space-y-6">
-                  {tripDays.map((day, index) => {
-                    const dayPOIs = pointsOfInterest.filter((poi) => poi.dayId === day.id);
-
-                    if (dayPOIs.length === 0) return null;
-
-                    return (
-                      <div key={day.id} className="space-y-3">
-                        <h3 className="font-medium flex items-center">
-                          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                            Day {index + 1}
-                          </span>
-                          {day.location.city || day.location.name}
-                        </h3>
-
-                        <div className="grid grid-cols-1 gap-2">
-                          {dayPOIs.map((poi) => (
-                            <div
-                              key={poi.id}
-                              className={`text-sm border-l-2 ${selectedPOI === poi.id ? 'border-green-500 bg-green-50' : 'border-blue-500'} pl-3 py-2 pr-2 rounded-r flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors`}
-                              onClick={() => handlePOIClick(poi)}
-                            >
-                              <div>
-                                {editingPOI === poi.id ? (
-                                  <input
-                                    type="text"
-                                    value={newPOIName}
-                                    onChange={(e) => setNewPOIName(e.target.value)}
-                                    className="w-full p-1 border rounded"
-                                    onClick={(e) => e.stopPropagation()}
-                                    autoFocus
-                                  />
-                                ) : (
-                                  <>
-                                    <p className="font-medium">{poi.name}</p>
-                                    <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
-                                    <a
-                                      href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
-                                      View in Google Maps
-                                    </a>
-                                  </>
-                                )}
-                              </div>
-                              <div className="flex space-x-1">
-                                {editingPOI === poi.id ? (
-                                  <>
-                                    <button
-                                      onClick={(e) => handleSavePOI(e, poi.id)}
-                                      className="p-1 text-green-600 hover:text-green-800"
-                                      title="Save changes"
-                                    >
-                                      <PlusIcon className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={handleCancelEdit}
-                                      className="p-1 text-red-600 hover:text-red-800"
-                                      title="Cancel editing"
-                                    >
-                                      <XMarkIcon className="h-4 w-4" />
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      onClick={(e) => handleEditPOI(e, poi)}
-                                      className="p-1 text-blue-600 hover:text-blue-800"
-                                      title="Edit"
-                                    >
-                                      <PencilIcon className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => handleDeletePOI(e, poi.id)}
-                                      className="p-1 text-red-600 hover:text-red-800"
-                                      title="Delete"
-                                    >
-                                      <TrashIcon className="h-4 w-4" />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
