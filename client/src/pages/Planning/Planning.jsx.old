@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, CircleMarker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MagnifyingGlassIcon, PlusIcon, TrashIcon, MapPinIcon, ArrowPathIcon, PencilIcon, XMarkIcon, ArrowTopRightOnSquareIcon, BuildingOfficeIcon, HomeIcon, StarIcon, SparklesIcon } from '@heroicons/react/24/solid';
+import { MagnifyingGlassIcon, PlusIcon, TrashIcon, MapPinIcon, ArrowPathIcon, PencilIcon, XMarkIcon, ArrowTopRightOnSquareIcon, BuildingOfficeIcon, HomeIcon, StarIcon } from '@heroicons/react/24/solid';
 import { format } from 'date-fns';
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -81,9 +81,6 @@ const Planning = () => {
   const [poiRoutes, setPoiRoutes] = useState([]);
   const [hotels, setHotels] = useState([]);
   const [selectedHotel, setSelectedHotel] = useState(null);
-  const [mapLocations, setMapLocations] = useState([]);
-  const [isUsingAiForPoi, setIsUsingAiForPoi] = useState(false);
-  const [isProcessingAiPoi, setIsProcessingAiPoi] = useState(false);
   
   // POI Category selections
   const [selectedCategories, setSelectedCategories] = useState({
@@ -227,19 +224,6 @@ const Planning = () => {
     setTripDays(tripDays.filter(day => day.id !== dayId));
   };
   
-  // Effect to update mapLocations when tripDays change
-  useEffect(() => {
-    if (tripDays.length > 0) {
-      const locations = tripDays.map(day => ({
-        lat: day.location.lat,
-        lng: day.location.lng
-      }));
-      
-      // Update the mapLocations state
-      setMapLocations(locations);
-    }
-  }, [tripDays]);
-  
   // Handle POI click to highlight on map
   const handlePOIClick = (poi) => {
     setSelectedPOI(poi.id === selectedPOI ? null : poi.id);
@@ -270,7 +254,7 @@ const Planning = () => {
             </a>
           </div>
         `)
-        .openOn(map)
+        .openOn(map);
     }
   };
   
@@ -1042,14 +1026,13 @@ const Planning = () => {
           </p>
         </div>
         
-        {/* Main Content - Three Column Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          {/* Left Panel: Search and Trip Days */}
-          <div className="md:col-span-3 space-y-6">
-            {/* Search Bar */}
-            <div className="bg-white p-6 rounded-lg shadow-lg space-y-4">
-              <div className="relative">
-              <div className="flex flex-col gap-3">
+        {/* Main Content - 3 Column Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6" style={{ minHeight: '80vh' }}>
+          
+          {/* Left Panel - Search and Filters */}
+          <div className="md:col-span-3 bg-white p-6 rounded-lg shadow-lg space-y-4 flex flex-col h-full overflow-y-auto">
+            <div className="relative">
+              <div className="flex items-center gap-2">
                 <div className="flex-1 flex items-center gap-2 p-2 border rounded-lg focus-within:ring-2 focus-within:ring-blue-500">
                   <MagnifyingGlassIcon className="h-5 w-5 text-gray-500" />
                   <input
@@ -1063,9 +1046,15 @@ const Planning = () => {
                 <button
                   onClick={() => searchLocation(searchQuery)}
                   disabled={isSearching || searchQuery.length < 3}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSearching ? 'Searching...' : 'Search'}
+                </button>
+                <button
+                  onClick={logTripDays}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  Debug Trip
                 </button>
               </div>
               
@@ -1085,192 +1074,8 @@ const Planning = () => {
               )}
             </div>
             
-            </div>
-            
-            {/* Trip Days */}
-            {tripDays.length > 0 && (
-              <div className="mt-4 border-t pt-4">
-                <h2 className="text-lg font-semibold mb-2">Trip Days</h2>
-                <div className="space-y-3">
-                  {tripDays.map((day, index) => (
-                    <div key={day.id} className="border-b pb-2">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="flex items-center">
-                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                              Day {index + 1}
-                            </span>
-                            <h3 className="font-medium">{day.location.name}</h3>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {day.location.city && day.location.country 
-                              ? `${day.location.city}, ${day.location.country}`
-                              : day.location.country || 'Location details not available'}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveDay(day.id)}
-                          className="text-red-500 hover:text-red-700"
-                          title="Remove this day"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  <button
-                    onClick={generatePlan}
-                    disabled={tripDays.length < 2 || isGeneratingPlan}
-                    className="w-full mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                  >
-                    {isGeneratingPlan ? (
-                      <>
-                        <ArrowPathIcon className="h-5 w-5 mr-2 animate-spin" />
-                        Generating Plan...
-                      </>
-                    ) : (
-                      <>
-                        <PlusIcon className="h-5 w-5 mr-2" />
-                        Generate Trip Plan
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Center Panel: Map */}
-          <div className="md:col-span-6">
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-              <MapContainer 
-                center={[routeCoordinates[0]?.[0] || 0, routeCoordinates[0]?.[1] || 0]} 
-                zoom={13} 
-                style={{ height: '700px', width: '100%' }}
-                ref={mapRef}
-              >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                />
-                
-                {/* Display route */}
-                {routeCoordinates.length > 0 && (
-                  <Polyline
-                    positions={routeCoordinates}
-                    color="#3b82f6"
-                    weight={4}
-                    opacity={0.7}
-                  />
-                )}
-
-                {/* Display POI routes */}
-                {poiRoutes.map((route, index) => (
-                  <Polyline
-                    key={`route-${route.poiId}-${index}`}
-                    positions={route.coordinates}
-                    color="#EF4444"
-                    weight={3}
-                    opacity={0.6}
-                    dashArray="5, 10"
-                  />
-                ))}
-
-                {/* Display Search Points */}
-                {sampledSearchPoints.map((point, index) => (
-                  <CircleMarker
-                    key={`search-point-${index}`}
-                    center={[point[0], point[1]]}
-                    radius={8}
-                    fillColor="#3B82F6"
-                    fillOpacity={0.6}
-                    color="#2563EB"
-                    weight={2}
-                  >
-                    <Popup>
-                      <div className="text-sm">
-                        Search Point {index + 1}
-                        <p className="text-xs text-gray-500 mt-1">
-                          Looking for attractions near this point
-                        </p>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                ))}
-
-                {/* Display POIs */}
-                {pointsOfInterest.map(poi => (
-                  <Marker 
-                    key={poi.id} 
-                    position={[poi.lat, poi.lng]}
-                    icon={createCustomIcon('#EF4444')}
-                    eventHandlers={{
-                      click: () => handlePOIClick(poi)
-                    }}
-                  >
-                    <Popup>
-                      <div className="space-y-2">
-                        <h3 className="font-medium">{poi.name}</h3>
-                        <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
-                        {poi.locality && (
-                          <p className="text-xs text-gray-500">
-                            Located in {poi.locality}
-                            {poi.distanceToRoute && ` (${poi.distanceToRoute.toFixed(1)}km from route)`}
-                          </p>
-                        )}
-                        <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
-                        >
-                          <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
-                          View in Google Maps
-                        </a>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-                
-                {/* Display Trip Days */}
-                {tripDays.map((day, index) => (
-                  <Marker
-                    key={day.id}
-                    position={[day.location.lat, day.location.lng]}
-                    icon={createCustomIcon('#3b82f6')}
-                  >
-                    <Popup>
-                      <div className="space-y-2">
-                        <h3 className="font-medium flex items-center">
-                          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                            Day {index + 1}
-                          </span>
-                          {day.location.name}
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          {day.location.city && day.location.country 
-                            ? `${day.location.city}, ${day.location.country}`
-                            : day.location.country || 'Location details not available'}
-                        </p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-                
-                {/* Map controller to update bounds */}
-                <MapController locations={mapLocations} />
-              </MapContainer>
-            </div>
-          </div>
-          
-          {/* Right Panel: Filters and Options */}
-          <div className="md:col-span-3 space-y-6">
-            {/* Trip Preferences */}
-            <div className="bg-white p-6 rounded-lg shadow-lg space-y-4">
-              <h2 className="text-lg font-semibold mb-2">Trip Preferences</h2>
-              
-              {/* Interests */}
+            {/* Trip preferences checkboxes */}
+            <div className="mt-4 border-t pt-4">
               <div className="mb-3">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Trip Interests</h3>
                 <div className="flex flex-wrap gap-3">
@@ -1290,7 +1095,6 @@ const Planning = () => {
                 </div>
               </div>
               
-              {/* Trip Style */}
               <div className="mb-3">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Trip Style</h3>
                 <div className="flex flex-wrap gap-3">
@@ -1674,14 +1478,25 @@ const Planning = () => {
           </div>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Trip Days List */}
-          <div className="space-y-4">
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-xl font-semibold mb-4 flex items-center">
-                <MapPinIcon className="h-5 w-5 mr-2 text-blue-600" />
-                Your Trip Days
-              </h2>
+        {/* Main Planning Interface */}
+        <div className="planning-grid mt-8" style={{ 
+          display: 'grid',
+          gridTemplateColumns: '280px minmax(0, 3fr) 320px',
+          gridTemplateRows: 'minmax(600px, 1fr) auto',
+          gap: '16px',
+          minHeight: '800px'
+        }}>
+          {/* Trip Days List - Left Sidebar */}
+          <div className="trip-days-sidebar bg-white rounded-lg shadow-lg p-6" style={{
+            gridColumn: '1 / 2',
+            gridRow: '1 / 2',
+            overflowY: 'auto',
+            maxHeight: 'calc(100vh - 250px)'
+          }}>
+            <h2 className="text-xl font-semibold mb-4 flex items-center">
+              <MapPinIcon className="h-5 w-5 mr-2 text-blue-600" />
+              Your Trip Days
+            </h2>
               
               {tripDays.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
@@ -1793,10 +1608,21 @@ const Planning = () => {
                 </div>
               </div>
             )}
-            
-            {/* Points of Interest */}
+          </div>
+          
+          {/* Right Sidebar - Points of Interest & Hotels */}
+          <div className="right-sidebar" style={{
+            gridColumn: '3 / 4',
+            gridRow: '1 / 2',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            overflowY: 'auto',
+            maxHeight: 'calc(100vh - 250px)'
+          }}>
+            {/* Points of Interest Section */}
             {pointsOfInterest.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow-lg">
+              <div className="bg-white p-6 rounded-lg shadow-lg mb-4">
                 <h2 className="text-xl font-semibold mb-4">Points of Interest</h2>
                 
                 <div className="space-y-6">
@@ -1951,6 +1777,221 @@ const Planning = () => {
               </div>
             )}
           </div>
+          
+          {/* Middle Panel - Map */}
+          <div className="md:col-span-6 bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
+            <MapContainer 
+              center={[routeCoordinates[0]?.[0] || 0, routeCoordinates[0]?.[1] || 0]} 
+              zoom={13} 
+              style={{ height: '100%', width: '100%', minHeight: '500px', flex: '1' }}
+              ref={mapRef}
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              />
+              
+              {/* Display route */}
+              {routeCoordinates.length > 0 && (
+                <Polyline
+                  positions={routeCoordinates}
+                  color="#3b82f6"
+                  weight={4}
+                  opacity={0.7}
+                />
+              )}
+
+              {/* Display POI routes */}
+              {poiRoutes.map((route, index) => (
+                <Polyline
+                  key={`route-${route.poiId}-${index}`}
+                  positions={route.coordinates}
+                  color="#EF4444"
+                  weight={3}
+                  opacity={0.6}
+                  dashArray="5, 10"
+                />
+              ))}
+
+              {/* Display Search Points */}
+              {sampledSearchPoints.map((point, index) => (
+                <CircleMarker
+                  key={`search-point-${index}`}
+                  center={[point[0], point[1]]}
+                  radius={8}
+                  fillColor="#3B82F6"
+                  fillOpacity={0.6}
+                  color="#2563EB"
+                  weight={2}
+                >
+                  <Popup>
+                    <div className="text-sm">
+                      Search Point {index + 1}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Looking for attractions near this point
+                      </p>
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              ))}
+
+              {/* Display POIs */}
+              {pointsOfInterest.map(poi => (
+                <Marker 
+                  key={poi.id} 
+                  position={[poi.lat, poi.lng]}
+                  icon={createCustomIcon('#EF4444')}
+                  eventHandlers={{
+                    click: () => handlePOIClick(poi)
+                  }}
+                >
+                  <Popup>
+                    <div className="space-y-2">
+                      <h3 className="font-medium">{poi.name}</h3>
+                      <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
+                      {poi.locality && (
+                        <p className="text-xs text-gray-500">
+                          Located in {poi.locality}
+                          {poi.distanceToRoute && ` (${poi.distanceToRoute.toFixed(1)}km from route)`}
+                        </p>
+                      )}
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${poi.lat},${poi.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
+                      >
+                        <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
+                        View in Google Maps
+                      </a>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+            
+            {/* Generate Trip Button - Bottom of Map */}
+            <div className="p-4 border-t">
+              <div className="flex space-x-4">
+                <button
+                  onClick={generatePlan}
+                  disabled={tripDays.length < 2 || isGeneratingPlan}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {isGeneratingPlan ? (
+                    <>
+                      <ArrowPathIcon className="h-5 w-5 mr-2 animate-spin" />
+                      Generating Plan...
+                    </>
+                  ) : (
+                    <>
+                      <PlusIcon className="h-5 w-5 mr-2" />
+                      Generate Trip Plan
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={logTripDays}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  Debug Trip
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Right Panel - Trip Details */}
+          <div className="md:col-span-3 bg-white rounded-xl shadow-lg overflow-hidden flex flex-col h-full overflow-y-auto">
+            {/* Trip Details Content */}
+            <div className="p-4">
+              <h2 className="text-lg font-semibold mb-4">Trip Details</h2>
+              
+              {/* Trip Days */}
+              <div className="space-y-4">
+                {tripDays.length > 0 ? (
+                  tripDays.map((day, index) => (
+                    <div key={index} className="bg-white p-3 rounded border border-gray-200 hover:border-gray-300 transition-colors">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-medium">{day.name || `Day ${index + 1}`}</h4>
+                          <p className="text-sm text-gray-600">{day.location?.display_name?.split(',')[0]}</p>
+                        </div>
+                        <div className="flex space-x-1">
+                          <button
+                            onClick={() => handleEditDay(day, index)}
+                            className="p-1 text-gray-500 hover:text-gray-700"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDay(index)}
+                            className="p-1 text-gray-500 hover:text-red-500"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center p-4 text-gray-500">
+                    <p>Add destinations to your trip using the search bar</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Selected POIs */}
+              {pointsOfInterest.filter(poi => poi.selected).length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-md font-semibold mb-2">Selected Points of Interest</h3>
+                  <div className="space-y-2">
+                    {pointsOfInterest
+                      .filter(poi => poi.selected)
+                      .map(poi => (
+                        <div key={poi.id} className="bg-white p-2 rounded border border-blue-200 flex justify-between items-center">
+                          <div>
+                            <p className="font-medium text-sm">{poi.name}</p>
+                            <p className="text-xs text-gray-500">{poi.type}</p>
+                          </div>
+                          <button
+                            onClick={() => handleViewOnMap(poi)}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            View on Map
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Hotel Recommendations */}
+              {hotelRecommendations.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-md font-semibold mb-2">Hotel Recommendations</h3>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {hotelRecommendations.map(hotel => (
+                      <div 
+                        key={hotel.id} 
+                        className="bg-white p-2 rounded border border-gray-200 hover:border-gray-300 cursor-pointer"
+                        onClick={() => handleHotelSelect(hotel)}
+                      >
+                        <p className="font-medium text-sm">{hotel.name}</p>
+                        <div className="flex justify-between items-center">
+                          <p className="text-xs text-gray-500">{hotel.city}</p>
+                          {hotel.rooms && hotel.rooms.length > 0 && (
+                            <p className="text-xs font-semibold text-blue-600">
+                              From ${Math.min(...hotel.rooms.map(r => r.price_per_night || 999))}/night
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1958,3 +1999,4 @@ const Planning = () => {
 };
 
 export default Planning;
+
