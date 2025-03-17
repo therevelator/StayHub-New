@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  overpass-api:
+    image: wiktorn/overpass-api:latest
+    container_name: overpass-romania
+    ports:
+      - "12345:80"
+    environment:
+      - OVERPASS_META=yes
+      - OVERPASS_MODE=init
+      - OVERPASS_PLANET_URL=https://download.geofabrik.de/europe/romania-latest.osm.bz2
+      - OVERPASS_DIFF_URL=https://download.openstreetmap.fr/replication/europe/romania/minute/
+      - OVERPASS_RULES_LOAD=10
+      - OVERPASS_ALLOW_SPACE_AFTER_SEMICOLON=yes
+      - OVERPASS_USE_AREAS=yes
+      - OVERPASS_MEMORY=2048
+      - OVERPASS_MAX_TIMEOUT=300
+    volumes:
+      - ./overpass_db:/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-O", "-", "http://localhost/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3" 
