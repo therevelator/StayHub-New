@@ -1,19 +1,18 @@
 import axios from 'axios';
 import Swal from 'sweetalert2';
 
+// Create a base API instance for authenticated requests
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5001/api',
-  withCredentials: true,
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json'
-  }
+  },
 });
 
-// Add a request interceptor to add token
+// Add a request interceptor to include auth token when available
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -24,56 +23,31 @@ api.interceptors.request.use(
   }
 );
 
-// Add a response interceptor
+// Add a response interceptor to handle common errors
 api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    // If the error is due to an invalid token and we haven't tried to refresh yet
-    if ((error.response?.data?.message === 'Invalid token' || 
-         (error.response?.status === 401 && error.response?.data?.message?.includes('token'))) && 
-        !originalRequest._retry) {
-      
-      originalRequest._retry = true;
-
-      try {
-        // Try to refresh the token
-        const response = await api.post('/auth/refresh-token');
-        const { token } = response.data;
-
-        if (token) {
-          // Save the new token
-          localStorage.setItem('token', token);
-          
-          // Update the original request with new token
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-          
-          // Retry the original request
-          return api(originalRequest);
-        }
-      } catch (refreshError) {
-        // If refresh fails, show error and redirect to login
-        Swal.fire({
-          title: 'Session Expired',
-          text: 'Your session has expired. You will be redirected to login page.',
-          icon: 'warning',
-          timer: 5000,
-          timerProgressBar: true,
-          showConfirmButton: false
-        }).then(() => {
-          // Clear any stored auth data
-          localStorage.removeItem('token');
-          sessionStorage.removeItem('token');
-          
-          // Redirect to login
-          window.location.href = '/login';
-        });
+  (response) => {
+    return response;
+  },
+  (error) => {
+    // Only redirect on auth errors if not accessing public endpoints
+    if (error.response && error.response.status === 401 && !error.config.url.includes('/properties')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      // Redirect to login if needed
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
       }
     }
-    
     return Promise.reject(error);
   }
 );
+
+// Create a public API instance for endpoints that don't require authentication
+export const publicApi = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 export default api;

@@ -16,6 +16,7 @@ import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import '../../styles/searchBar.css';
 import FilterContainer from '../../components/FilterContainer/FilterContainer';
+import Swal from 'sweetalert2';
 
 const propertyTypes = [
   { label: 'Any Type', value: '' },
@@ -828,6 +829,40 @@ const Home = () => {
               />
             </div>
 
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={() => {
+                  if (userLocation) {
+                    setLocation('Current Location');
+                    handleSearch({ preventDefault: () => {} });
+                  } else if (isLoadingLocation) {
+                    Swal.fire({
+                      title: 'Getting Your Location',
+                      text: 'Please wait while we access your location...',
+                      icon: 'info',
+                      showConfirmButton: false,
+                      allowOutsideClick: false,
+                      didOpen: () => {
+                        Swal.showLoading();
+                      }
+                    });
+                  } else {
+                    Swal.fire({
+                      title: 'Location Access Required',
+                      text: 'Please allow access to your location to use this feature.',
+                      icon: 'warning',
+                      confirmButtonText: 'OK'
+                    });
+                  }
+                }}
+                className="bg-white text-primary-600 border border-primary-600 px-6 py-2 rounded-full hover:bg-primary-50 transition-colors flex items-center"
+                disabled={isLoadingLocation}
+              >
+                <MapPinIcon className="h-5 w-5 mr-2" />
+                {isLoadingLocation ? 'Getting location...' : 'Show Recommendations Near Me'}
+              </button>
+            </div>
+
             <button
               type="submit"
               className="search-button"
@@ -916,6 +951,54 @@ const Home = () => {
                 </div>
               </div>
             )}
+
+            {/* Why Visit Romania Section */}
+            <div className="mb-12">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Why Visit Romania</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <img 
+                    src="https://source.unsplash.com/800x600/?romania,castle" 
+                    alt="Romanian Castles" 
+                    className="w-full h-48 object-cover"
+                  />
+                  <div className="p-5">
+                    <h3 className="text-lg font-semibold mb-2">Rich History & Culture</h3>
+                    <p className="text-gray-600">
+                      Explore medieval castles, fortified churches, and well-preserved historic towns that showcase Romania's fascinating past.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <img 
+                    src="https://source.unsplash.com/800x600/?romania,mountains" 
+                    alt="Romanian Landscapes" 
+                    className="w-full h-48 object-cover"
+                  />
+                  <div className="p-5">
+                    <h3 className="text-lg font-semibold mb-2">Breathtaking Nature</h3>
+                    <p className="text-gray-600">
+                      From the Carpathian Mountains to the Danube Delta, Romania offers diverse landscapes and outdoor adventures.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <img 
+                    src="https://source.unsplash.com/800x600/?romania,food" 
+                    alt="Romanian Cuisine" 
+                    className="w-full h-48 object-cover"
+                  />
+                  <div className="p-5">
+                    <h3 className="text-lg font-semibold mb-2">Delicious Cuisine</h3>
+                    <p className="text-gray-600">
+                      Taste traditional Romanian dishes like sarmale, mămăligă, and mici, accompanied by excellent local wines.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Results Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
