@@ -3493,33 +3493,6 @@ const Planning = () => {
         </div>
       </div>
       
-      {/* Add the Create Trip Layout button */}
-      {pointsOfInterest.filter(poi => poi.selected).length > 0 && (
-        <div className="pdf-button-container mt-4 mb-4 flex justify-center gap-4">
-          <Button 
-            onClick={generatePDF}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          >
-            Create Trip Layout
-          </Button>
-          
-          {!isGeneratingPlan && (
-            <Button 
-              onClick={() => {
-                setIsGeneratingPlan(true);
-                generatePlan().then(() => {
-                  // Hide the button after generating
-                  setIsGeneratingPlan(false);
-                });
-              }}
-              className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Generate Again
-            </Button>
-          )}
-        </div>
-      )}
-
       {/* Add Select All button for POIs */}
       {pointsOfInterest.length > 0 && (
         <div className="flex justify-end mb-4 px-4">
@@ -3567,7 +3540,12 @@ const Planning = () => {
                 >
                   {category}
                   <span className="ml-1">
-                    ({pointsOfInterest.filter(poi => categorizePOI(poi.type) === category && poi.name && poi.name !== 'Unnamed').length})
+                    ({pointsOfInterest.filter(poi => 
+                      poi && // Check if poi exists
+                      categorizePOI(poi.type || '') === category && 
+                      poi.name && 
+                      poi.name !== 'Unnamed'
+                    ).length})
                   </span>
                 </button>
               ))}
@@ -3578,7 +3556,7 @@ const Planning = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {getFilteredPOIs().map((poi) => (
               <div
-                key={poi.id}
+                key={poi.id || Math.random().toString(36).substr(2, 9)} // Ensure unique key even if id is missing
                 className={`border rounded-lg p-4 transition-all ${
                   poi.selected
                     ? 'border-green-500 bg-green-50'
@@ -3587,8 +3565,8 @@ const Planning = () => {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h3 className="font-medium text-gray-900">{poi.name}</h3>
-                    <p className="text-sm text-gray-500 capitalize">{poi.type}</p>
+                    <h3 className="font-medium text-gray-900">{poi.name || 'Unnamed'}</h3>
+                    <p className="text-sm text-gray-500 capitalize">{poi.type || 'Unknown'}</p>
                     {poi.locality && (
                       <p className="text-xs text-gray-500 mt-1">{poi.locality}</p>
                     )}
@@ -3603,7 +3581,7 @@ const Planning = () => {
                         ? 'bg-green-500 text-white hover:bg-green-600'
                         : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
                     }`}
-                    style={{ backgroundColor: poi.selected ? '#10b981' : '' }} // Force green-500 color
+                    style={{ backgroundColor: poi.selected ? '#10b981' : '' }}
                   >
                     <CheckIcon 
                       className="h-4 w-4" 
@@ -3619,6 +3597,33 @@ const Planning = () => {
             <div className="text-center py-8 text-gray-500">
               No points of interest match your selected filters.
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Add this after the POI section */}
+      {pointsOfInterest.filter(poi => poi.selected).length > 0 && (
+        <div className="container mx-auto px-4 mt-6 mb-10 text-center">
+          <button 
+            onClick={generatePDF}
+            className="mx-2 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Create Trip Layout
+          </button>
+          
+          {!isGeneratingPlan && (
+            <button 
+              onClick={() => {
+                setIsGeneratingPlan(true);
+                generatePlan().then(() => {
+                  // Hide the button after generating
+                  setIsGeneratingPlan(false);
+                });
+              }}
+              className="mx-2 px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Generate Again
+            </button>
           )}
         </div>
       )}

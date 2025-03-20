@@ -7,6 +7,7 @@ import EditPropertyPage from '../pages/Admin/EditProperty/EditPropertyPage';
 import AdminBookings from '../pages/Admin/Bookings';
 import AdminUsers from '../pages/Admin/Users';
 import AdminSettings from '../pages/Admin/Settings';
+import Flights from '../pages/Flights';
 
 const routes = [
   // Admin routes
@@ -21,7 +22,8 @@ const routes = [
       { path: 'properties/:id/edit', element: <EditPropertyPage /> },
       { path: 'bookings', element: <AdminBookings /> },
       { path: 'users', element: <AdminUsers /> },
-      { path: 'settings', element: <AdminSettings /> }
+      { path: 'settings', element: <AdminSettings /> },
+      { path: 'flights', element: <Flights /> }
     ]
   }
 ];

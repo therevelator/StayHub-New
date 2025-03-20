@@ -1,14 +1,19 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { PropertyDashboard } from './pages/PropertyOwner/PropertyDashboard';
+import { HelmetProvider } from 'react-helmet-async';
 import './styles/swal.css';
+import './styles/flights.css';
+import Header from './components/Header/Header';
+import { Outlet } from 'react-router-dom';
 
 function App() {
   return (
-    <AuthProvider>
-      <Outlet />
-    </AuthProvider>
+    <HelmetProvider>
+      <AuthProvider>
+        <Header />
+        <Outlet />
+      </AuthProvider>
+    </HelmetProvider>
   );
 }
 

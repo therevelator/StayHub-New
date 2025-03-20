@@ -15,6 +15,7 @@ import { searchPhotos } from '../../services/pexels';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import '../../styles/searchBar.css';
+import '../../styles/homeCustom.css';
 import FilterContainer from '../../components/FilterContainer/FilterContainer';
 import Swal from 'sweetalert2';
 
@@ -686,6 +687,36 @@ const Home = () => {
     }
   };
 
+  // Update the property click handler to check for authentication
+  const handlePropertyClick = (propertyId) => {
+    // Check if user is logged in
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      // User is not logged in, show login prompt
+      Swal.fire({
+        title: 'Login Required',
+        text: 'You need to be logged in to view property details',
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: 'Login',
+        cancelButtonText: 'Cancel'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // Redirect to login page with return URL
+          const returnUrl = `/property/${propertyId}`;
+          navigate(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+        }
+      });
+    } else {
+      // User is logged in, proceed to property details
+      const params = new URLSearchParams();
+      if (checkInDate) params.append('startDate', format(checkInDate, 'yyyy-MM-dd'));
+      if (checkOutDate) params.append('endDate', format(checkOutDate, 'yyyy-MM-dd'));
+      navigate(`/property/${propertyId}?${params.toString()}`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -829,40 +860,6 @@ const Home = () => {
               />
             </div>
 
-            <div className="mt-4 flex justify-center">
-              <button
-                onClick={() => {
-                  if (userLocation) {
-                    setLocation('Current Location');
-                    handleSearch({ preventDefault: () => {} });
-                  } else if (isLoadingLocation) {
-                    Swal.fire({
-                      title: 'Getting Your Location',
-                      text: 'Please wait while we access your location...',
-                      icon: 'info',
-                      showConfirmButton: false,
-                      allowOutsideClick: false,
-                      didOpen: () => {
-                        Swal.showLoading();
-                      }
-                    });
-                  } else {
-                    Swal.fire({
-                      title: 'Location Access Required',
-                      text: 'Please allow access to your location to use this feature.',
-                      icon: 'warning',
-                      confirmButtonText: 'OK'
-                    });
-                  }
-                }}
-                className="bg-white text-primary-600 border border-primary-600 px-6 py-2 rounded-full hover:bg-primary-50 transition-colors flex items-center"
-                disabled={isLoadingLocation}
-              >
-                <MapPinIcon className="h-5 w-5 mr-2" />
-                {isLoadingLocation ? 'Getting location...' : 'Show Recommendations Near Me'}
-              </button>
-            </div>
-
             <button
               type="submit"
               className="search-button"
@@ -952,6 +949,126 @@ const Home = () => {
               </div>
             )}
 
+            {/* Results Grid - Move this here, between Popular Destinations and Why Visit Romania */}
+            <div className="mb-12">
+              {filteredProperties.length > 0 && (
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Properties</h2>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProperties.length === 0 && (
+                  <div className="col-span-full text-center py-10">
+                    <div className="text-gray-500 mb-6">
+                      {loading ? 'Searching...' : properties.length > 0 ? 'No properties match your filters' : 'No properties found'}
+                    </div>
+                    
+                    {/* Show recommendations button when no properties found */}
+                    {!loading && (
+                      <button
+                        onClick={() => {
+                          if (userLocation) {
+                            setLocation('Current Location');
+                            handleSearch({ preventDefault: () => {} });
+                          } else if (isLoadingLocation) {
+                            Swal.fire({
+                              title: 'Getting Your Location',
+                              text: 'Please wait while we access your location...',
+                              icon: 'info',
+                              showConfirmButton: false,
+                              allowOutsideClick: false,
+                              didOpen: () => {
+                                Swal.showLoading();
+                              }
+                            });
+                          } else {
+                            Swal.fire({
+                              title: 'Location Access Required',
+                              text: 'Please allow access to your location to use this feature.',
+                              icon: 'warning',
+                              confirmButtonText: 'OK'
+                            });
+                          }
+                        }}
+                        className="bg-primary-600 text-white px-6 py-2 rounded-full hover:bg-primary-700 transition-colors flex items-center mx-auto"
+                        disabled={isLoadingLocation}
+                      >
+                        <MapPinIcon className="h-5 w-5 mr-2" />
+                        {isLoadingLocation ? 'Getting location...' : 'Show Recommendations Near Me'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {filteredProperties.map((property) => (
+                  <div
+                    key={property.id}
+                    className="bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer group"
+                    onClick={() => handlePropertyClick(property.id)}
+                  >
+                    <div className="relative">
+                      <img
+                        src={property.imageUrl || '/placeholder-property.jpg'}
+                        alt={property.name}
+                        className="w-full h-56 object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                      <div className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
+                        <HeartIcon className="h-5 w-5 text-gray-600" />
+                      </div>
+                    </div>
+                    <div className="p-5">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {property.name || 'Unnamed Property'}
+                      </h3>
+                      <p className="text-gray-600 mb-2">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (property.latitude && property.longitude) {
+                              const url = `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
+                              window.open(url, '_blank');
+                            }
+                          }}
+                          className="inline-flex items-center hover:text-primary-600 transition-colors"
+                          title="Open in Google Maps"
+                        >
+                          <MapPinIcon className="h-4 w-4 mr-1" />
+                          {`${property.city}, ${property.country}`}
+                          {property.distance && (
+                            <span className="ml-2 text-sm text-gray-500">
+                              ({formatDistance(property.distance)})
+                            </span>
+                          )}
+                        </button>
+                      </p>
+                      <p className="text-gray-600 mb-4">
+                        <UserIcon className="h-4 w-4 inline mr-1" />
+                        {property.total_max_occupancy} guests max
+                      </p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-primary-600 font-semibold">
+                          {searchParams.checkIn && searchParams.checkOut ? (
+                            <>
+                              ${Number(property.price).toFixed(2)}/night
+                              <span className="text-xs block">for selected dates</span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-gray-600">Select dates to see prices</span>
+                          )}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePropertyClick(property.id);
+                          }}
+                          className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition-colors"
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Why Visit Romania Section */}
             <div className="mb-12">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Why Visit Romania</h2>
@@ -998,92 +1115,6 @@ const Home = () => {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Results Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProperties.length === 0 && (
-                <div className="col-span-full text-center text-gray-500">
-                  {loading ? 'Searching...' : properties.length > 0 ? 'No properties match your filters' : 'No properties found'}
-                </div>
-              )}
-              {filteredProperties.map((property) => (
-            <div
-              key={property.id}
-              className="bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer group"
-              onClick={() => {
-                const params = new URLSearchParams();
-                if (checkInDate) params.append('startDate', format(checkInDate, 'yyyy-MM-dd'));
-                if (checkOutDate) params.append('endDate', format(checkOutDate, 'yyyy-MM-dd'));
-                navigate(`/property/${property.id}?${params.toString()}`);
-              }}
-            >
-              <div className="relative">
-                <img
-                  src={property.imageUrl || '/placeholder-property.jpg'}
-                  alt={property.name}
-                  className="w-full h-56 object-cover group-hover:scale-110 transition-transform duration-300"
-                />
-                <div className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
-                  <HeartIcon className="h-5 w-5 text-gray-600" />
-                </div>
-              </div>
-              <div className="p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  {property.name || 'Unnamed Property'}
-                </h3>
-                <p className="text-gray-600 mb-2">
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (property.latitude && property.longitude) {
-                        const url = `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
-                        window.open(url, '_blank');
-                      }
-                    }}
-                    className="inline-flex items-center hover:text-primary-600 transition-colors"
-                    title="Open in Google Maps"
-                  >
-                    <MapPinIcon className="h-4 w-4 mr-1" />
-                    {`${property.city}, ${property.country}`}
-                    {property.distance && (
-                      <span className="ml-2 text-sm text-gray-500">
-                        ({formatDistance(property.distance)})
-                      </span>
-                    )}
-                  </button>
-                </p>
-                <p className="text-gray-600 mb-4">
-                  <UserIcon className="h-4 w-4 inline mr-1" />
-                  {property.total_max_occupancy} guests max
-                </p>
-                <div className="flex justify-between items-center">
-                  <span className="text-primary-600 font-semibold">
-                    {searchParams.checkIn && searchParams.checkOut ? (
-                      <>
-                        ${Number(property.price).toFixed(2)}/night
-                        <span className="text-xs block">for selected dates</span>
-                      </>
-                    ) : (
-                      <span className="text-sm text-gray-600">Select dates to see prices</span>
-                    )}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const params = new URLSearchParams();
-                      if (checkInDate) params.append('startDate', format(checkInDate, 'yyyy-MM-dd'));
-                      if (checkOutDate) params.append('endDate', format(checkOutDate, 'yyyy-MM-dd'));
-                      navigate(`/property/${property.id}?${params.toString()}`);
-                    }}
-                    className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition-colors"
-                  >
-                    View Details
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
             </div>
           </div>
         </div>

@@ -147,6 +147,14 @@ const Header = () => {
                     Account
                   </Link>
 
+                  <Link
+                    to="/flights"
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
+                  >
+                    <MapPinIcon className="h-5 w-5 mr-2" />
+                    Flights
+                  </Link>
+
                   <button
                     onClick={handleLogout}
                     className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600"
@@ -306,6 +314,17 @@ const Header = () => {
                   <div className="flex items-center">
                     <Cog6ToothIcon className="h-5 w-5 mr-2" />
                     Account
+                  </div>
+                </Link>
+
+                <Link
+                  to="/flights"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <div className="flex items-center">
+                    <MapPinIcon className="h-5 w-5 mr-2" />
+                    Flights
                   </div>
                 </Link>
 
