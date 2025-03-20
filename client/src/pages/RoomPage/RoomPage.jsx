@@ -7,7 +7,7 @@ import { Calendar } from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { BedDouble, Bath, Mountain, Grid, Maximize, Home, Sofa } from 'lucide-react';
+import { BedDouble, Bath, Mountain, Grid, Maximize, Home, Sofa, Star } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 const RoomPage = () => {
@@ -28,6 +28,8 @@ const RoomPage = () => {
   const [numberOfGuests, setNumberOfGuests] = useState(1);
   const [nightlyPrices, setNightlyPrices] = useState([]);
   const [alternativeRooms, setAlternativeRooms] = useState([]);
+  const [checkinOnlyDates, setCheckinOnlyDates] = useState([]);
+  const [checkoutOnlyDates, setCheckoutOnlyDates] = useState([]);
 
   const isRoomFullyAvailable = (availability) => {
     if (!availability) return false;
@@ -57,13 +59,50 @@ const RoomPage = () => {
     
     console.log('Checking availability for dates:', dates);
     
-    // Check if we have availability info for ALL dates and they are ALL available
+    // Check if we have availability info for ALL dates
     const availability_status = dates.map(date => {
       const info = availability[date];
+      
+      // A date is available if:
+      // 1. It's the check-in date (first date) - can use checkout-starred dates
+      // 2. It's the check-out date (last date) - can use checkin-starred dates
+      // 3. All middle dates must be fully available (no bookings)
+      
+      const isStartDate = date === format(start, 'yyyy-MM-dd');
+      const isEndDate = date === format(end, 'yyyy-MM-dd');
+      
+      let isAvailable = false;
+      
+      if (!info) {
+        isAvailable = false;
+      } else if (isStartDate && isEndDate) {
+        // Same day check-in/check-out (edge case)
+        // A date can be both check-in and check-out if it's marked as such
+        isAvailable = info.status === 'available' || 
+                     (info.is_checkin_only && info.is_checkout_only);
+      } else if (isStartDate) {
+        // Check-in date: either regular available date or a checkout-starred date
+        // We allow a checkout-starred date to be used as a check-in date
+        isAvailable = info.status === 'available' || 
+                     info.is_checkin_only || 
+                     info.is_checkout_only;
+      } else if (isEndDate) {
+        // Check-out date: either regular available date or a checkin-starred date
+        // We allow a checkin-starred date to be used as a check-out date
+        isAvailable = info.status === 'available' || 
+                     info.is_checkout_only || 
+                     info.is_checkin_only;
+      } else {
+        // Middle dates: must be fully available (no bookings)
+        isAvailable = info.status === 'available' && !info.booking_id;
+      }
+      
       const status = {
         date,
-        available: info && info.status === 'available' && !info.booking_id,
-        info
+        available: isAvailable,
+        info,
+        isStartDate,
+        isEndDate
       };
       console.log('Date status:', status);
       return status;
@@ -102,14 +141,118 @@ const RoomPage = () => {
       // Process availability data for the requested room
       const available = [];
       const unavailable = [];
+      const checkinOnly = [];
+      const checkoutOnly = [];
       
+      // Process raw availability data to identify check-in and check-out only dates
       if (requested_room?.availability) {
-        Object.entries(requested_room.availability).forEach(([date, info]) => {
-          // A date is only available if it's explicitly marked as available AND has no booking_id
-          if (info.status === 'available' && !info.booking_id) {
-            available.push(date);
+        // Get all booking IDs to track
+        const bookingIds = new Set();
+        
+        // Create a map of all dates to properly analyze booking patterns
+        const dateMap = {};
+        
+        // First pass: collect all booking data
+        Object.entries(requested_room.availability).forEach(([dateStr, info]) => {
+          dateMap[dateStr] = { ...info };
+          
+          if (info.booking_id) {
+            bookingIds.add(info.booking_id);
+          }
+        });
+        
+        // Initialize bookings object to track booking details
+        const bookings = {};
+        bookingIds.forEach(id => {
+          bookings[id] = { dates: [], checkInDate: null, checkOutDate: null };
+        });
+        
+        // Second pass: identify all dates for each booking
+        Object.entries(dateMap).forEach(([dateStr, info]) => {
+          if (info.booking_id) {
+            if (!bookings[info.booking_id].dates.includes(dateStr)) {
+              bookings[info.booking_id].dates.push(dateStr);
+            }
+          }
+        });
+        
+        // Sort dates and determine check-in/check-out dates for each booking
+        Object.values(bookings).forEach(booking => {
+          if (booking.dates.length > 0) {
+            booking.dates.sort();
+            booking.checkInDate = booking.dates[0];
+            // The checkout date is the day AFTER the last occupied date
+            // This is because checkout date is not part of the booking dates
+            const lastOccupiedDate = new Date(booking.dates[booking.dates.length - 1]);
+            const checkoutDate = new Date(lastOccupiedDate);
+            checkoutDate.setDate(checkoutDate.getDate() + 1);
+            booking.checkOutDate = format(checkoutDate, 'yyyy-MM-dd');
+          }
+        });
+        
+        // Third pass: mark check-in and check-out dates
+        Object.entries(dateMap).forEach(([dateStr, info]) => {
+          let isCheckinOnly = false;
+          let isCheckoutOnly = false;
+          
+          // Check if this date is a check-in date for any booking
+          Object.values(bookings).forEach(booking => {
+            // Check-in date is the first day of the booking
+            if (dateStr === booking.checkInDate) {
+              isCheckinOnly = true;
+              info.is_checkin_only = true;
+            }
+            
+            // Check-out date is the day AFTER the last occupied date
+            if (dateStr === booking.checkOutDate) {
+              isCheckoutOnly = true;
+              info.is_checkout_only = true;
+            }
+          });
+          
+          // Handle directly marked dates from API (if available)
+          if (info.is_checkin_only) {
+            isCheckinOnly = true;
+          }
+          if (info.is_checkout_only) {
+            isCheckoutOnly = true;
+          }
+          
+          // Update the date info in the dateMap
+          dateMap[dateStr] = { 
+            ...info, 
+            is_checkin_only: isCheckinOnly, 
+            is_checkout_only: isCheckoutOnly 
+          };
+        });
+        
+        // Final pass: categorize dates for displaying in the calendar
+        Object.entries(dateMap).forEach(([dateStr, info]) => {
+          // Ensure the processed info is applied back to the original data
+          requested_room.availability[dateStr] = { ...info };
+          
+          // Categorize the date
+          if (info.is_checkout_only && !info.booking_id) {
+            // Checkout-only date that isn't occupied
+            checkoutOnly.push(dateStr);
+            info.status = 'available'; // Mark as available for the calendar
+          } else if (info.is_checkin_only && !info.booking_id) {
+            // Checkin-only date that isn't occupied
+            checkinOnly.push(dateStr);
+            info.status = 'available'; // Mark as available for the calendar
+          } else if (info.is_checkin_only && info.is_checkout_only) {
+            // Both checkin and checkout (special case)
+            info.status = 'available'; // Mark as available for the calendar
+            available.push(dateStr);
+          } else if (info.booking_id) {
+            // Occupied date
+            unavailable.push(dateStr);
+          } else if (info.status === 'available') {
+            // Regular available date
+            available.push(dateStr);
           } else {
-            unavailable.push(date);
+            // Maintenance, blocked, or other unavailable status
+            unavailable.push(dateStr);
           }
         });
       }
@@ -118,6 +261,8 @@ const RoomPage = () => {
       setAvailabilityMap(availability);
       setAvailableDates(available);
       setBookingDates(unavailable);
+      setCheckinOnlyDates(checkinOnly);
+      setCheckoutOnlyDates(checkoutOnly);
       
       // Update room data with availability status
       setRoom(prev => ({
@@ -271,6 +416,15 @@ const RoomPage = () => {
     const price = info.price ? `$${parseFloat(info.price).toFixed(2)}` : 'N/A';
     const notes = info.notes ? ` - ${info.notes}` : '';
     
+    // Add info for check-in only and check-out only dates
+    if (info.is_checkin_only && info.is_checkout_only) {
+      return `Booked - This date is both check-in and check-out for different bookings`;
+    } else if (info.is_checkin_only) {
+      return `Check-in only date - ${price}/night${notes}`;
+    } else if (info.is_checkout_only) {
+      return `Check-out only date - ${price}/night${notes}`;
+    }
+    
     switch(status) {
       case 'occupied':
         return `Booked by another guest${notes}`;
@@ -303,8 +457,25 @@ const RoomPage = () => {
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const dateInfo = availabilityMap[dateStr];
     
-    // Don't allow selecting unavailable dates
-    if (!dateInfo || dateInfo.status !== 'available' || dateInfo.booking_id) {
+    // Don't allow selecting dates without info
+    if (!dateInfo) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Date Not Available',
+        text: `This room has no availability information for ${format(selectedDate, 'MMMM d, yyyy')}`,
+      });
+      return;
+    }
+    
+    // If this date is available for check-in or check-out, allow it to be selected
+    const canSelectForCheckIn = dateInfo.status === 'available' || dateInfo.is_checkin_only;
+    const canSelectForCheckOut = dateInfo.status === 'available' || dateInfo.is_checkout_only;
+    
+    // Full date availability check
+    const isUnavailable = (!canSelectForCheckIn && !canSelectForCheckOut) ||
+                         (dateInfo.booking_id && !dateInfo.is_checkin_only && !dateInfo.is_checkout_only);
+      
+    if (isUnavailable) {
       Swal.fire({
         icon: 'error',
         title: 'Date Not Available',
@@ -321,11 +492,31 @@ const RoomPage = () => {
     }
 
     if (!checkInDate || (checkInDate && checkOutDate)) {
+      // Start new selection - check if this date can be used as check-in
+      if (!canSelectForCheckIn) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid Selection',
+          text: `This date can only be used as a check-out date.`
+        });
+        return;
+      }
+      
       // Start new selection
       setCheckInDate(selectedDate);
       setCheckOutDate(null);
       console.log('Set check-in date:', format(selectedDate, 'yyyy-MM-dd'));
     } else {
+      // Complete selection - check if this date can be used as check-out
+      if (!canSelectForCheckOut) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid Selection',
+          text: `This date can only be used as a check-in date.`
+        });
+        return;
+      }
+      
       // Complete the selection
       if (selectedDate <= checkInDate) {
         // Prevent selecting same day or earlier day for checkout
@@ -344,7 +535,9 @@ const RoomPage = () => {
     }
   };
 
-  const tileClassName = ({ date }) => {
+  const tileClassName = ({ date, view }) => {
+    if (view !== 'month') return '';
+    
     const dateString = format(date, 'yyyy-MM-dd');
     const dateInfo = availabilityMap[dateString];
     
@@ -354,17 +547,39 @@ const RoomPage = () => {
       date > checkInDate && 
       date < checkOutDate;
 
-    let classes = ['rounded-lg'];
+    const isCheckinOnly = dateInfo?.is_checkin_only;
+    const isCheckoutOnly = dateInfo?.is_checkout_only;
+    
+    let classes = ['rounded-lg', 'relative'];
+
+    // Add range selection classes for better styling
+    if (isCheckIn) classes.push('react-calendar__tile--rangeStart');
+    if (isCheckOut) classes.push('react-calendar__tile--rangeEnd');
+    if (isBetween) classes.push('react-calendar__tile--rangeBetween');
 
     // Selection styles take precedence
     if (isCheckIn || isCheckOut) {
-      classes.push('bg-amber-100 text-amber-800 hover:bg-amber-200');
+      classes.push('react-calendar__tile--active');
     } else if (isBetween) {
-      classes.push('bg-amber-50 text-amber-800 hover:bg-amber-100');
+      // Already handled by rangeBetween class
     } else if (dateInfo) {
-      // Consider a date unavailable if it has a booking_id or non-available status
-      const isAvailable = dateInfo.status === 'available' && !dateInfo.booking_id;
-      classes.push(getStatusStyles(isAvailable ? 'available' : 'occupied'));
+      // Check if the date is both check-in and check-out for another booking
+      if (isCheckinOnly && isCheckoutOnly) {
+        classes.push('checkin-checkout');
+      } 
+      // Check if it's a check-in only date
+      else if (isCheckinOnly) {
+        classes.push('checkin-only');
+      } 
+      // Check if it's a check-out only date
+      else if (isCheckoutOnly) {
+        classes.push('checkout-only');
+      } 
+      // Otherwise, standard availability check
+      else {
+        const isAvailable = dateInfo.status === 'available' && !dateInfo.booking_id;
+        classes.push(getStatusStyles(isAvailable ? 'available' : 'occupied'));
+      }
     } else {
       classes.push('hover:bg-gray-100');
     }
@@ -378,11 +593,37 @@ const RoomPage = () => {
     
     if (!dateInfo) return null;
     
+    const isCheckinOnly = dateInfo.is_checkin_only;
+    const isCheckoutOnly = dateInfo.is_checkout_only;
+    
+    let tooltipText = getStatusTitle(dateInfo.status, dateInfo);
+    
     return (
       <div 
-        title={getStatusTitle(dateInfo.status, dateInfo)}
-        className="w-full h-full"
-      />
+        title={tooltipText}
+        className="w-full h-full relative"
+      >
+        {isCheckinOnly && !isCheckoutOnly && (
+          <div className="absolute bottom-0 right-0 star-checkin">
+            <Star className="w-3 h-3 text-amber-500" fill="currentColor" />
+          </div>
+        )}
+        {isCheckoutOnly && !isCheckinOnly && (
+          <div className="absolute top-0 left-0 star-checkout">
+            <Star className="w-3 h-3 text-amber-500" fill="currentColor" />
+          </div>
+        )}
+        {isCheckinOnly && isCheckoutOnly && (
+          <>
+            <div className="absolute bottom-0 right-0 star-checkin">
+              <Star className="w-3 h-3 text-amber-500" fill="currentColor" />
+            </div>
+            <div className="absolute top-0 left-0 star-checkout">
+              <Star className="w-3 h-3 text-amber-500" fill="currentColor" />
+            </div>
+          </>
+        )}
+      </div>
     );
   };
 
@@ -394,12 +635,59 @@ const RoomPage = () => {
 
     // Check if the entire date range is available
     if (!isDateRangeAvailable(availabilityMap, checkInDate, checkOutDate)) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Room Not Available',
-        text: 'Some dates in your selected range are not available. Please choose different dates.'
-      });
-      return;
+      // Check if it's a case of checkout-star as check-in and checkin-star as checkout
+      const checkInInfo = availabilityMap[format(checkInDate, 'yyyy-MM-dd')];
+      const checkOutInfo = availabilityMap[format(checkOutDate, 'yyyy-MM-dd')];
+      
+      // If both dates are properly marked as available for these purposes, allow the booking
+      const checkInValid = checkInInfo && 
+                           (checkInInfo.status === 'available' || 
+                           checkInInfo.is_checkin_only || 
+                           checkInInfo.is_checkout_only);
+                           
+      const checkOutValid = checkOutInfo && 
+                           (checkOutInfo.status === 'available' || 
+                           checkOutInfo.is_checkout_only || 
+                           checkOutInfo.is_checkin_only);
+                           
+      // Check dates in between
+      const allMiddleDatesValid = (() => {
+        const startDate = new Date(checkInDate);
+        const endDate = new Date(checkOutDate);
+        startDate.setDate(startDate.getDate() + 1); // Start from the day after check-in
+        
+        // If there are no middle dates (adjacent days), return true
+        if (startDate >= endDate) return true;
+        
+        // Check each date in between
+        const current = new Date(startDate);
+        while (current < endDate) {
+          const dateStr = format(current, 'yyyy-MM-dd');
+          const dateInfo = availabilityMap[dateStr];
+          
+          // Middle dates must be fully available
+          if (!dateInfo || dateInfo.status !== 'available' || dateInfo.booking_id) {
+            return false;
+          }
+          
+          current.setDate(current.getDate() + 1);
+        }
+        
+        return true;
+      })();
+      
+      // If all conditions are met, proceed with booking
+      if (checkInValid && checkOutValid && allMiddleDatesValid) {
+        // Proceed with booking
+        console.log('Special case: Using checkout-starred date as check-in or checkin-starred date as checkout.');
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Room Not Available',
+          text: 'Some dates in your selected range are not available. Please choose different dates.'
+        });
+        return;
+      }
     }
 
     if (numberOfGuests > room.max_occupancy) {
@@ -410,6 +698,7 @@ const RoomPage = () => {
       });
       return;
     }
+    
     if (!termsAccepted) {
       Swal.fire('You must accept the terms and conditions to proceed.');
       return;
@@ -607,6 +896,67 @@ const RoomPage = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* Add CSS for calendar stars */}
+      <style>
+        {`
+          .react-calendar .react-calendar__tile {
+            position: relative;
+            padding-bottom: 14px;
+          }
+          
+          .star-checkin {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            pointer-events: none;
+            z-index: 2;
+          }
+          
+          .star-checkout {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            pointer-events: none;
+            z-index: 2;
+          }
+          
+          .checkin-only {
+            background-color: #86efac !important; /* Green background */
+            color: #166534 !important;
+          }
+          
+          .checkout-only {
+            background-color: #86efac !important; /* Green background */
+            color: #166534 !important;
+          }
+          
+          .checkin-checkout {
+            background-color: #fee2e2 !important; /* Red background - same as booked */
+            color: #b91c1c !important;
+          }
+          
+          /* Make sure selected dates take priority */
+          .react-calendar__tile--active,
+          .react-calendar__tile--active:enabled:hover,
+          .react-calendar__tile--active:enabled:focus {
+            background: #fef3c7 !important;
+            color: #92400e !important;
+          }
+          
+          /* Make the days between selected dates visible */
+          .react-calendar__tile--rangeStart,
+          .react-calendar__tile--rangeEnd {
+            background: #fef3c7 !important;
+            color: #92400e !important;
+          }
+          
+          .react-calendar__tile--rangeBetween {
+            background: #fffbeb !important;
+            color: #92400e !important;
+          }
+        `}
+      </style>
+      
       {room && (
         <div className="space-y-8">
           <div className="bg-white rounded-lg shadow-lg p-6">
@@ -652,6 +1002,33 @@ const RoomPage = () => {
                     <div className="flex items-center">
                       <div className="w-4 h-4 bg-amber-100 rounded mr-2"></div>
                       <span className="text-sm">Selected Dates</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-green-300 rounded mr-2 relative">
+                        <div className="absolute bottom-0 right-0">
+                          <Star className="w-2 h-2 text-amber-500" fill="currentColor" />
+                        </div>
+                      </div>
+                      <span className="text-sm">Check-in Only</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-green-300 rounded mr-2 relative">
+                        <div className="absolute top-0 left-0">
+                          <Star className="w-2 h-2 text-amber-500" fill="currentColor" />
+                        </div>
+                      </div>
+                      <span className="text-sm">Check-out Only</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-red-100 rounded mr-2 relative">
+                        <div className="absolute bottom-0 right-0">
+                          <Star className="w-2 h-2 text-amber-500" fill="currentColor" />
+                        </div>
+                        <div className="absolute top-0 left-0">
+                          <Star className="w-2 h-2 text-amber-500" fill="currentColor" />
+                        </div>
+                      </div>
+                      <span className="text-sm">Booked (Check-in/Check-out)</span>
                     </div>
                   </div>
                 </CardContent>
