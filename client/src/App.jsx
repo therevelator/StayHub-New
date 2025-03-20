@@ -10,7 +10,7 @@ function App() {
   return (
     <HelmetProvider>
       <AuthProvider>
-        <Header />
+
         <Outlet />
       </AuthProvider>
     </HelmetProvider>
