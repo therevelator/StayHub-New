@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "client": "npm run dev --prefix client",
+    "server": "npm start --prefix server",
+    "start": "concurrently \"npm run client\" \"npm run server\""
+  },
   "dependencies": {
     "@react-google-maps/api": "^2.20.3",
     "jspdf": "^3.0.1",
@@ -10,6 +15,7 @@
     "react-helmet-async": "^2.0.5"
   },
   "devDependencies": {
-    "cypress": "^13.17.0"
+    "cypress": "^13.17.0",
+    "concurrently": "^8.2.2"
   }
 }

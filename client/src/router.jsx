@@ -25,10 +25,13 @@ import Dashboard from './pages/PropertyOwner/Dashboard';
 import PropertyView from './pages/PropertyOwner/PropertyView';
 import MyReservations from './pages/Guest/MyReservations';
 
+import Account from './pages/PropertyOwner/Account';
+import Bookings from './pages/PropertyOwner/Bookings';
+
 // Property Owner Routes
 const propertyOwnerRoutes = [
   {
-    path: '/owner',
+    path: '/',
     element: <MainLayout />,
     children: [
       {
@@ -70,6 +73,22 @@ const propertyOwnerRoutes = [
             <EditPropertyPage />
           </PropertyOwnerRoute>
         ),
+      },
+      {
+        path: 'bookings',
+        element: (
+          <PropertyOwnerRoute>
+            <Bookings />
+          </PropertyOwnerRoute>
+        ),
+      },
+      {
+        path: 'account',
+        element: (
+          <PropertyOwnerRoute>
+            <Account />
+          </PropertyOwnerRoute>
+        ),
       }
     ]
   }
@@ -99,19 +118,19 @@ export const router = createBrowserRouter([
           { path: 'property/:propertyId', element: <PropertyDetails /> },
           { path: 'property/:propertyId/room/:roomId', element: <RoomPage /> },
           { path: 'search', element: <SearchResults /> },
-          { 
+          {
             path: 'myreservations',
             element: <GuestRoute><MyReservations /></GuestRoute>
           },
-          { 
+          {
             path: 'admin/properties',
             element: <AdminRoute><AdminProperties /></AdminRoute>
           },
-          { 
+          {
             path: 'admin/properties/add',
             element: <AdminRoute><AddPropertyPage /></AdminRoute>
           },
-          { 
+          {
             path: 'admin/properties/:id/edit',
             element: <AdminRoute><EditPropertyPage /></AdminRoute>
           },

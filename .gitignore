@@ -56,7 +56,6 @@ Thumbs.db
 .npm/
 .eslintcache 
 server/node_modules/whatwg-url/README.md
-server/node_modules/whatwg-url/package.json
 server/node_modules/whatwg-url/lib/URLSearchParams.js
 server/node_modules/whatwg-url/lib/URLSearchParams-impl.js
 server/node_modules/whatwg-url/lib/URL.js
@@ -686,7 +685,6 @@ server/node_modules/@types/whatwg-url/lib/URL-impl.d.ts
 server/node_modules/@types/whatwg-url/index.d.ts
 server/node_modules/@mongodb-js/saslprep/package.json
 server/node_modules/.package-lock.json
-package.json
 package-lock.json
 overpass_db/planet.osm.bz2
 overpass_db/cookie.jar
