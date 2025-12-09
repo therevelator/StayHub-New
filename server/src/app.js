@@ -21,7 +21,7 @@ app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
 // CORS configuration
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: ['http://localhost:3000', 'http://localhost:5001'],
   credentials: true
 }));
 

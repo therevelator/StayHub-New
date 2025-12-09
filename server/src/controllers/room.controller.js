@@ -14,7 +14,7 @@ export const createRoom = async (req, res) => {
 
     // Validate required fields based on schema
     if (!roomData.name || !roomData.room_type || !roomData.max_occupancy) {
-      console.log('[RoomController] Validation failed:', { 
+      console.log('[RoomController] Validation failed:', {
         name: roomData.name,
         room_type: roomData.room_type,
         max_occupancy: roomData.max_occupancy
@@ -95,7 +95,7 @@ export const createRoom = async (req, res) => {
       roomData.has_balcony === true ? 1 : 0,
       roomData.has_kitchen === true ? 1 : 0,
       roomData.has_minibar === true ? 1 : 0,
-      JSON.stringify(roomData.climate || {type: 'ac', available: true}),
+      JSON.stringify(roomData.climate || { type: 'ac', available: true }),
       roomData.price_per_night || null,
       roomData.cancellation_policy || null,
       roomData.includes_breakfast === true ? 1 : 0,
@@ -155,7 +155,7 @@ export const getRooms = async (req, res) => {
     `, [propertyId]);
 
     console.log('Raw rooms from DB:', rooms);
-    
+
     // Parse JSON fields for each room
     const parsedRooms = rooms.map(room => ({
       ...room,
@@ -180,7 +180,7 @@ export const getRooms = async (req, res) => {
     }));
 
     console.log('Parsed rooms:', parsedRooms);
-    
+
     res.json({
       status: 'success',
       data: parsedRooms
@@ -223,9 +223,9 @@ export const getRoomAvailability = async (req, res) => {
   try {
     const { propertyId, roomId } = req.params;
     const { startDate, endDate } = req.query;
-    
+
     console.log('Checking availability for roomId:', roomId, 'between:', startDate, 'and', endDate);
-    
+
     // Get room details including default price
     const [rooms] = await db.query(
       'SELECT id, price_per_night FROM rooms WHERE id = ? AND property_id = ?',
@@ -241,7 +241,7 @@ export const getRoomAvailability = async (req, res) => {
     }
 
     const defaultPrice = rooms[0].price_per_night;
-    
+
     // Get all rooms for this property to check their availability
     const [propertyRooms] = await db.query(
       'SELECT id, price_per_night FROM rooms WHERE property_id = (SELECT property_id FROM rooms WHERE id = ?)',
@@ -280,21 +280,21 @@ export const getRoomAvailability = async (req, res) => {
         OR (check_in_date <= ? AND check_out_date >= ?)
       )
     `, [startDate, endDate, startDate, endDate, startDate, endDate]);
-    
+
     console.log('Found bookings:', bookings);
 
     console.log('Found availability records:', availability);
 
     // Create availability maps for each room
     const roomAvailabilityMaps = {};
-    
+
     // Initialize availability maps for all rooms
     propertyRooms.forEach(room => {
-      const dateRange = eachDayOfInterval({ 
-        start: new Date(startDate), 
-        end: new Date(endDate) 
+      const dateRange = eachDayOfInterval({
+        start: new Date(startDate),
+        end: new Date(endDate)
       });
-      
+
       roomAvailabilityMaps[room.id] = {};
       dateRange.forEach(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
@@ -326,10 +326,24 @@ export const getRoomAvailability = async (req, res) => {
     bookings.forEach(booking => {
       const start = new Date(booking.check_in_date);
       const end = new Date(booking.check_out_date);
-      const dates = eachDayOfInterval({ start, end });
-      
+
+      // Calculate dates but exclude the checkout date for availability
+      // checkout date should be available for new check-ins
+      const stayEnd = new Date(end);
+      stayEnd.setDate(stayEnd.getDate() - 1);
+
+      // Handle single day bookings or edge cases where stayEnd < start
+      if (stayEnd < start) {
+        stayEnd.setDate(start.getDate());
+      }
+
+      const dates = eachDayOfInterval({ start, end: stayEnd });
+
       dates.forEach(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
+        // If this date is the actual checkout date, don't mark as occupied
+        if (dateStr === format(end, 'yyyy-MM-dd')) return;
+
         if (roomAvailabilityMaps[booking.room_id] && roomAvailabilityMaps[booking.room_id][dateStr]) {
           roomAvailabilityMaps[booking.room_id][dateStr] = {
             ...roomAvailabilityMaps[booking.room_id][dateStr],
@@ -371,7 +385,7 @@ export const getRoomAvailability = async (req, res) => {
           }))
       }
     };
-    
+
     console.log('Sending availability response:', responseData);
     res.json(responseData);
 
@@ -478,7 +492,7 @@ export const updateRoom = async (req, res) => {
       roomData.has_balcony === true ? 1 : 0,
       roomData.has_kitchen === true ? 1 : 0,
       roomData.has_minibar === true ? 1 : 0,
-      JSON.stringify(roomData.climate || {type: 'ac', available: true}),
+      JSON.stringify(roomData.climate || { type: 'ac', available: true }),
       roomData.price_per_night || null,
       roomData.cancellation_policy || null,
       roomData.includes_breakfast === true ? 1 : 0,
@@ -518,7 +532,7 @@ export const updateRoom = async (req, res) => {
 
 export const deleteRoom = async (req, res) => {
   const connection = await db.getConnection();
-  
+
   try {
     await connection.beginTransaction();
     const { roomId } = req.params;
@@ -571,7 +585,7 @@ export const deleteRoom = async (req, res) => {
     console.error('Error deleting room:', error);
     res.status(500).json({
       status: 'error',
-      message: error.code === 'ER_ROW_IS_REFERENCED_2' 
+      message: error.code === 'ER_ROW_IS_REFERENCED_2'
         ? 'Cannot delete room because it has active bookings. Please cancel or complete all bookings for this room first.'
         : 'Failed to delete room',
       code: error.code || 'UNKNOWN_ERROR'
@@ -686,7 +700,7 @@ export const createBooking = async (req, res) => {
         message: 'Check-in and check-out dates are required'
       });
     }
-    
+
     const userId = req.user.id;
     console.log('Creating booking for user:', userId);
 
@@ -701,7 +715,7 @@ export const createBooking = async (req, res) => {
 
     const room = rooms[0];
     const defaultPrice = room.price_per_night;
-    
+
     // Calculate number of nights
     const startDate = new Date(checkInDate);
     const endDate = new Date(checkOutDate);
@@ -727,7 +741,7 @@ export const createBooking = async (req, res) => {
     // Calculate total price using custom prices where available
     let totalPrice = 0;
     const priceBreakdown = {};
-    
+
     for (let i = 0; i < numberOfNights; i++) {
       const currentDate = new Date(startDate);
       currentDate.setDate(currentDate.getDate() + i);
@@ -821,7 +835,7 @@ export const createBooking = async (req, res) => {
 export const getRoomReservations = async (req, res) => {
   try {
     const { propertyId, roomId } = req.params;
-    
+
     // First verify that the room exists and belongs to the property
     const [rooms] = await db.query(
       'SELECT id FROM rooms WHERE id = ? AND property_id = ?',
