@@ -39,11 +39,11 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371; // Earth's radius in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
@@ -94,13 +94,13 @@ const Home = () => {
   const handleRadiusChange = (selectedRadius) => {
     setRadius(selectedRadius);
   };
-  
+
   // Handle filter changes - wrapped in useCallback to prevent infinite renders
   const handleFilterChange = useCallback((newFilters) => {
     setActiveFilters(newFilters);
-    
+
     // Check if all filters are in their default state
-    const areFiltersCleared = 
+    const areFiltersCleared =
       newFilters.priceRange[0] === 0 &&
       newFilters.priceRange[1] === 1000 &&
       newFilters.rating === 0 &&
@@ -112,26 +112,26 @@ const Home = () => {
       setFilteredProperties(properties);
       return;
     }
-    
+
     // Apply filters to properties
     if (properties.length > 0) {
       const filtered = properties.filter(property => {
         // Only apply price filter if the range is not at min/max
         const propertyPrice = parseFloat(property.price);
         if (isNaN(propertyPrice)) return false;
-        
+
         const [minPrice, maxPrice] = newFilters.priceRange;
         if (minPrice > propertyPriceRange.min || maxPrice < propertyPriceRange.max) {
           if (propertyPrice < minPrice || propertyPrice > maxPrice) {
             return false;
           }
         }
-        
+
         // Apply rating filter
         if (newFilters.rating > 0 && (!property.rating || property.rating < newFilters.rating)) {
           return false;
         }
-        
+
         // Helper function to normalize keys
         const normalizeKey = (key) => {
           return key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -157,7 +157,7 @@ const Home = () => {
         const selectedAmenities = Object.entries(newFilters.amenities)
           .filter(([_, selected]) => selected)
           .map(([name]) => normalizeKey(name));
-        
+
         if (selectedAmenities.length > 0) {
           console.log('\n=== Checking Property Amenities ===');
           console.log(`Property ID: ${property.id}`);
@@ -234,24 +234,26 @@ const Home = () => {
             return false;
           }
         }
-        
+
         return true;
       });
-      
+
       setFilteredProperties(filtered);
     }
   }, [properties]); // Only re-create when properties change
-  
+
   // Toggle filters visibility on mobile
   const toggleFilters = () => {
     setShowFilters(!showFilters);
   };
 
+  const [hasInitialSearchRun, setHasInitialSearchRun] = useState(false);
+
   // Get user's location on component mount
   useEffect(() => {
     if (navigator.geolocation) {
       setIsLoadingLocation(true);
-      
+
       // Try to get a more precise location first with a longer timeout
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -264,7 +266,7 @@ const Home = () => {
         },
         (error) => {
           console.error('High accuracy geolocation error:', error);
-          
+
           // If high accuracy fails, try again with lower accuracy but higher timeout
           navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -300,6 +302,15 @@ const Home = () => {
     }
   }, []);
 
+  // Auto-search when location is found
+  useEffect(() => {
+    if (userLocation && !hasInitialSearchRun && !loading) {
+      console.log('Auto-triggering search with user location');
+      handleSearch();
+      setHasInitialSearchRun(true);
+    }
+  }, [userLocation]);
+
   const updateBackgroundImage = useCallback(async (searchLocation) => {
     if (!searchLocation) return;
     try {
@@ -320,43 +331,39 @@ const Home = () => {
   // Load popular destinations on mount
   useEffect(() => {
     const destinations = [
-      { name: 'Paris', lat: 48.8566, lon: 2.3522 },
-      { name: 'London', lat: 51.5074, lon: -0.1278 },
-      { name: 'New York', lat: 40.7128, lon: -74.0060 },
-      { name: 'Tokyo', lat: 35.6762, lon: 139.6503 }
+      { name: 'Paris', lat: 48.8566, lon: 2.3522, image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=800&q=80' },
+      { name: 'London', lat: 51.5074, lon: -0.1278, image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=800&q=80' },
+      { name: 'New York', lat: 40.7128, lon: -74.0060, image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=800&q=80' },
+      { name: 'Tokyo', lat: 35.6762, lon: 139.6503, image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=800&q=80' }
     ];
-    const destinationsWithImages = destinations.map(city => ({
-      ...city,
-      image: `https://source.unsplash.com/400x300/?${city.name.toLowerCase()},city`
-    }));
-    setPopularDestinations(destinationsWithImages);
+    setPopularDestinations(destinations);
   }, []);
-  
+
   // Handle POI selection
   const handlePOIClick = (poi) => {
     setSelectedPOI(poi.name === selectedPOI ? null : poi.name);
-    
+
     // If map is available, highlight the location
     if (mapRef.current && poi) {
       // Center map on the POI
       mapRef.current.setView([poi.lat, poi.lon], 13);
-      
+
       // You could also add a marker or highlight effect here
       // This depends on your map implementation (Leaflet, Google Maps, etc.)
     }
   };
-  
+
   // Handle POI deletion
   const handleDeletePOI = (poiName, e) => {
     e.stopPropagation(); // Prevent triggering the POI click
     setPopularDestinations(prev => prev.filter(poi => poi.name !== poiName));
-    
+
     // If the deleted POI was selected, clear selection
     if (selectedPOI === poiName) {
       setSelectedPOI(null);
     }
   };
-  
+
   // Open Google Maps with coordinates
   const openInGoogleMaps = (poi, e) => {
     e.stopPropagation(); // Prevent triggering the POI click
@@ -366,7 +373,7 @@ const Home = () => {
 
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
-    
+
     // If we're trying to use current location but it's still loading, show a message
     if ((!location || location === 'Current Location') && isLoadingLocation) {
       setError('Please wait while we get your location...');
@@ -435,9 +442,9 @@ const Home = () => {
       if (response.data.status === 'success') {
         // Debug raw API response
         console.log('Raw API response:', JSON.stringify(response.data.data));
-        
+
         // Check for base_price in the API response
-        const hasBasePrice = response.data.data.some(property => 
+        const hasBasePrice = response.data.data.some(property =>
           property.rooms && property.rooms.some(room => room.base_price)
         );
         console.log('API response contains base_price:', hasBasePrice);
@@ -445,7 +452,7 @@ const Home = () => {
         const preprocessedProperties = response.data.data.map(property => {
           // Create a new property object without base_price
           const newProperty = { ...property };
-          
+
           // If property has rooms, remove base_price from each room
           if (newProperty.rooms && Array.isArray(newProperty.rooms)) {
             newProperty.rooms = newProperty.rooms.map(room => {
@@ -454,10 +461,10 @@ const Home = () => {
               return newRoom;
             });
           }
-          
+
           return newProperty;
         });
-        
+
         // First map to add distance
         const propertiesWithDistance = preprocessedProperties.map(property => ({
           ...property,
@@ -468,15 +475,15 @@ const Home = () => {
             property.longitude
           )
         }));
-        
+
         // If check-in and check-out dates are provided, fetch room prices for those dates
         let propertiesWithPrices = [...propertiesWithDistance];
-        
+
         if (searchParams.checkIn && searchParams.checkOut) {
           // Process properties sequentially to avoid too many concurrent requests
           for (let i = 0; i < propertiesWithDistance.length; i++) {
             const property = propertiesWithDistance[i];
-            
+
             if (property.rooms && Array.isArray(property.rooms) && property.rooms.length > 0) {
               try {
                 // Create an array of promises for each room's availability check
@@ -488,136 +495,115 @@ const Home = () => {
                     }
                   }).catch(err => {
                     console.error(`Error fetching room ${room.id} availability:`, err);
-                    return { data: { data: { defaultPrice: room.price_per_night || 0 } } };
+                    return { isError: true, data: { data: { defaultPrice: room.price_per_night || 0 } } };
                   });
                 });
-                
+
                 // Wait for all room availability checks to complete
                 const roomResponses = await Promise.all(roomPromises);
-                
-                // Extract prices and calculate the lowest price
-                const roomPrices = roomResponses.map(response => {
-                  if (response.data && response.data.data) {
-                    // Calculate average price from availability data
-                    const availabilityData = response.data.data.availability || [];
-                    if (availabilityData.length > 0) {
-                      // Sum all prices and divide by number of days
-                      const totalPrice = availabilityData.reduce((sum, day) => {
-                        return sum + (parseFloat(day.price) || 0);
-                      }, 0);
-                      return totalPrice / availabilityData.length;
-                    } else {
-                      // Use default price if no availability data
-                      return parseFloat(response.data.data.defaultPrice) || 0;
-                    }
+
+                // Analyze availability and price for each room
+                const roomStatusBuffer = roomResponses.map(response => {
+                  if (response.isError) return { price: parseFloat(response.data?.data?.defaultPrice || 0), available: false };
+
+                  const data = response.data?.data;
+                  // Handle different API response structures (object vs array)
+                  const rawAvail = data?.availability || data?.requested_room?.availability;
+                  const availList = Array.isArray(rawAvail) ? rawAvail : Object.values(rawAvail || {});
+
+                  if (availList.length === 0) {
+                    // If no data, fall back to default price but assume available (or unavailable depending on strictness)
+                    // For now, if no explicit "occupied" status, assume available if price exists.
+                    return { price: parseFloat(data?.defaultPrice || 0), available: true };
                   }
-                  return 0;
-                }).filter(price => price > 0);
-                
-                // Update the property with the lowest price
-                if (roomPrices.length > 0) {
+
+                  // Check strict availability
+                  const isAvailable = availList.every(day => day.status === 'available' && !day.booking_id);
+
+                  // Calculate average price for the period
+                  const totalPrice = availList.reduce((sum, day) => sum + (parseFloat(day.price) || 0), 0);
+                  const avgPrice = totalPrice / availList.length;
+
+                  return { price: avgPrice, available: isAvailable };
+                });
+
+                // Filter for rooms that are fully available
+                const availableRooms = roomStatusBuffer.filter(r => r.available && r.price > 0);
+
+                if (availableRooms.length > 0) {
+                  // Property is available
                   propertiesWithPrices[i] = {
                     ...propertiesWithPrices[i],
-                    price: Math.min(...roomPrices)
+                    price: Math.min(...availableRooms.map(r => r.price)),
+                    is_available: true
                   };
                 } else {
-                  // Fallback to basic price calculation if no room prices available
+                  // Property is NOT available for the selected dates
+                  // Fallback to basic price for display purposes
                   const basicPrices = property.rooms
-                    .map(room => {
-                      // Only use price_per_night
-                      const pricePerNight = room.price_per_night ? parseFloat(room.price_per_night) : 0;
-                      return pricePerNight;
-                    })
+                    .map(room => parseFloat(room.price_per_night || 0))
                     .filter(price => price > 0);
-                  
+
                   propertiesWithPrices[i] = {
                     ...propertiesWithPrices[i],
-                    price: basicPrices.length > 0 ? Math.min(...basicPrices) : (property.price || 0)
+                    price: basicPrices.length > 0 ? Math.min(...basicPrices) : (property.price || 0),
+                    is_available: false
                   };
                 }
               } catch (error) {
                 console.error(`Error processing property ${property.id}:`, error);
                 // Fallback to basic price calculation
                 const basicPrices = property.rooms
-                  .map(room => {
-                    // Only use price_per_night
-                    const pricePerNight = room.price_per_night ? parseFloat(room.price_per_night) : 0;
-                    return pricePerNight;
-                  })
+                  .map(room => parseFloat(room.price_per_night || 0))
                   .filter(price => price > 0);
-                
+
                 propertiesWithPrices[i] = {
                   ...propertiesWithPrices[i],
-                  price: basicPrices.length > 0 ? Math.min(...basicPrices) : (property.price || 0)
+                  price: basicPrices.length > 0 ? Math.min(...basicPrices) : (property.price || 0),
+                  is_available: true // Default to true on error to avoid blocking valid properties
                 };
               }
             } else {
               // No rooms, use property price
               propertiesWithPrices[i] = {
                 ...propertiesWithPrices[i],
-                price: property.price || 0
+                price: property.price || 0,
+                is_available: true
               };
             }
           }
         } else {
-          // If no dates provided, use basic price calculation
+          // If no dates provided, use basic price calculation and mark as available
           propertiesWithPrices = propertiesWithDistance.map(property => {
             let lowestPrice = null;
             if (property.rooms && Array.isArray(property.rooms) && property.rooms.length > 0) {
-              // Debug room data
-              console.log('Property rooms:', property.id, property.rooms.map(r => ({
-                id: r.id,
-                price_per_night: r.price_per_night
-              })));
-              
-              // Calculate prices with strict type handling
               const prices = property.rooms
-                .map(room => {
-                  // Log room price data for debugging
-                  console.log(`Room ${room.id} price data:`, {
-                    price_per_night: room.price_per_night,
-                    price_per_night_parsed: parseFloat(room.price_per_night)
-                  });
-                  
-                  // Only use price_per_night
-                  const pricePerNight = room.price_per_night ? parseFloat(room.price_per_night) : 0;
-                  console.log(`Room ${room.id} price: ${pricePerNight}`);
-                  return pricePerNight;
-                })
+                .map(room => parseFloat(room.price_per_night || 0))
                 .filter(price => price > 0);
-                
-              console.log('Calculated prices:', prices);
-              
+
               if (prices.length > 0) {
                 lowestPrice = Math.min(...prices);
               }
             }
-            
-            // Log room prices for debugging
-            if (property.rooms && Array.isArray(property.rooms) && property.rooms.length > 0) {
-              console.log(`Property ${property.id} rooms:`, property.rooms.map(r => ({
-                id: r.id,
-                price_per_night: r.price_per_night
-              })));
-            }
-            
-            const finalPrice = lowestPrice || property.price || 0;
-            console.log(`Property ${property.id} final price: ${finalPrice}`);
+
             return {
               ...property,
-              price: finalPrice
+              price: lowestPrice || property.price || 0,
+              is_available: true // Always available if no dates selected
             };
           });
         }
-        
+
+
+
         // Final properties with both distance and accurate prices
         const propertiesWithDistanceAndPrice = propertiesWithPrices;
-        
+
         // Enhance properties with room amenities
         const enhancedProperties = propertiesWithDistanceAndPrice.map(property => {
           // Start with the property's own amenities
           let allAmenities = Array.isArray(property.amenities) ? [...property.amenities] : [];
-          
+
           // Add all room amenities to the property's amenities
           if (property.rooms && Array.isArray(property.rooms)) {
             property.rooms.forEach(room => {
@@ -627,9 +613,9 @@ const Home = () => {
                   // Add each room amenity to the property amenities
                   room.amenities.forEach(amenity => {
                     // Handle both string and object amenities
-                    const amenityValue = typeof amenity === 'object' ? 
+                    const amenityValue = typeof amenity === 'object' ?
                       (amenity.amenity || amenity.name || '') : amenity;
-                    
+
                     if (amenityValue && !allAmenities.includes(amenityValue)) {
                       allAmenities.push(amenityValue);
                     }
@@ -641,9 +627,9 @@ const Home = () => {
                       allAmenities.push(key);
                     } else if (Array.isArray(value)) {
                       value.forEach(item => {
-                        const amenityValue = typeof item === 'object' ? 
+                        const amenityValue = typeof item === 'object' ?
                           (item.amenity || item.name || '') : item;
-                        
+
                         if (amenityValue && !allAmenities.includes(amenityValue)) {
                           allAmenities.push(amenityValue);
                         }
@@ -652,7 +638,7 @@ const Home = () => {
                   });
                 }
               }
-              
+
               // Also check for view_type and add it as an amenity
               if (room.view_type && !allAmenities.includes(room.view_type)) {
                 allAmenities.push(room.view_type);
@@ -660,16 +646,16 @@ const Home = () => {
               }
             });
           }
-          
+
           console.log(`Property ${property.id} amenities enhanced from ${property.amenities?.length || 0} to ${allAmenities.length}`);
-          
+
           // Return the enhanced property with all amenities
           return {
             ...property,
             amenities: allAmenities
           };
         });
-        
+
         console.log('Properties received:', enhancedProperties);
         setProperties(enhancedProperties);
         setFilteredProperties(enhancedProperties);
@@ -691,7 +677,7 @@ const Home = () => {
   const handlePropertyClick = (propertyId) => {
     // Check if user is logged in
     const token = localStorage.getItem('token');
-    
+
     if (!token) {
       // User is not logged in, show login prompt
       Swal.fire({
@@ -719,156 +705,146 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4 text-center">
-          Find Your Perfect Stay
-        </h1>
-        <p className="text-lg text-gray-600 text-center mb-8">
-          Discover amazing properties at the best prices
-        </p>
-
-      </div>
-
-      {/* Quick Filters */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex gap-4 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-primary-50 text-primary-700 font-medium text-sm hover:bg-primary-100 transition-colors">
-              Properties
-            </button>
-            <button 
-              onClick={() => navigate('/trips')}
-              className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors"
-            >
-              Trips
-            </button>
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
-              Mountain View
-            </button>
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
-              City Center
-            </button>
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
-              Pet Friendly
-            </button>
-          </div>
+      {/* Hero Section */}
+      <div className="relative min-h-[600px] flex items-center justify-center mb-12">
+        <div className="absolute inset-0">
+          <img
+            src={backgroundImage ? `${backgroundImage}?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&h=1080&q=80` : 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1920&q=80'}
+            className="w-full h-full object-cover"
+            alt="Hero background"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-gray-50/90"></div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="relative">
-        {/* Hero Section */}
-        <div className="relative h-[300px] bg-gray-900">
-          <div className="absolute inset-0">
-            <img
-              src={`${backgroundImage}?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&h=600&q=80`}
-              className="w-full h-full object-cover opacity-60 transition-opacity duration-300"
-              alt="Hero background"
-            />
-          </div>
-          <div className="relative z-10 h-full flex flex-col items-center justify-center px-4">
-            <h1 className="text-4xl font-bold text-white mb-2">
-              Find Your Perfect Stay
+        <div className="relative z-10 w-full max-w-7xl px-4 pt-20">
+          <div className="text-center mb-12">
+            <h1 className="text-4xl md:text-7xl font-extrabold text-white mb-6 drop-shadow-xl tracking-tight">
+              Find Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-primary-200">Perfect Stay</span>
             </h1>
-            <p className="text-base text-white text-center">
+            <p className="text-lg md:text-2xl text-gray-200 drop-shadow-lg max-w-2xl mx-auto font-light leading-relaxed">
               Discover amazing properties at the best prices, from cozy apartments to luxury villas
             </p>
           </div>
-        </div>
 
-        {/* Search Form - Desktop: right-aligned, Mobile: centered */}
-        <div className="container mx-auto px-4">
-          <form onSubmit={handleSearch} className="search-form-container">
-            <div className="search-bar">
-            <div className="search-section">
-              <div className="relative flex items-center">
+          {/* Glass Search Bar */}
+          <div className="bg-white/10 backdrop-blur-md p-2 md:p-3 rounded-3xl border border-white/20 shadow-2xl max-w-5xl mx-auto">
+            <form onSubmit={handleSearch} className="bg-white rounded-2xl p-2 shadow-sm grid grid-cols-1 md:grid-cols-12 gap-2">
+
+              {/* Location */}
+              <div className="md:col-span-3 relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <MapPinIcon className="h-5 w-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                </div>
                 <input
                   type="text"
-                  placeholder="Destination..."
+                  placeholder="Where to?"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 pl-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="block w-full h-12 pl-12 pr-4 rounded-xl border-0 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-100 text-gray-900 font-medium placeholder:text-gray-400 transition-all text-sm"
                 />
+              </div>
+
+              {/* Type */}
+              <div className="md:col-span-2 relative group">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <MapPinIcon className="h-5 w-5 text-gray-400" />
+                  <HomeIcon className="h-5 w-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                </div>
+                <select
+                  value={propertyType}
+                  onChange={(e) => setPropertyType(e.target.value)}
+                  className="block w-full h-12 pl-10 pr-8 rounded-xl border-0 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-100 text-gray-900 font-medium text-sm appearance-none transition-all cursor-pointer"
+                >
+                  <option value="">Any Type</option>
+                  {propertyTypes.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Dates */}
+              <div className="md:col-span-4 grid grid-cols-2 gap-2">
+                <div className="relative">
+                  <DatePicker
+                    selected={checkInDate}
+                    onChange={date => setCheckInDate(date)}
+                    placeholderText="Check-in"
+                    className="block w-full h-12 pl-4 pr-2 rounded-xl border-0 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-100 text-gray-900 font-medium text-sm transition-all"
+                    dateFormat="MMM d"
+                    minDate={new Date()}
+                  />
+                </div>
+                <div className="relative">
+                  <DatePicker
+                    selected={checkOutDate}
+                    onChange={date => setCheckOutDate(date)}
+                    placeholderText="Check-out"
+                    className="block w-full h-12 pl-4 pr-2 rounded-xl border-0 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-100 text-gray-900 font-medium text-sm transition-all"
+                    dateFormat="MMM d"
+                    minDate={checkInDate || new Date()}
+                  />
                 </div>
               </div>
-            </div>
 
-            <div className="search-section">
-              <select
-                value={propertyType}
-                onChange={(e) => setPropertyType(e.target.value)}
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              {/* Guests */}
+              <div className="md:col-span-2 relative group">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <UserIcon className="h-5 w-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                </div>
+                <select
+                  value={guests}
+                  onChange={(e) => setGuests(parseInt(e.target.value))}
+                  className="block w-full h-12 pl-10 pr-8 rounded-xl border-0 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-100 text-gray-900 font-medium text-sm appearance-none transition-all cursor-pointer"
+                >
+                  <option value="1">1 Guest</option>
+                  <option value="2">2 Guests</option>
+                  <option value="3">3 Guests</option>
+                  <option value="4">4 Guests</option>
+                  <option value="5">5+ Guests</option>
+                </select>
+              </div>
+
+              {/* Search Button */}
+              <div className="md:col-span-1">
+                <button
+                  type="submit"
+                  disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
+                  className="w-full h-12 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl shadow-lg shadow-primary-500/30 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+                >
+                  <MagnifyingGlassIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </form>
+
+            {/* Radius Options - Subtle below Search */}
+            <div className="mt-3 flex justify-center space-x-4 text-white/80 text-sm font-medium">
+              <span className="flex items-center text-white/60"><AdjustmentsHorizontalIcon className="w-4 h-4 mr-1" /> Radius:</span>
+              {radiusOptions.map((option) => (
+                <label key={option.value} className="flex items-center cursor-pointer hover:text-white transition-colors">
+                  <input
+                    type="radio"
+                    name="radius"
+                    checked={radius === option.value}
+                    onChange={() => handleRadiusChange(option.value)}
+                    className="mr-1.5 w-3 h-3 text-primary-500 focus:ring-primary-500 bg-transparent border-white/50"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Category Chips */}
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
+            {['Properties', 'Trips', 'Mountain View', 'City Center', 'Pet Friendly'].map((tag) => (
+              <button
+                key={tag}
+                onClick={() => tag === 'Trips' ? navigate('/trips') : null}
+                className="px-5 py-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/10 text-white text-sm font-medium transition-all hover:scale-105"
               >
-                <option value="">Any Type</option>
-                {propertyTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="search-section">
-              <select
-                value={guests}
-                onChange={(e) => setGuests(parseInt(e.target.value))}
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              >
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5+</option>
-              </select>
-            </div>
-
-            <div className="search-section">
-              <select
-                value={radius}
-                onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              >
-                {radiusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="search-section">
-              <DatePicker
-                selected={checkInDate}
-                onChange={date => setCheckInDate(date)}
-                placeholderText="Check-in date"
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                dateFormat="MMM d, yyyy"
-                minDate={new Date()}
-              />
-            </div>
-
-            <div className="search-section">
-              <DatePicker
-                selected={checkOutDate}
-                onChange={date => setCheckOutDate(date)}
-                placeholderText="Check-out date"
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                dateFormat="MMM d, yyyy"
-                minDate={checkInDate || new Date()}
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="search-button"
-              disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
-            >
-              <MagnifyingGlassIcon className="h-5 w-5" />
-            </button>
-            </div>
-          </form>
+                {tag}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -876,9 +852,9 @@ const Home = () => {
         <div className="flex flex-col xl:flex-row gap-8">
           {/* Filters */}
           <div className="hidden xl:block xl:w-1/5 xl:flex-shrink-0 xl:-mt-[96px]">
-            <FilterContainer 
-              onFilterChange={handleFilterChange} 
-              properties={properties} 
+            <FilterContainer
+              onFilterChange={handleFilterChange}
+              properties={properties}
             />
           </div>
 
@@ -912,8 +888,8 @@ const Home = () => {
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">Popular Destinations</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {popularDestinations.map((destination) => (
-                    <div 
-                      key={destination.name} 
+                    <div
+                      key={destination.name}
                       className={`relative h-40 rounded-lg overflow-hidden cursor-pointer group ${selectedPOI === destination.name ? 'ring-4 ring-primary-500' : ''}`}
                       onClick={() => handlePOIClick(destination)}
                     >
@@ -927,14 +903,14 @@ const Home = () => {
                           <h3 className="text-white font-semibold text-lg">{destination.name}</h3>
                         </div>
                         <div className="absolute top-2 right-2 flex space-x-2">
-                          <button 
+                          <button
                             onClick={(e) => openInGoogleMaps(destination, e)}
                             className="p-1.5 bg-white/80 hover:bg-white rounded-full text-gray-700 transition-colors"
                             title="Open in Google Maps"
                           >
                             <MapPinIcon className="h-4 w-4" />
                           </button>
-                          <button 
+                          <button
                             onClick={(e) => handleDeletePOI(destination.name, e)}
                             className="p-1.5 bg-white/80 hover:bg-red-100 rounded-full text-gray-700 hover:text-red-500 transition-colors"
                             title="Remove destination"
@@ -960,14 +936,14 @@ const Home = () => {
                     <div className="text-gray-500 mb-6">
                       {loading ? 'Searching...' : properties.length > 0 ? 'No properties match your filters' : 'No properties found'}
                     </div>
-                    
+
                     {/* Show recommendations button when no properties found */}
                     {!loading && (
                       <button
                         onClick={() => {
                           if (userLocation) {
                             setLocation('Current Location');
-                            handleSearch({ preventDefault: () => {} });
+                            handleSearch({ preventDefault: () => { } });
                           } else if (isLoadingLocation) {
                             Swal.fire({
                               title: 'Getting Your Location',
@@ -997,120 +973,158 @@ const Home = () => {
                     )}
                   </div>
                 )}
-                {filteredProperties.map((property) => (
-                  <div
-                    key={property.id}
-                    className="bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer group"
-                    onClick={() => handlePropertyClick(property.id)}
-                  >
-                    <div className="relative">
-                      <img
-                        src={property.imageUrl || '/placeholder-property.jpg'}
-                        alt={property.name}
-                        className="w-full h-56 object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
-                      <div className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
-                        <HeartIcon className="h-5 w-5 text-gray-600" />
-                      </div>
-                    </div>
-                    <div className="p-5">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        {property.name || 'Unnamed Property'}
-                      </h3>
-                      <p className="text-gray-600 mb-2">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (property.latitude && property.longitude) {
-                              const url = `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
-                              window.open(url, '_blank');
-                            }
-                          }}
-                          className="inline-flex items-center hover:text-primary-600 transition-colors"
-                          title="Open in Google Maps"
-                        >
-                          <MapPinIcon className="h-4 w-4 mr-1" />
-                          {`${property.city}, ${property.country}`}
-                          {property.distance && (
-                            <span className="ml-2 text-sm text-gray-500">
-                              ({formatDistance(property.distance)})
+                {filteredProperties.map((property) => {
+                  const isUnavailable = property.is_available === false;
+                  return (
+                    <div
+                      key={property.id}
+                      className={`glass-card rounded-2xl overflow-hidden group transition-transform duration-300 border border-white/50 ${isUnavailable ? 'opacity-90 grayscale-[0.3]' : 'hover:-translate-y-2 cursor-pointer'}`}
+                      onClick={() => !isUnavailable && handlePropertyClick(property.id)}
+                    >
+                      <div className="relative h-64 overflow-hidden">
+                        <img
+                          src={property.imageUrl || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80'}
+                          alt={property.name}
+                          className={`w-full h-full object-cover transition-transform duration-700 ${!isUnavailable ? 'group-hover:scale-110' : ''}`}
+                        />
+
+                        {isUnavailable && (
+                          <div className="absolute inset-0 z-20 bg-black/50 backdrop-blur-[2px] flex items-center justify-center">
+                            <span className="bg-red-500 text-white px-6 py-2 rounded-xl font-bold transform -rotate-6 shadow-2xl border border-red-400/50 tracking-wide">
+                              SOLD OUT
                             </span>
-                          )}
-                        </button>
-                      </p>
-                      <p className="text-gray-600 mb-4">
-                        <UserIcon className="h-4 w-4 inline mr-1" />
-                        {property.total_max_occupancy} guests max
-                      </p>
-                      <div className="flex justify-between items-center">
-                        <span className="text-primary-600 font-semibold">
-                          {searchParams.checkIn && searchParams.checkOut ? (
-                            <>
-                              ${Number(property.price).toFixed(2)}/night
-                              <span className="text-xs block">for selected dates</span>
-                            </>
-                          ) : (
-                            <span className="text-sm text-gray-600">Select dates to see prices</span>
-                          )}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePropertyClick(property.id);
-                          }}
-                          className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition-colors"
-                        >
-                          View Details
-                        </button>
+                          </div>
+                        )}
+
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80"></div>
+
+                        {!isUnavailable && (
+                          <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md border border-white/30 rounded-full p-2.5 hover:bg-white/40 transition-colors shadow-lg">
+                            <HeartIcon className="h-5 w-5 text-white" />
+                          </div>
+                        )}
+
+                        <div className="absolute bottom-4 left-4 right-4">
+                          <div className="flex justify-between items-end">
+                            <div>
+                              <span className="inline-block bg-primary-600/90 backdrop-blur-sm px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider text-white mb-2 shadow-sm">
+                                {property.property_type}
+                              </span>
+                              <h3 className="text-xl font-bold text-white leading-tight drop-shadow-md line-clamp-1">
+                                {property.name || 'Unnamed Property'}
+                              </h3>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-5">
+                        <div className="flex items-center text-sm text-gray-500 mb-4 group/location">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (property.latitude && property.longitude) {
+                                const url = `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
+                                window.open(url, '_blank');
+                              }
+                            }}
+                            className="flex items-center hover:text-primary-600 transition-colors text-left"
+                            title="Open in Google Maps"
+                            disabled={isUnavailable}
+                          >
+                            <MapPinIcon className="h-4 w-4 mr-1.5 text-primary-500 flex-shrink-0" />
+                            <span className="truncate mr-1">{property.city}, {property.country}</span>
+                            {property.distance && <span className="text-xs font-medium bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 ml-1 whitespace-nowrap">{formatDistance(property.distance)}</span>}
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 mb-5 p-3 bg-gray-50/50 rounded-xl border border-gray-100">
+                          <div className="flex items-center text-sm text-gray-600">
+                            <UserIcon className="h-4 w-4 mr-2 text-primary-400" />
+                            <span className="font-medium">{property.total_max_occupancy}</span> <span className="text-gray-400 ml-1">Guests</span>
+                          </div>
+                          <div className="flex items-center text-sm text-gray-600">
+                            <HomeIcon className="h-4 w-4 mr-2 text-primary-400" />
+                            <span className="font-medium">StayHub</span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                          <div className="flex flex-col">
+                            {searchParams.checkIn && searchParams.checkOut ? (
+                              <>
+                                <span className={`text-xl font-bold ${isUnavailable ? 'text-gray-400' : 'text-primary-700'}`}>${Number(property.price).toFixed(0)}</span>
+                                <span className="text-xs text-gray-400 font-medium">per night</span>
+                              </>
+                            ) : (
+                              <span className="text-sm font-bold text-gray-400">Add dates for price</span>
+                            )}
+                          </div>
+                          <button
+                            disabled={isUnavailable}
+                            className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors shadow-lg ${isUnavailable ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-900 text-white group-hover:bg-primary-600 shadow-gray-200 group-hover:shadow-primary-500/30'}`}
+                          >
+                            {isUnavailable ? 'Unavailable' : 'View Details'}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             {/* Why Visit Romania Section */}
-            <div className="mb-12">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Why Visit Romania</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <img 
-                    src="https://source.unsplash.com/800x600/?romania,castle" 
-                    alt="Romanian Castles" 
-                    className="w-full h-48 object-cover"
-                  />
-                  <div className="p-5">
-                    <h3 className="text-lg font-semibold mb-2">Rich History & Culture</h3>
-                    <p className="text-gray-600">
-                      Explore medieval castles, fortified churches, and well-preserved historic towns that showcase Romania's fascinating past.
+            <div className="mb-20">
+              <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center"><span className="gradient-text">Why Visit Romania</span></h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="glass-card rounded-2xl overflow-hidden group hover:-translate-y-2 transition-transform duration-300">
+                  <div className="relative h-56 overflow-hidden">
+                    <img
+                      src="https://images.unsplash.com/photo-1533929736458-ca588d080e63?auto=format&fit=crop&w=800&q=80"
+                      alt="Romanian Castles"
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                    <h3 className="absolute bottom-4 left-5 text-xl font-bold text-white drop-shadow-md">Rich History & Culture</h3>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-gray-600 leading-relaxed">
+                      Explore medieval castles, fortified churches, and well-preserved historic towns that showcase Romania's fascinating and mysterious past.
                     </p>
                   </div>
                 </div>
-                
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <img 
-                    src="https://source.unsplash.com/800x600/?romania,mountains" 
-                    alt="Romanian Landscapes" 
-                    className="w-full h-48 object-cover"
-                  />
-                  <div className="p-5">
-                    <h3 className="text-lg font-semibold mb-2">Breathtaking Nature</h3>
-                    <p className="text-gray-600">
-                      From the Carpathian Mountains to the Danube Delta, Romania offers diverse landscapes and outdoor adventures.
+
+                <div className="glass-card rounded-2xl overflow-hidden group hover:-translate-y-2 transition-transform duration-300">
+                  <div className="relative h-56 overflow-hidden">
+                    <img
+                      src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=80"
+                      alt="Romanian Landscapes"
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                    <h3 className="absolute bottom-4 left-5 text-xl font-bold text-white drop-shadow-md">Breathtaking Nature</h3>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-gray-600 leading-relaxed">
+                      From the majestic Carpathian Mountains to the unique Danube Delta, experience diverse landscapes and unforgettable outdoor adventures.
                     </p>
                   </div>
                 </div>
-                
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <img 
-                    src="https://source.unsplash.com/800x600/?romania,food" 
-                    alt="Romanian Cuisine" 
-                    className="w-full h-48 object-cover"
-                  />
-                  <div className="p-5">
-                    <h3 className="text-lg font-semibold mb-2">Delicious Cuisine</h3>
-                    <p className="text-gray-600">
-                      Taste traditional Romanian dishes like sarmale, mămăligă, and mici, accompanied by excellent local wines.
+
+                <div className="glass-card rounded-2xl overflow-hidden group hover:-translate-y-2 transition-transform duration-300">
+                  <div className="relative h-56 overflow-hidden">
+                    <img
+                      src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80"
+                      alt="Romanian Cuisine"
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                    <h3 className="absolute bottom-4 left-5 text-xl font-bold text-white drop-shadow-md">Delicious Cuisine</h3>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-gray-600 leading-relaxed">
+                      Taste traditional Romanian dishes like sarmale, mămăligă, and mici, accompanied by excellent local wines involved in a rich culinary tradition.
                     </p>
                   </div>
                 </div>

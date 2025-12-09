@@ -17,8 +17,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@headlessui/react": "^2.2.0",
     "@heroicons/react": "^2.2.0",
+    "@mui/icons-material": "^7.3.6",
+    "@mui/material": "^7.3.6",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.2",
     "@react-leaflet/core": "^2.1.0",
@@ -53,6 +57,7 @@
     "yup": "^1.6.1"
   },
   "devDependencies": {
+    "@babel/plugin-transform-private-property-in-object": "^7.27.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "cypress": "^13.6.2",

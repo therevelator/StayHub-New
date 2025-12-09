@@ -58,6 +58,31 @@ const RoomPage = () => {
   // Get URL search params
   const [searchParams] = useSearchParams();
 
+  // Initialize from URL params
+  useEffect(() => {
+    const startParam = searchParams.get('startDate');
+    const endParam = searchParams.get('endDate');
+
+    if (startParam && endParam) {
+      // Parse dates as local time to avoid timezone issues
+      const parseDate = (dateStr) => {
+        if (!dateStr) return null;
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+      };
+
+      const start = parseDate(startParam);
+      const end = parseDate(endParam);
+
+      if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        console.log('RoomPage: Setting dates from URL', { start, end });
+        setCheckInDate(start);
+        setCheckOutDate(end);
+        setActiveStartDate(start);
+      }
+    }
+  }, [searchParams]);
+
   const isRoomFullyAvailable = (availability) => {
     if (!availability) return false;
     return Object.values(availability).every(info =>
@@ -455,7 +480,7 @@ const RoomPage = () => {
         `,
         confirmButtonColor: '#2A9D8F'
       }).then(() => {
-        window.location.reload();
+        navigate('/');
       });
     } catch (error) {
       console.error('Error booking the room:', error);
