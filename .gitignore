@@ -906,7 +906,6 @@ node_modules/cliui/build/index.cjs
 node_modules/.package-lock.json
 node_modules/.bin/concurrently
 node_modules/.bin/conc
-client/src/pages/Planning/Planning.jsx
 client/node_modules/.vite/deps/recharts.js
 client/node_modules/.vite/deps/react-datepicker.js
 client/node_modules/.vite/deps/react-calendar.js

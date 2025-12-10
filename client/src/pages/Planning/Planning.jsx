@@ -23,11 +23,15 @@ import {
   BuildingOfficeIcon,
   InformationCircleIcon,
   CheckIcon,
+  SparklesIcon,
+  DocumentArrowDownIcon,
+  AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/solid';
 import { format } from 'date-fns';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import api from '../../services/api';
+import propertyService from '../../services/propertyService';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Button } from '../../components/ui/button';
@@ -67,8 +71,12 @@ const MapController = ({ locations }) => {
 
   useEffect(() => {
     if (locations && locations.length > 0) {
-      const bounds = L.latLngBounds(locations.map((loc) => [loc.lat, loc.lng]));
-      map.fitBounds(bounds, { padding: [50, 50] });
+      // Filter out any locations with missing lat/lng
+      const validLocations = locations.filter(loc => loc && loc.lat !== undefined && loc.lng !== undefined);
+      if (validLocations.length > 0) {
+        const bounds = L.latLngBounds(validLocations.map((loc) => [loc.lat, loc.lng]));
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
     }
   }, [locations, map]);
 
@@ -129,11 +137,16 @@ const Planning = () => {
   const [hotels, setHotels] = useState([]);
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [mapLocations, setMapLocations] = useState([]);
-  const [isUsingAiForPoi, setIsUsingAiForPoi] = useState(false);
+  const [isUsingAiForPoi, setIsUsingAiForPoi] = useState(true); // AI enabled by default
+  const [accommodationStops, setAccommodationStops] = useState([]); // Recommended overnight stops
+  const [bookingAppProperties, setBookingAppProperties] = useState([]); // Properties from our booking app
   const [isMapClickMode, setIsMapClickMode] = useState(false);
   const [isProcessingAiPoi, setIsProcessingAiPoi] = useState(false);
   // Use the API key from localStorage or environment variable, but don't hardcode it
-  const [openAIApiKey, setOpenAIApiKey] = useState(localStorage.getItem('openai_api_key') || import.meta.env.VITE_OPENAI_API_KEY || '');
+  // Use the API key from localStorage or environment variable, but don't hardcode it
+  const [groqApiKey, setGroqApiKey] = useState(localStorage.getItem('groq_api_key') || import.meta.env.VITE_GROQ_API_KEY || '');
+  // Enforce Groq per user request
+  const aiProvider = 'groq';
 
   // POI Category selections
   const [selectedCategories, setSelectedCategories] = useState({
@@ -150,6 +163,13 @@ const Planning = () => {
 
   // POI distance from route selection
   const [poiDistance, setPoiDistance] = useState(10); // Default to 10km
+
+  // AI Route Recommendation State
+  const [tripDuration, setTripDuration] = useState(3);
+  const [returnToStart, setReturnToStart] = useState(false);
+  const [recommendedRoutes, setRecommendedRoutes] = useState([]);
+  const [isRecommending, setIsRecommending] = useState(false);
+  const [numRoutesToRecommend, setNumRoutesToRecommend] = useState(5); // Customizable, max 10
 
   // New state for additional features
   const [avoidOptions, setAvoidOptions] = useState({
@@ -171,29 +191,45 @@ const Planning = () => {
     accommodations: false,
   });
 
-  // Overpass API endpoints with fallback
+  // Overpass API endpoints with fallback (ordered by reliability)
   const OVERPASS_ENDPOINTS = [
-    'http://localhost:8080/api/interpreter', // Local Docker instance
     'https://overpass-api.de/api/interpreter',
     'https://lz4.overpass-api.de/api/interpreter',
-    'https://overpass.osm.ch/api/interpreter',
-    'https://overpass.openstreetmap.fr/api/interpreter',
-    'https://overpass.openstreetmap.ru/api/interpreter',
   ];
+
+  // Track when we last made a request to avoid rate limiting
+  const lastRequestTime = React.useRef(0);
 
   // Make request with fallback to different endpoints
   const makeOverpassRequest = async (query) => {
+    // Enforce minimum delay between requests (1 second)
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime.current;
+    if (timeSinceLastRequest < 1000) {
+      await new Promise(resolve => setTimeout(resolve, 1000 - timeSinceLastRequest));
+    }
+    lastRequestTime.current = Date.now();
+
     let lastError;
 
     for (const endpoint of OVERPASS_ENDPOINTS) {
       try {
         const response = await axios.post(endpoint, query, {
-          timeout: 10000, // 10 second timeout
+          timeout: 15000, // 15 second timeout
         });
         return response.data;
       } catch (error) {
         console.warn(`Failed to fetch from ${endpoint}:`, error.message);
         lastError = error;
+
+        // If it's a 429 (rate limit), don't try other endpoints - they share limits
+        if (error.response?.status === 429) {
+          console.warn('Rate limited by Overpass API - stopping retries');
+          throw new Error('OVERPASS_RATE_LIMITED');
+        }
+
+        // Small delay before trying next endpoint
+        await new Promise(resolve => setTimeout(resolve, 500));
         continue;
       }
     }
@@ -337,7 +373,7 @@ const Planning = () => {
       // Ensure coordinates are numbers
       const lat = typeof poi.lat === 'number' ? poi.lat : parseFloat(poi.lat);
       const lng = typeof poi.lng === 'number' ? poi.lng : parseFloat(poi.lng);
-      
+
       // Only pan if coordinates are valid
       if (!isNaN(lat) && !isNaN(lng)) {
         map.panTo([lat, lng]);
@@ -519,17 +555,17 @@ const Planning = () => {
   // Find POIs in the current map bounds
   const findPOIsInMapBounds = useCallback(() => {
     if (!mapRef.current) return;
-    
+
     const map = mapRef.current;
     const bounds = map.getBounds();
     const north = bounds.getNorth();
     const south = bounds.getSouth();
     const east = bounds.getEast();
     const west = bounds.getWest();
-    
+
     // Show loading state
     setIsSearching(true);
-    
+
     // Construct Overpass query for POIs in the bounding box
     const overpassQuery = `
       [out:json];
@@ -543,7 +579,7 @@ const Planning = () => {
       >;
       out skel qt;
     `;
-    
+
     // Make request to Overpass API
     makeOverpassRequest(overpassQuery)
       .then(data => {
@@ -553,13 +589,13 @@ const Planning = () => {
             // Ensure coordinates are properly formatted as numbers
             const lat = typeof element.lat === 'number' ? element.lat : parseFloat(element.lat);
             const lng = typeof element.lon === 'number' ? element.lon : parseFloat(element.lon);
-            
+
             // Skip POIs with invalid coordinates
             if (isNaN(lat) || isNaN(lng)) {
               console.warn('Skipping POI with invalid coordinates:', element);
               return null;
             }
-            
+
             return {
               id: `osm-${element.id}`,
               name: element.tags.name || `Unnamed ${element.tags.tourism || element.tags.historic || element.tags.natural || element.tags.leisure}`,
@@ -578,7 +614,7 @@ const Planning = () => {
               }
             };
           }).filter(poi => poi !== null); // Filter out null entries (invalid coordinates)
-          
+
           // Update state with found POIs
           setPointsOfInterest(prevPois => {
             // Combine with existing POIs, avoiding duplicates
@@ -586,7 +622,7 @@ const Planning = () => {
             const newPois = pois.filter(p => !existingIds.has(p.id));
             return [...prevPois, ...newPois];
           });
-          
+
           Swal.fire({
             title: 'Points of Interest Found',
             text: `Found ${pois.length} points of interest in the current map view`,
@@ -615,10 +651,12 @@ const Planning = () => {
   // Effect to update mapLocations when tripDays change
   useEffect(() => {
     if (tripDays.length > 0) {
-      const locations = tripDays.map((day) => ({
-        lat: day.location.lat,
-        lng: day.location.lng,
-      }));
+      const locations = tripDays
+        .filter((day) => day && day.location && day.location.lat !== undefined && day.location.lng !== undefined)
+        .map((day) => ({
+          lat: day.location.lat,
+          lng: day.location.lng,
+        }));
 
       // Update the mapLocations state
       setMapLocations(locations);
@@ -628,39 +666,44 @@ const Planning = () => {
   // Modify the openInGoogleMaps function to handle both POIs and locations properly
   const openInGoogleMaps = (item) => {
     let url;
-    
-    // Ensure we have valid coordinates
-    if (item.lat && item.lng) {
-      // It's a POI with direct coordinates
-      // Ensure coordinates are numbers
-      const lat = typeof item.lat === 'number' ? item.lat : parseFloat(item.lat);
-      const lng = typeof item.lng === 'number' ? item.lng : parseFloat(item.lng);
-      
-      if (!isNaN(lat) && !isNaN(lng)) {
-        url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-      } else {
-        // Fallback to name-based search if coordinates are invalid
-        url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.name || 'Unknown location')}`;
-      }
-    } else if (item.location && item.location.lat && item.location.lng) {
-      // It's a location object
-      // Ensure coordinates are numbers
-      const lat = typeof item.location.lat === 'number' ? item.location.lat : parseFloat(item.location.lat);
-      const lng = typeof item.location.lng === 'number' ? item.location.lng : parseFloat(item.location.lng);
-      
-      if (!isNaN(lat) && !isNaN(lng)) {
-        url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-      } else {
-        // Fallback to name-based search if coordinates are invalid
-        url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location.name || 'Unknown location')}`;
-      }
+    const name = item.name || item.location?.name;
+    const locality = item.locality || item.location?.city || item.location?.country;
+
+    // Use name-based search for real places (better accuracy if coordinates are approximate)
+    // Avoid name search for generic/unnamed/custom points which need exact coordinates
+    const shouldUseNameSearch = name &&
+      name !== 'Unnamed' &&
+      name !== 'Custom Location' &&
+      name !== 'Search Point' &&
+      !name.includes('Dropped Pin');
+
+    if (shouldUseNameSearch) {
+      // Prioritize name + locality for best resolution
+      const query = locality ? `${name}, ${locality}` : name;
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
     } else {
-      // Fallback to name-based search
-      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        item.name || item.location?.name || 'Unknown location'
-      )}`;
+      // Logic to extract coordinates
+      let lat, lng;
+
+      if (item.lat !== undefined && item.lng !== undefined) {
+        lat = typeof item.lat === 'number' ? item.lat : parseFloat(item.lat);
+        lng = typeof item.lng === 'number' ? item.lng : parseFloat(item.lng);
+      } else if (item.location?.lat !== undefined && item.location?.lng !== undefined) {
+        lat = typeof item.location.lat === 'number' ? item.location.lat : parseFloat(item.location.lat);
+        lng = typeof item.location.lng === 'number' ? item.location.lng : parseFloat(item.location.lng);
+      }
+
+      if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+        url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+      } else {
+        // Final fallback
+        url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name || 'Unknown location')}`;
+      }
     }
-    window.open(url, '_blank');
+
+    if (url) {
+      window.open(url, '_blank');
+    }
   };
 
   // Calculate distance between two points using the Haversine formula
@@ -671,12 +714,344 @@ const Planning = () => {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
 
-  // Find points of interest using OpenAI
+  // Fetch properties from our booking app that are near the route
+  const fetchBookingAppProperties = async (currentRouteCoordinates) => {
+    try {
+      console.log('Fetching properties from booking app...');
+      const response = await propertyService.getAll();
+      const allProperties = response?.data || response || [];
+
+      if (!Array.isArray(allProperties) || allProperties.length === 0) {
+        console.log('No properties found in booking app');
+        return [];
+      }
+
+      console.log(`Found ${allProperties.length} properties in booking app`);
+
+      // Filter properties that have coordinates and are within poiDistance of the route
+      const nearbyProperties = allProperties.filter(property => {
+        if (!property.latitude || !property.longitude) return false;
+
+        const lat = parseFloat(property.latitude);
+        const lng = parseFloat(property.longitude);
+
+        if (isNaN(lat) || isNaN(lng)) return false;
+
+        // Check distance to route
+        if (currentRouteCoordinates && currentRouteCoordinates.length > 0) {
+          const step = Math.max(1, Math.floor(currentRouteCoordinates.length / 50));
+          for (let i = 0; i < currentRouteCoordinates.length; i += step) {
+            const routePoint = currentRouteCoordinates[i];
+            const dist = calculateDistance(lat, lng, routePoint[0], routePoint[1]);
+            if (dist <= poiDistance * 2) { // Double radius for accommodations
+              return true;
+            }
+          }
+        }
+
+        // Check distance to trip destinations
+        for (const day of tripDays) {
+          if (day.location && day.location.lat && day.location.lng) {
+            const dist = calculateDistance(
+              lat, lng,
+              parseFloat(day.location.lat),
+              parseFloat(day.location.lng)
+            );
+            if (dist <= poiDistance * 2) {
+              return true;
+            }
+          }
+        }
+
+        return false;
+      });
+
+      console.log(`Found ${nearbyProperties.length} properties near route`);
+
+      // Transform to our POI format
+      const formattedProperties = nearbyProperties.map(property => ({
+        id: `property-${property.id}`,
+        name: property.name,
+        type: 'accommodation',
+        lat: parseFloat(property.latitude),
+        lng: parseFloat(property.longitude),
+        locality: property.city || property.state || 'Unknown',
+        description: property.description?.substring(0, 100) || `${property.property_type || 'Property'} in ${property.city}`,
+        isBookingAppProperty: true,
+        isOvernightStop: true,
+        propertyId: property.id,
+        propertyType: property.property_type,
+        starRating: property.star_rating,
+        selected: false,
+        location: {
+          name: property.name,
+          lat: parseFloat(property.latitude),
+          lng: parseFloat(property.longitude),
+          city: property.city,
+          country: property.country,
+        }
+      }));
+
+      setBookingAppProperties(formattedProperties);
+      return formattedProperties;
+    } catch (error) {
+      console.error('Error fetching booking app properties:', error);
+      return [];
+    }
+  };
+
+  // AI Best POI Selection
+  const recommendBestPOIs = async () => {
+    if (pointsOfInterest.length === 0) return;
+
+    setIsRecommending(true);
+
+    try {
+      // Limit to 40 names to avoid token limits, prioritize by popularity/wiki score if available
+      const candidates = pointsOfInterest
+        .slice(0, 50)
+        .map(p => `- ${p.name} (${p.locality || 'Unknown'}, ${p.type})`)
+        .join('\n');
+
+      const prompt = `
+        I have a list of tourist attractions:
+        ${candidates}
+        
+        Select the 10 absolute "must-visit" best locations from this list and what I can see on the way to them.
+        Focus on famous landmarks, unique experiences, and high-rated attractions.
+        
+        Respond with ONLY valid JSON:
+        {
+          "selectedNames": ["Exact Name 1", "Exact Name 2"]
+        }
+      `;
+
+      const currentKey = groqApiKey;
+      if (!currentKey) {
+        Swal.fire('Error', 'Groq API Key missing.', 'error');
+        return;
+      }
+
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'openai/gpt-oss-120b',
+          messages: [
+            { role: 'system', content: 'You are a travel curator. Respond with valid JSON only.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3,
+          response_format: { type: 'json_object' }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentKey}`
+          }
+        }
+      );
+
+      const data = JSON.parse(response.data.choices[0].message.content);
+      const selectedNames = data.selectedNames || [];
+
+      if (selectedNames.length > 0) {
+        setPointsOfInterest(prevPois =>
+          prevPois.map(poi => ({
+            ...poi,
+            selected: selectedNames.some(name => poi.name.includes(name) || name.includes(poi.name))
+          }))
+        );
+
+        Swal.fire({
+          title: 'AI Recommendations Applied',
+          text: `Selected ${selectedNames.length} top attractions for you!`,
+          icon: 'success',
+          timer: 2000
+        });
+      }
+
+    } catch (error) {
+      console.error("AI Recommendation Error", error);
+      Swal.fire('Error', 'Failed to generate recommendations.', 'error');
+    } finally {
+      setIsRecommending(false);
+    }
+  };
+
+  // AI Route Recommendation
+  const recommendRoutes = async () => {
+    if (tripDays.length === 0) return;
+
+    setIsRecommending(true);
+    setRecommendedRoutes([]);
+
+    try {
+      const startLocation = tripDays[0].location.name;
+
+      const prompt = `
+        I am planning a trip starting from ${startLocation}.
+        Duration: ${tripDuration} days.
+        Return to start: ${returnToStart ? 'Yes' : 'No'}.
+        Interests: ${Object.keys(selectedCategories).filter(k => selectedCategories[k].length > 0).join(', ') || 'General Sightseeing'}.
+        
+        Please recommend ${numRoutesToRecommend} distinct, detailed route itineraries.
+        Each option should have a name, description, and a list of stop names (cities/locations).
+        
+        Respond with ONLY valid JSON in this format:
+        {
+          "routes": [
+            {
+              "name": "Route Name",
+              "description": "Short description of the vibe",
+              "stops": ["Start City", "Stop 1", "Stop 2", "End City"]
+            }
+          ]
+        }
+      `;
+
+      // Determine active key (Groq Only)
+      const currentKey = groqApiKey;
+      if (!currentKey) {
+        Swal.fire('Error', 'Groq API Key missing. Please set it in AI Settings.', 'error');
+        return;
+      }
+
+      const apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+      const response = await axios.post(
+        apiUrl,
+        {
+          model: 'openai/gpt-oss-120b',
+          messages: [
+            { role: 'system', content: 'You are a travel planner. Respond with valid JSON only.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          response_format: { type: 'json_object' }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentKey}`
+          }
+        }
+      );
+
+      const responseText = response.data.choices[0].message.content;
+      const data = JSON.parse(responseText);
+
+      setRecommendedRoutes(data.routes || []);
+
+    } catch (error) {
+      console.error("AI Recommendation Error", error);
+      Swal.fire('Error', 'Failed to generate recommendations.', 'error');
+    } finally {
+      setIsRecommending(false);
+    }
+  };
+
+  const applyRecommendedRoute = async (routeStops) => {
+    if (!routeStops || routeStops.length === 0) return;
+
+    const result = await Swal.fire({
+      title: 'Apply this route?',
+      text: 'This will replace your current trip points. We will try to find the best matches for these locations.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Apply Route',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) return;
+
+    setIsRecommending(true);
+    Swal.fire({
+      title: 'Building Itinerary',
+      html: 'Geocoding locations...<br/><span id="geocode-progress">Starting...</span>',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    try {
+      const newDays = [];
+      const apiKey = import.meta.env.VITE_OPENCAGE_API_KEY;
+
+      for (let i = 0; i < routeStops.length; i++) {
+        const stopName = routeStops[i];
+
+        // Update loading text
+        const progressEl = document.getElementById('geocode-progress');
+        if (progressEl) progressEl.innerText = `Finding location: ${stopName} (${i + 1}/${routeStops.length})`;
+
+        try {
+          // Use Nominatim (OSM) which doesn't require an API Key (more robust for this demo)
+          // Add detailed address details
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(stopName)}&format=json&addressdetails=1&limit=1`,
+            {
+              headers: {
+                'User-Agent': 'StayHub-Planning-App/1.0'
+              }
+            }
+          );
+          const data = await response.json();
+
+          if (data && data.length > 0) {
+            const result = data[0];
+            newDays.push({
+              id: Date.now() + i,
+              location: {
+                name: stopName, // Use the name from the itinerary for consistency
+                lat: parseFloat(result.lat),
+                lng: parseFloat(result.lon),
+                city: result.address?.city || result.address?.town || result.address?.village || stopName,
+                country: result.address?.country || ''
+              },
+              date: format(new Date(), 'yyyy-MM-dd'),
+              pointsOfInterest: [],
+              timeAtStop: 120
+            });
+          } else {
+            // Fallback to manual object/warning
+            console.warn(`Could not geocode: ${stopName}`);
+            // Add it anyway with null coords so user can see/fix it? 
+            // Better to skip and warn.
+          }
+        } catch (e) {
+          console.error(`Geocode failed for ${stopName}`, e);
+        }
+
+        // Respect Nominatim Usage Policy (1 request per second)
+        await new Promise(r => setTimeout(r, 1200));
+      }
+
+      if (newDays.length > 0) {
+        setTripDays(newDays);
+        setPointsOfInterest([]); // Clear old POIs
+        setRecommendedRoutes([]); // Close the recommendation panel? Or keep it open.
+
+        Swal.fire({
+          title: 'Route Applied!',
+          text: `Successfully added ${newDays.length} locations. Click "Generate Plan" to calculate the route details.`,
+          icon: 'success'
+        });
+      } else {
+        Swal.fire('Error', 'Could not find coordinates for these locations.', 'error');
+      }
+
+    } catch (error) {
+      console.error("Apply Route Error", error);
+      Swal.fire('Error', 'Failed to apply route. Please try adding locations manually.', 'error');
+    } finally {
+      setIsRecommending(false);
+    }
+  };
+
+  // Find points of interest using OpenAI or Groq
   const findPointsOfInterestWithAI = async (routeCoordinates) => {
     return new Promise(async (resolve, reject) => {
       if (tripDays.length < 2) {
@@ -694,38 +1069,37 @@ const Planning = () => {
         return;
       }
 
-      // Check if we have an OpenAI API key
-      if (!openAIApiKey) {
-        console.warn('No OpenAI API key available');
-        Swal.fire({
-          title: 'OpenAI API Key Required',
-          text: 'Please enter your OpenAI API key in the settings to use AI-generated points of interest.',
-          icon: 'warning',
+      // Determine active key (Groq Only)
+      const currentKey = groqApiKey;
+
+      // Check if we have the API key
+      if (!currentKey) {
+        const { value: key } = await Swal.fire({
+          title: 'Groq API Key Required',
           input: 'password',
-          inputPlaceholder: 'Enter your OpenAI API key',
+          inputLabel: 'Enter your Groq API Key',
+          inputPlaceholder: 'gsk_...',
+          html: '<p class="text-xs text-gray-500">Get a free key from console.groq.com</p>',
           showCancelButton: true,
-          confirmButtonText: 'Save',
-          cancelButtonText: 'Cancel',
-          preConfirm: (key) => {
-            if (!key) {
-              Swal.showValidationMessage('Please enter a valid API key');
-              return false;
+          confirmButtonText: 'Save & Continue',
+          inputValidator: (value) => {
+            if (!value) {
+              return 'You need to write something!'
             }
-            return key;
-          }
-        }).then((result) => {
-          if (result.isConfirmed) {
-            const key = result.value;
-            setOpenAIApiKey(key);
-            localStorage.setItem('openai_api_key', key);
-            // Retry the function
-            findPointsOfInterestWithAI(routeCoordinates).then(resolve).catch(reject);
-          } else {
-            // Fall back to traditional search
-            findPointsOfInterestTraditional(routeCoordinates).then(resolve).catch(reject);
           }
         });
-        return;
+
+        if (key) {
+          setGroqApiKey(key);
+          localStorage.setItem('groq_api_key', key);
+          // Retry
+          setTimeout(() => findPointsOfInterestWithAI(routeCoordinates).then(resolve).catch(reject), 100);
+          return;
+        } else {
+          // Fall back to traditional search
+          findPointsOfInterestTraditional(routeCoordinates).then(resolve).catch(reject);
+          return;
+        }
       }
 
       setIsProcessingAiPoi(true);
@@ -739,10 +1113,10 @@ const Planning = () => {
 
       try {
         // Get the locations from trip days
-        const locations = tripDays.map((day) => ({
-          name: day.location.name,
-          lat: day.location.lat,
-          lng: day.location.lng,
+        const locations = tripDays.map((loc) => ({
+          name: loc.location.name,
+          lat: loc.location.lat,
+          lng: loc.location.lng,
         }));
 
         // Collect all selected filters from the expandable sections
@@ -758,20 +1132,45 @@ const Planning = () => {
           }
         });
 
-        // Create an interests string
-        const interests = Object.values(filtersByCategory)
+        // Create an interests string from the interests state
+        const selectedInterests = Object.entries(interests)
+          .filter(([_, isSelected]) => isSelected)
+          .map(([interest]) => interest)
+          .join(', ');
+
+        // Get filter interests
+        const filterInterests = Object.values(filtersByCategory)
           .flat()
           .join(', ');
 
+        // Calculate approximate route distance to determine number of POIs
+        let totalDistance = 0;
+        for (let i = 0; i < locations.length - 1; i++) {
+          totalDistance += calculateDistance(
+            locations[i].lat, locations[i].lng,
+            locations[i + 1].lat, locations[i + 1].lng
+          );
+        }
+
+        // More POIs for longer routes: 15 for short routes, up to 40 for very long routes
+        const numPois = Math.min(40, Math.max(15, Math.floor(totalDistance / 20) + 10));
+        console.log(`Route distance: ${totalDistance.toFixed(0)}km, requesting ${numPois} POIs`);
+
         const prompt = `
-          I'm planning a trip with the following destinations: 
+          I'm planning a ${tripDuration}-day trip in Romania with the following destinations: 
           ${locations
             .map((loc, i) => `${i + 1}. ${loc.name} (${loc.lat}, ${loc.lng})`)
             .join('\n')}
           
+          This is approximately a ${totalDistance.toFixed(0)} km route.
           I'm traveling by ${transportMode}.
+          ${scenicRoute ? 'I strongly prefer taking a scenic route over the fastest one.' : ''}
+          ${avoidOptions.highways ? 'I want to avoid highways.' : ''}
+          ${avoidOptions.tolls ? 'I want to avoid tolls.' : ''}
+          ${avoidOptions.unpaved ? 'I want to avoid unpaved roads.' : ''}
           
-          ${interests ? `I'm interested in: ${interests}` : ''}
+          ${selectedInterests ? `My interests are: ${selectedInterests}` : ''}
+          ${filterInterests ? `Additional interests: ${filterInterests}` : ''}
           ${selectedInterest ? `My main interest is: ${selectedInterest}` : ''}
           ${Object.entries(tripStyle)
             .filter(([_, isSelected]) => isSelected)
@@ -781,330 +1180,160 @@ const Planning = () => {
               .map(([style]) => style)
               .join(', ')}` : ''}
           
-          Please suggest 10-15 interesting points of interest along or near this route that match my interests.
-          IMPORTANT: Only include places that are within ${poiDistance} km of the route I'll be traveling.
+          Please suggest ${numPois} interesting points of interest along this route. Include:
+          - Famous landmarks and UNESCO sites
+          - Scenic mountain passes and roads (like Transfăgărășan, Transalpina if near the route)
+          - Natural wonders (Bâlea Lake, Vidraru Dam, waterfalls, caves, gorges)
+          - Historic fortresses and castles (Peleș, Bran, Corvin, Râșnov if near route)
+          - Monasteries and churches with historical significance
+          - Beautiful viewpoints and photo spots
+          - Local attractions that tourists often miss
+          
+          IMPORTANT: 
+          - Distribute POIs evenly along the ENTIRE route, not just near the start
+          - Only include places within ${poiDistance} km of the actual route
+          - Include famous attractions even if they require a small detour
+          
+          For a ${tripDuration}-day trip, also suggest ${tripDuration - 1} recommended overnight stops where I should look for accommodation.
+          These should be at roughly equal intervals along my route, in towns or cities with good lodging options.
           
           For each point of interest, provide:
           1. Name
-          2. Type (museum, park, historic site, etc.)
+          2. Type (castle, lake, mountain_pass, dam, monastery, viewpoint, museum, historic_site, natural_wonder, etc.)
           3. Precise latitude and longitude
           4. A brief description (1-2 sentences)
           5. Locality (city or town name)
+          6. isOvernightStop: true/false - set to true ONLY for the ${tripDuration - 1} recommended overnight accommodation stops
           
-          Format your response as a JSON array with objects containing these fields:
-          [{"name": "...", "type": "...", "lat": 00.000000, "lng": 00.000000, "description": "...", "locality": "..."}]
+          Format your response as a JSON object with a "pois" array:
+          {"pois": [{"name": "...", "type": "...", "lat": 00.000000, "lng": 00.000000, "description": "...", "locality": "...", "isOvernightStop": false}]}
           
-          Make sure all points are real places that actually exist, with accurate coordinates, and are within ${poiDistance} km of my route. RETURN ONLY JSON.
+          Make sure all points are real places that actually exist, with accurate coordinates. RETURN ONLY JSON.
         `;
 
-        console.log('Sending request to OpenAI with prompt:', prompt);
+        console.log(`Sending request to ${aiProvider}...`);
+
+        const apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+        const model = 'llama-3.3-70b-versatile'; // Use correct Groq model
+
+        // Call AI API
+        const response = await axios.post(
+          apiUrl,
+          {
+            model: model,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a travel expert for Romania that provides points of interest along routes. Always respond with valid JSON only, no markdown formatting.'
+              },
+              {
+                role: 'user',
+                content: prompt
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 8000, // Increased for more POIs
+            top_p: 1,
+            frequency_penalty: 0,
+            presence_penalty: 0,
+            response_format: { type: 'json_object' }
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${currentKey}`,
+              // OpenAI specific header, Groq might ignore or accept it
+              ...(aiProvider === 'openai' ? { 'OpenAI-Beta': 'assistants=v1' } : {})
+            },
+            timeout: 25000 // 25 second timeout for the API call
+          }
+        );
+
+        // Clear the timeout since we got a response
+        clearTimeout(poiTimeout);
+
+        // Parse the response
+        if (!response.data || !response.data.choices || !response.data.choices[0] || !response.data.choices[0].message) {
+          console.error(`Unexpected ${aiProvider} API response format:`, response.data);
+          throw new Error('Unexpected response format from AI API');
+        }
+
+        const responseText = response.data.choices[0].message.content;
+        console.log(`Received AI response with ${responseText.length} characters`);
+
+        // Extract JSON from the response
+        let poisFromAi = [];
 
         try {
-          // Call OpenAI API with a timeout
-          const response = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
-              model: 'gpt-4o',
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a travel expert that provides points of interest along routes. Always respond with valid JSON only.'
-                },
-                {
-                  role: 'user',
-                  content: prompt
-                }
-              ],
-              temperature: 0.7,
-              max_tokens: 4000,
-              top_p: 1,
-              frequency_penalty: 0,
-              presence_penalty: 0,
-              response_format: { type: 'json_object' }
-            },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${openAIApiKey}`,
-                'OpenAI-Beta': 'assistants=v1'
-              },
-              timeout: 25000 // 25 second timeout for the API call
-            }
-          );
-
-          // Clear the timeout since we got a response
-          clearTimeout(poiTimeout);
-
-          // Parse the response
-          if (!response.data || !response.data.choices || !response.data.choices[0] || !response.data.choices[0].message) {
-            console.error('Unexpected OpenAI API response format:', response.data);
-            throw new Error('Unexpected response format from OpenAI API');
-          }
-          
-          const responseText = response.data.choices[0].message.content;
-          console.log('Received response from OpenAI:', responseText);
-
-          // Extract JSON from the response
-          let poisFromAi = [];
-
-          try {
-            // Parse the JSON response
-            const parsedResponse = JSON.parse(responseText);
-            poisFromAi = Array.isArray(parsedResponse) ? parsedResponse : (parsedResponse.pois || []);
-            console.log('Successfully parsed JSON response');
-          } catch (jsonError) {
-            console.error('JSON parsing failed:', jsonError);
-            reject(new Error(`Failed to parse OpenAI response: ${jsonError.message}`));
-            return;
-          }
-
-          // Process and add IDs to POIs
-          const processedPois = poisFromAi.map((poi) => {
-            // Ensure coordinates are numbers
-            const lat = typeof poi.lat === 'number' ? poi.lat : parseFloat(poi.lat);
-            const lng = typeof poi.lng === 'number' ? poi.lng : parseFloat(poi.lng);
-            
-            // Skip POIs with invalid coordinates
-            if (isNaN(lat) || isNaN(lng)) {
-              console.warn('Skipping POI with invalid coordinates:', poi);
-              return null;
-            }
-            
-            return {
-              ...poi,
-              id: `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              isAiGenerated: true,
-              selected: false,
-              popularity: 0.8,
-              locality: poi.locality || 'Unknown',
-              // Ensure lat and lng are properly set as numbers
-              lat: lat,
-              lng: lng,
-              location: {
-                name: poi.name,
-                lat: lat,
-                lng: lng,
-                city: poi.locality,
-                country: '',
-              },
-              type: 'poi',
-            };
-          }).filter(poi => poi !== null); // Filter out null entries (invalid coordinates)
-
-          // Check if we have any valid POIs
-          if (processedPois.length === 0) {
-            console.warn('No valid POIs found in AI response');
-            reject(new Error('No valid POIs found in AI response'));
-            return;
-          }
-
-          // Set the POIs to state
-          setPointsOfInterest(prevPois => {
-            // Combine previous POIs with new ones, avoiding duplicates
-            const combinedPois = [...prevPois];
-            processedPois.forEach(newPoi => {
-              // Check if this POI already exists (by name and coordinates)
-              const exists = combinedPois.some(
-                existingPoi => 
-                  existingPoi.name === newPoi.name && 
-                  Math.abs(existingPoi.lat - newPoi.lat) < 0.0001 && 
-                  Math.abs(existingPoi.lng - newPoi.lng) < 0.0001
-              );
-              if (!exists) {
-                combinedPois.push(newPoi);
-              }
-            });
-            return combinedPois;
-          });
-
-          // Insert POIs between trip days instead of adding them as separate days
-          const actualDays = tripDays.filter((day) => day.type !== 'poi');
-
-          // Sort all accumulated POIs by their proximity to the route
-          // Use the updated pointsOfInterest state which now includes all POIs
-          const sortedPois = [...pointsOfInterest];
-
-          // Create a new array with days and POIs interspersed
-          const newTripDays = [];
-          if (actualDays.length > 0) {
-            newTripDays.push(actualDays[0]);
-          }
-
-          for (let i = 1; i < actualDays.length; i++) {
-            const poisToAdd = sortedPois.splice(0, Math.min(2, sortedPois.length));
-            newTripDays.push(...poisToAdd);
-            newTripDays.push(actualDays[i]);
-          }
-
-          if (sortedPois.length > 0) {
-            newTripDays.push(...sortedPois);
-          }
-
-          setTripDays(newTripDays);
-
-          Swal.fire({
-            title: 'AI Points of Interest',
-            text: `Added ${processedPois.length} points of interest to your trip`,
-            icon: 'success',
-          });
-
-          resolve(processedPois);
-        } catch (openaiError) {
-          console.error('Error connecting to OpenAI:', openaiError);
-          clearTimeout(poiTimeout);
-          
-          // Check if it's a rate limit error
-          const isRateLimit = openaiError.response && openaiError.response.status === 429;
-          
-          if (isRateLimit) {
-            console.log('OpenAI API rate limit reached, falling back to traditional search...');
-            
-            // Show a single notification about falling back
-            Swal.fire({
-              title: 'Using Traditional Search',
-              text: 'OpenAI API rate limit reached. Using traditional search for points of interest instead.',
-              icon: 'info',
-              timer: 3000,
-              timerProgressBar: true,
-              showConfirmButton: false
-            });
-            
-            // Directly use traditional search without trying the fallback prompt
+          // Parse the JSON response
+          const parsedResponse = JSON.parse(responseText);
+          poisFromAi = Array.isArray(parsedResponse) ? parsedResponse : (parsedResponse.pois || []);
+          console.log('Successfully parsed JSON response');
+        } catch (jsonError) {
+          console.error('JSON parsing failed:', jsonError);
+          // Try heuristic fix if JSON is wrapped in ```json ... ```
+          const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+          if (jsonMatch) {
             try {
-              const traditionalPois = await findPointsOfInterestTraditional(routeCoordinates);
-              resolve(traditionalPois);
-              return;
-            } catch (tradError) {
-              console.error('Traditional search also failed:', tradError);
-              reject(new Error('All POI search methods failed'));
-              return;
-            }
-          }
-          
-          // If not a rate limit error, try the fallback prompt
-          try {
-            const fallbackPois = await tryFallbackPrompt(routeCoordinates);
-            if (fallbackPois && fallbackPois.length > 0) {
-              resolve(fallbackPois);
-              return;
-            }
-          } catch (fallbackError) {
-            console.error('Fallback also failed:', fallbackError);
-            
-            // If fallback failed due to rate limit, use traditional search
-            if (fallbackError.message && fallbackError.message.includes('rate limit')) {
-              console.log('Fallback hit rate limit, using traditional search...');
-              
-              try {
-                const traditionalPois = await findPointsOfInterestTraditional(routeCoordinates);
-                resolve(traditionalPois);
-                return;
-              } catch (tradError) {
-                console.error('Traditional search also failed:', tradError);
-                reject(new Error('All POI search methods failed'));
+              poisFromAi = JSON.parse(jsonMatch[1]);
+            } catch (e) {
+              // Try identifying array brackets directly
+              const firstBracket = responseText.indexOf('[');
+              const lastBracket = responseText.lastIndexOf(']');
+              if (firstBracket !== -1 && lastBracket !== -1) {
+                try {
+                  poisFromAi = JSON.parse(responseText.substring(firstBracket, lastBracket + 1));
+                } catch (err) {
+                  reject(new Error(`Failed to parse AI response: ${jsonError.message}`));
+                  return;
+                }
+              } else {
+                reject(new Error(`Failed to parse AI response: ${jsonError.message}`));
                 return;
               }
             }
-          }
-          
-          reject(new Error('Failed to connect to OpenAI API'));
-        }
-      } catch (error) {
-        // Clear the timeout
-        clearTimeout(poiTimeout);
-        
-        console.error('Error finding POIs with OpenAI:', error);
-        reject(error);
-      } finally {
-        setIsProcessingAiPoi(false);
-      }
-    });
-  };
-
-  // Helper function to try a simplified prompt as fallback
-  const tryFallbackPrompt = async (routeCoordinates) => {
-    // Check if we have route coordinates
-    if (!routeCoordinates || routeCoordinates.length === 0) {
-      console.warn('No route coordinates available for fallback POI search');
-      throw new Error('No route coordinates for fallback');
-    }
-
-    // Check if we have an OpenAI API key
-    if (!openAIApiKey) {
-      console.warn('No OpenAI API key available for fallback');
-      throw new Error('No OpenAI API key for fallback');
-    }
-
-    console.log('Trying simplified prompt as fallback...');
-
-    const simplifiedPrompt = `
-      I need points of interest between ${tripDays[0].location.name} and ${tripDays[tripDays.length - 1].location.name}.
-      Only include places that are within ${poiDistance} km of the route I'll be traveling.
-      Please provide 10 interesting tourist attractions as a JSON array with these fields:
-      [{"name": "...", "type": "...", "lat": 00.000000, "lng": 00.000000, "description": "...", "locality": "..."}]
-      RETURN ONLY JSON.
-    `;
-
-    try {
-      const fallbackResponse = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a travel expert that provides points of interest along routes. Always respond with valid JSON only.'
-            },
-            {
-              role: 'user',
-              content: simplifiedPrompt
+          } else {
+            // Try loose JSON extraction (finding outer brackets)
+            const firstBracket = responseText.indexOf('[');
+            const lastBracket = responseText.lastIndexOf(']');
+            if (firstBracket !== -1 && lastBracket !== -1) {
+              try {
+                poisFromAi = JSON.parse(responseText.substring(firstBracket, lastBracket + 1));
+              } catch (e) {
+                reject(new Error(`Failed to parse AI response: ${jsonError.message}`));
+                return;
+              }
+            } else {
+              reject(new Error(`Failed to parse AI response: ${jsonError.message}`));
+              return;
             }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000,
-          top_p: 1,
-          frequency_penalty: 0,
-          presence_penalty: 0,
-          response_format: { type: 'json_object' }
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${openAIApiKey}`,
-            'OpenAI-Beta': 'assistants=v1'
-          },
-          timeout: 20000 // 20 second timeout for fallback
+          }
         }
-      );
 
-      const fallbackText = fallbackResponse.data.choices[0].message.content;
-      let fallbackPois = [];
+        // Filter undefined or Unnamed
+        if (Array.isArray(poisFromAi)) {
+          poisFromAi = poisFromAi.filter(p => p.name && p.name !== 'Unnamed' && !p.name.includes('(Unnamed)') && p.type);
+        }
 
-      try {
-        const parsedResponse = JSON.parse(fallbackText);
-        fallbackPois = Array.isArray(parsedResponse) ? parsedResponse : (parsedResponse.pois || []);
-      } catch (parseError) {
-        throw new Error('Could not parse fallback response');
-      }
-
-      if (Array.isArray(fallbackPois) && fallbackPois.length > 0) {
-        const processedPois = fallbackPois.map((poi) => {
+        // Process and add IDs to POIs
+        let processedPois = poisFromAi.map((poi) => {
           // Ensure coordinates are numbers
           const lat = typeof poi.lat === 'number' ? poi.lat : parseFloat(poi.lat);
           const lng = typeof poi.lng === 'number' ? poi.lng : parseFloat(poi.lng);
-          
+
           // Skip POIs with invalid coordinates
           if (isNaN(lat) || isNaN(lng)) {
-            console.warn('Skipping fallback POI with invalid coordinates:', poi);
+            console.warn('Skipping POI with invalid coordinates:', poi);
             return null;
           }
-          
+
           return {
             ...poi,
-            id: `ai-fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             isAiGenerated: true,
+            isOvernightStop: poi.isOvernightStop || false, // Mark overnight stops
             selected: false,
-            popularity: 0.7,
+            popularity: 0.8,
             locality: poi.locality || 'Unknown',
             // Ensure lat and lng are properly set as numbers
             lat: lat,
@@ -1113,27 +1342,106 @@ const Planning = () => {
               name: poi.name,
               lat: lat,
               lng: lng,
-              city: poi.locality || 'Unknown',
+              city: poi.locality,
               country: '',
             },
-            type: 'poi',
+            type: poi.isOvernightStop ? 'accommodation' : 'poi',
           };
         }).filter(poi => poi !== null); // Filter out null entries (invalid coordinates)
 
-        // Check if we have any valid POIs
-        if (processedPois.length === 0) {
-          throw new Error('No valid POIs found in fallback AI response');
+        // Filter POIs by distance to route
+        const beforeCount = processedPois.length;
+        processedPois = processedPois.filter(poi => {
+          let minDistToRoute = Infinity;
+
+          // Check distance to route - sample more points for better accuracy
+          if (routeCoordinates && routeCoordinates.length > 0) {
+            // Check every 50 points (more samples for accuracy)
+            const step = Math.max(1, Math.floor(routeCoordinates.length / 100));
+            for (let i = 0; i < routeCoordinates.length; i += step) {
+              const routePoint = routeCoordinates[i];
+              const dist = calculateDistance(poi.lat, poi.lng, routePoint[0], routePoint[1]);
+              minDistToRoute = Math.min(minDistToRoute, dist);
+              if (dist <= poiDistance) {
+                return true;
+              }
+            }
+            // Also check the very last point
+            const lastPoint = routeCoordinates[routeCoordinates.length - 1];
+            const distToLast = calculateDistance(poi.lat, poi.lng, lastPoint[0], lastPoint[1]);
+            minDistToRoute = Math.min(minDistToRoute, distToLast);
+            if (distToLast <= poiDistance) {
+              return true;
+            }
+          }
+
+          // Check distance to trip destinations (more reliable)
+          for (const day of tripDays) {
+            if (day.location && day.location.lat && day.location.lng) {
+              const dist = calculateDistance(
+                poi.lat, poi.lng,
+                parseFloat(day.location.lat),
+                parseFloat(day.location.lng)
+              );
+              minDistToRoute = Math.min(minDistToRoute, dist);
+              if (dist <= poiDistance) {
+                return true;
+              }
+            }
+          }
+
+          console.log(`Filtering out POI "${poi.name}" - min distance ${minDistToRoute.toFixed(1)}km > ${poiDistance}km limit`);
+          return false;
+        });
+
+        console.log(`Kept ${processedPois.length} POIs within ${poiDistance}km, filtered out ${beforeCount - processedPois.length}`);
+
+        // Reverse Geocode Missing Locations (Sequential to be safe)
+        const OPENCAGE_KEY = import.meta.env.VITE_OPENCAGE_API_KEY;
+        if (OPENCAGE_KEY && processedPois.length > 0) {
+          console.log('Verifying locations with OpenCage...');
+          for (let i = 0; i < processedPois.length; i++) {
+            const poi = processedPois[i];
+            if (!poi.locality || poi.locality === 'Unknown' || poi.locality === 'Unknown location' || poi.locality === 'Location not available') {
+              try {
+                // Rate limit basic handling: wait small delay
+                await new Promise(r => setTimeout(r, 200));
+                const geoUrl = `https://api.opencagedata.com/geocode/v1/json?q=${poi.lat}+${poi.lng}&key=${OPENCAGE_KEY}`;
+                const geoRes = await axios.get(geoUrl);
+                if (geoRes.data.results && geoRes.data.results.length > 0) {
+                  const components = geoRes.data.results[0].components;
+                  // Prioritize city/town, fallback to county/state
+                  const newLocality = components.city || components.town || components.village || components.municipality || components.county || components.state || 'Unknown';
+
+                  processedPois[i].locality = newLocality;
+                  processedPois[i].location.city = newLocality;
+                  if (components.country) processedPois[i].location.country = components.country;
+                  // console.log(`Geocoded ${poi.name} to ${newLocality}`);
+                }
+              } catch (err) {
+                console.warn('Geocoding fail:', err.message);
+              }
+            }
+          }
         }
 
+        // Check if we have any valid POIs
+        if (processedPois.length === 0) {
+          console.warn('No valid POIs found in AI response');
+          reject(new Error('No valid POIs found in AI response'));
+          return;
+        }
+
+        // Set the POIs to state
         setPointsOfInterest(prevPois => {
           // Combine previous POIs with new ones, avoiding duplicates
           const combinedPois = [...prevPois];
           processedPois.forEach(newPoi => {
             // Check if this POI already exists (by name and coordinates)
             const exists = combinedPois.some(
-              existingPoi => 
-                existingPoi.name === newPoi.name && 
-                Math.abs(existingPoi.lat - newPoi.lat) < 0.0001 && 
+              existingPoi =>
+                existingPoi.name === newPoi.name &&
+                Math.abs(existingPoi.lat - newPoi.lat) < 0.0001 &&
                 Math.abs(existingPoi.lng - newPoi.lng) < 0.0001
             );
             if (!exists) {
@@ -1145,7 +1453,12 @@ const Planning = () => {
 
         // Insert POIs between trip days instead of adding them as separate days
         const actualDays = tripDays.filter((day) => day.type !== 'poi');
-        const sortedPois = [...processedPois];
+
+        // Sort all accumulated POIs by their proximity to the route
+        // Use the updated pointsOfInterest state which now includes all POIs
+        const sortedPois = [...pointsOfInterest];
+
+        // Create a new array with days and POIs interspersed
         const newTripDays = [];
         if (actualDays.length > 0) {
           newTripDays.push(actualDays[0]);
@@ -1164,27 +1477,42 @@ const Planning = () => {
         setTripDays(newTripDays);
 
         Swal.fire({
-          title: 'AI Points of Interest (Fallback)',
-          text: `Added ${processedPois.length} points of interest to your trip`,
-          icon: 'info',
+          title: 'AI Points of Interest',
+          text: `Added ${processedPois.length} points of interest to your trip using ${aiProvider === 'groq' ? 'Groq' : 'OpenAI'}`,
+          icon: 'success',
         });
 
-        return processedPois;
+        resolve(processedPois);
+      } catch (aiError) {
+        console.error(`Error connecting to ${aiProvider}:`, aiError);
+        clearTimeout(poiTimeout);
+
+        // Handle specific errors
+        if (aiError.response && aiError.response.status === 429) {
+          Swal.fire({
+            title: 'Rate Limit Exceeded',
+            text: `The ${aiProvider} API rate limit was reached. Using fallback POIs instead.`,
+            icon: 'warning'
+          });
+
+          try {
+            // Use hardcoded fallback - don't call Overpass which may also be rate limited
+            const fallbackPois = await findPointsOfInterestFallback(routeCoordinates);
+            resolve(fallbackPois);
+            return;
+          } catch (e) {
+            console.warn('Fallback also failed:', e);
+          }
+        }
+
+        reject(new Error(`Failed to connect to ${aiProvider} API`));
+      } finally {
+        setIsProcessingAiPoi(false);
       }
-    } catch (error) {
-      console.error('Fallback prompt error:', error);
-      
-      // Check if it's a rate limit error
-      if (error.response && error.response.status === 429) {
-        console.log('OpenAI API rate limit exceeded in fallback prompt');
-        throw new Error('OpenAI API rate limit exceeded');
-      }
-      
-      throw new Error(`Fallback failed: ${error.message}`);
-    }
-    
-    throw new Error('Fallback did not return valid POIs');
+    });
   };
+
+
 
   // Find all points of interest based on selected filters using traditional method
   const findPointsOfInterestTraditional = async (routeCoordinates) => {
@@ -1219,9 +1547,9 @@ const Planning = () => {
           const localityQuery = `
             [out:json][bbox:${minLat},${minLng},${maxLat},${maxLng}];
             (
-              node[place~"city|town|village|suburb|hamlet"](around:10000,${point[0]},${point[1]});
-              way[place~"city|town|village|suburb|hamlet"](around:10000,${point[0]},${point[1]});
-              relation[place~"city|town|village|suburb|hamlet"](around:10000,${point[0]},${point[1]});
+              node[place~"city|town|village|suburb|hamlet"](around:${poiDistance * 1000},${point[0]},${point[1]});
+              way[place~"city|town|village|suburb|hamlet"](around:${poiDistance * 1000},${point[0]},${point[1]});
+              relation[place~"city|town|village|suburb|hamlet"](around:${poiDistance * 1000},${point[0]},${point[1]});
             );
             out body center;
           `;
@@ -1255,7 +1583,10 @@ const Planning = () => {
           .filter((locality, index, self) =>
             // Remove duplicates based on name
             index === self.findIndex((l) => l.tags.name === locality.tags.name)
-          );
+          )
+          .slice(0, 3); // Limit to 3 localities to avoid too many API calls
+
+        console.log(`Found ${localities.length} localities to search for POIs`);
 
         // If no localities found, reject with an error
         if (localities.length === 0) {
@@ -1284,14 +1615,15 @@ const Planning = () => {
           );
         }
 
-        // Find POIs near each locality
-        const poiPromises = localities.map(async (locality) => {
+        // Find POIs near each locality - SEQUENTIAL to avoid rate limiting
+        const allPois = [];
+        for (const locality of localities) {
           const poiQuery = `
             [out:json];
             (
               ${categoryQueries.map((q) =>
-                q.replace(';', `(around:5000,${locality.lat},${locality.lon});`)
-              ).join('\n              ')}
+            q.replace(';', `(around:${poiDistance * 1000},${locality.lat},${locality.lon});`)
+          ).join('\n              ')}
             );
             out body;
             >;
@@ -1299,8 +1631,9 @@ const Planning = () => {
           `;
 
           try {
+            console.log(`Searching for POIs near ${locality.tags.name}...`);
             const data = await makeOverpassRequest(poiQuery);
-            return data.elements
+            const pois = data.elements
               .filter((element) => element.tags?.name)
               .map((element) => ({
                 id: `osm-${element.id}`,
@@ -1328,29 +1661,39 @@ const Planning = () => {
                   country: '',
                 },
               }));
+
+            allPois.push(...pois);
+            console.log(`Found ${pois.length} POIs near ${locality.tags.name}`);
+
+            // If we have enough POIs, stop early
+            if (allPois.length >= 20) {
+              console.log('Found enough POIs, stopping search');
+              break;
+            }
           } catch (error) {
             console.warn(`Failed to fetch POIs near ${locality.tags.name}:`, error.message);
-            return [];
+            // If rate limited, stop trying other localities
+            if (error.message === 'OVERPASS_RATE_LIMITED') {
+              console.warn('Rate limited - stopping POI search');
+              break;
+            }
           }
-        });
+        }
 
-        // Get all POIs and group by locality
-        const allPois = (await Promise.all(poiPromises))
-          .flat()
-          .filter((poi, index, self) =>
-            // Remove duplicates based on ID
-            index === self.findIndex((p) => p.id === poi.id)
-          );
+        // Remove duplicates based on ID
+        const uniquePois = allPois.filter((poi, index, self) =>
+          index === self.findIndex((p) => p.id === poi.id)
+        );
 
         // If no POIs found, reject with an error
-        if (allPois.length === 0) {
+        if (uniquePois.length === 0) {
           clearTimeout(traditionalSearchTimeout);
           reject(new Error('No points of interest found along the route'));
           return;
         }
 
         // Group POIs by locality and get top 10 for each
-        const poisByLocality = allPois.reduce((acc, poi) => {
+        const poisByLocality = uniquePois.reduce((acc, poi) => {
           if (!acc[poi.locality]) {
             acc[poi.locality] = [];
           }
@@ -1367,12 +1710,12 @@ const Planning = () => {
         setPointsOfInterest(prevPois => {
           // Combine previous POIs with new ones, avoiding duplicates
           const combinedPois = [...prevPois];
-          allPois.forEach(newPoi => {
+          uniquePois.forEach(newPoi => {
             // Check if this POI already exists (by name and coordinates)
             const exists = combinedPois.some(
-              existingPoi => 
-                existingPoi.name === newPoi.name && 
-                Math.abs(existingPoi.lat - newPoi.lat) < 0.0001 && 
+              existingPoi =>
+                existingPoi.name === newPoi.name &&
+                Math.abs(existingPoi.lat - newPoi.lat) < 0.0001 &&
                 Math.abs(existingPoi.lng - newPoi.lng) < 0.0001
             );
             if (!exists) {
@@ -1386,25 +1729,25 @@ const Planning = () => {
         // Show success message
         Swal.fire({
           title: 'Points of Interest Found',
-          text: `Found ${allPois.length} points of interest along your route`,
+          text: `Found ${uniquePois.length} points of interest along your route`,
           icon: 'success',
         });
 
         // Clear the timeout and resolve with the POIs
         clearTimeout(traditionalSearchTimeout);
-        resolve(allPois);
+        resolve(uniquePois);
       } catch (error) {
         console.error('Error finding route POIs:', error);
-        
+
         // Clear the timeout and reject with the error
         clearTimeout(traditionalSearchTimeout);
-        
+
         Swal.fire({
           title: 'Error',
           text: 'Failed to find points of interest along the route',
           icon: 'error',
         });
-        
+
         reject(error);
       }
     });
@@ -1535,12 +1878,98 @@ const Planning = () => {
     }
   };
 
-  // Store the default API key in localStorage if not already there
-  useEffect(() => {
-    if (!localStorage.getItem('openai_api_key') && openAIApiKey) {
-      localStorage.setItem('openai_api_key', openAIApiKey);
+
+
+  // Optimize Trip Order (TSP)
+  const optimizeTripOrder = () => {
+    if (tripDays.length < 3) {
+      Swal.fire('Info', 'Add more destinations to optimize the order.', 'info');
+      return;
     }
-  }, [openAIApiKey]);
+
+    const start = tripDays[0];
+    const end = tripDays[tripDays.length - 1];
+
+    // If only 3 points (Start, Middle, End), nothing to optimize unless End is flexible.
+    // Assuming Start and End are fixed anchors.
+    if (tripDays.length === 3) {
+      Swal.fire('Optimized', 'Route is already minimal.', 'info');
+      return;
+    }
+
+    const middle = tripDays.slice(1, -1);
+    let bestOrder = middle;
+    let minDistance = Infinity;
+
+    // Helper to calc total path distance
+    const getPathDist = (path) => {
+      let d = 0;
+      for (let i = 0; i < path.length - 1; i++) {
+        // Ensure numbers
+        const lat1 = typeof path[i].location.lat === 'number' ? path[i].location.lat : parseFloat(path[i].location.lat);
+        const lng1 = typeof path[i].location.lng === 'number' ? path[i].location.lng : parseFloat(path[i].location.lng);
+        const lat2 = typeof path[i + 1].location.lat === 'number' ? path[i + 1].location.lat : parseFloat(path[i + 1].location.lat);
+        const lng2 = typeof path[i + 1].location.lng === 'number' ? path[i + 1].location.lng : parseFloat(path[i + 1].location.lng);
+        d += calculateDistance(lat1, lng1, lat2, lng2);
+      }
+      return d;
+    };
+
+    // For small number of stops (<= 5 middle points), use Brute Force Permutations
+    if (middle.length <= 5) {
+      const perms = (arr) => {
+        if (arr.length <= 1) return [arr];
+        const output = [];
+        for (let i = 0; i < arr.length; i++) {
+          const current = arr[i];
+          const remaining = [...arr.slice(0, i), ...arr.slice(i + 1)];
+          const subPerms = perms(remaining);
+          subPerms.forEach(p => output.push([current, ...p]));
+        }
+        return output;
+      };
+
+      const allPermutations = perms(middle);
+
+      allPermutations.forEach(perm => {
+        const path = [start, ...perm, end];
+        const d = getPathDist(path);
+        if (d < minDistance) {
+          minDistance = d;
+          bestOrder = perm;
+        }
+      });
+    } else {
+      // Nearest Neighbor Greedy for larger sets
+      let current = start;
+      const remaining = [...middle];
+      const result = [];
+
+      while (remaining.length > 0) {
+        let nearestIdx = -1;
+        let minD = Infinity;
+        for (let i = 0; i < remaining.length; i++) {
+          const d = calculateDistance(
+            current.location.lat, current.location.lng,
+            remaining[i].location.lat, remaining[i].location.lng
+          );
+          if (d < minD) { minD = d; nearestIdx = i; }
+        }
+        const next = remaining.splice(nearestIdx, 1)[0];
+        result.push(next);
+        current = next;
+      }
+      bestOrder = result;
+    }
+
+    setTripDays([start, ...bestOrder, end]);
+    Swal.fire({
+      title: 'Route Optimized',
+      text: 'Stops have been reordered for the shortest driving distance.',
+      icon: 'success',
+      timer: 1500
+    });
+  };
 
   // Generate a trip plan with route and points of interest
   const generatePlan = async () => {
@@ -1556,7 +1985,7 @@ const Planning = () => {
 
     // Show loading state
     setIsGeneratingPlan(true);
-    
+
     // Set a timeout for the entire plan generation process
     const planGenerationTimeout = setTimeout(() => {
       console.warn('Plan generation timeout');
@@ -1573,7 +2002,7 @@ const Planning = () => {
       for (const day of tripDays) {
         const lat = typeof day.location.lat === 'number' ? day.location.lat : parseFloat(day.location.lat);
         const lng = typeof day.location.lng === 'number' ? day.location.lng : parseFloat(day.location.lng);
-        
+
         if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
           throw new Error(`Invalid coordinates for destination: ${day.location.name}`);
         }
@@ -1597,57 +2026,59 @@ const Planning = () => {
 
       if (response.data.routes && response.data.routes.length > 0) {
         const route = response.data.routes[0];
-        
+
         // Convert coordinates from [lng, lat] to [lat, lng] for Leaflet
         const coordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
-        
+
         // Store route coordinates for later use
         setRouteCoordinates(coordinates);
-        
+
         // Calculate route details
         const distance = route.distance / 1000; // Convert to km
         const duration = route.duration / 60; // Convert to minutes
-        
+
         setRouteDetails({
           distance,
           duration,
           steps: route.legs || [],
         });
-        
+
         // Find points of interest along the route
         try {
           let currentRouteCoordinates = coordinates;
-          
+
           // Clear existing POIs only at the beginning of a new plan generation
           setPointsOfInterest([]);
-          
+
           if (isUsingAiForPoi) {
             // Use AI to find points of interest
             try {
-              await findPointsOfInterestWithAI(currentRouteCoordinates);
-              
-              // If AI search was successful but returned few POIs, also try traditional search
-              // to supplement the results
-              const currentPois = pointsOfInterest;
-              if (currentPois.length < 5) {
-                console.log('AI search returned few POIs, supplementing with traditional search...');
-                await findPointsOfInterestTraditional(currentRouteCoordinates);
-              }
+              const aiPois = await findPointsOfInterestWithAI(currentRouteCoordinates);
+              // AI search succeeded - don't call traditional search
+              console.log('AI POI search completed successfully');
             } catch (aiError) {
               console.error('AI POI search failed:', aiError);
-              
-              // If AI search fails, automatically try traditional search without showing an error
-              if (aiError.message && (aiError.message.includes('rate limit') || aiError.message.includes('All POI search methods failed'))) {
-                console.log('AI search failed, trying traditional search as final fallback...');
-                await findPointsOfInterestTraditional(currentRouteCoordinates);
-              } else {
-                // For other errors, rethrow to show the error message
-                throw aiError;
-              }
+              // Only try fallback if AI completely fails
+              console.log('AI search failed, trying fallback POIs...');
+              await findPointsOfInterestFallback(currentRouteCoordinates);
             }
           } else {
-            // Use traditional search with multiple Overpass endpoints
-            await findPointsOfInterestWithOverpass(currentRouteCoordinates);
+            // Use traditional search with Overpass API
+            try {
+              await findPointsOfInterestWithOverpass(currentRouteCoordinates);
+            } catch (overpassError) {
+              console.error('Overpass API failed:', overpassError);
+              // Only use fallback if Overpass completely fails
+              console.log('Overpass failed, using hardcoded fallback POIs...');
+              await findPointsOfInterestFallback(currentRouteCoordinates);
+            }
+          }
+
+          // Also fetch properties from our booking app
+          try {
+            await fetchBookingAppProperties(currentRouteCoordinates);
+          } catch (propError) {
+            console.log('Could not fetch booking app properties:', propError);
           }
         } catch (poiError) {
           console.error('Error finding POIs:', poiError);
@@ -1664,40 +2095,74 @@ const Planning = () => {
           setIsProcessingAiPoi(false);
         }
       } else {
-        console.error('No routes found in the response');
-        Swal.fire({
-          title: 'Route Calculation Failed',
-          text: 'Could not calculate a route between the destinations. Please try different locations or transport mode.',
-          icon: 'error',
+        console.warn('No driving route found, falling back to direct path');
+        // Fallback: Create straight lines between points
+        const directPath = tripDays
+          .filter(day => day.type !== 'poi')
+          .map(day => {
+            const lat = typeof day.location.lat === 'number' ? day.location.lat : parseFloat(day.location.lat);
+            const lng = typeof day.location.lng === 'number' ? day.location.lng : parseFloat(day.location.lng);
+            return [lat, lng];
+          });
+
+        setRouteCoordinates(directPath);
+        setRouteDetails({
+          distance: 0, // Unknown
+          duration: 0,
+          steps: []
         });
-        clearTimeout(planGenerationTimeout);
-        setIsGeneratingPlan(false);
+
+        Swal.fire({
+          title: 'Route Not Drivable',
+          text: 'Some parts of your trip are not accessible by car (e.g., requires ferry). Showing direct path instead.',
+          icon: 'info',
+          timer: 4000
+        });
+
+        // Still try to find POIs using the direct path
+        try {
+          // Use traditional search for direct path
+          await findPointsOfInterestTraditional(directPath);
+        } catch (err) {
+          console.error("Fallback POI search failed", err);
+        }
       }
     } catch (error) {
       console.error('Error in generatePlan:', error);
       Swal.fire({
-        title: 'Error',
-        text: 'An unexpected error occurred while generating the plan.',
+        title: 'Planning Error',
+        text: 'An error occurred while generating the plan.',
         icon: 'error',
       });
+      // Fallback on crash too
+      const directPath = tripDays
+        .filter(day => day.type !== 'poi')
+        .map(day => [
+          typeof day.location.lat === 'number' ? day.location.lat : parseFloat(day.location.lat),
+          typeof day.location.lng === 'number' ? day.location.lng : parseFloat(day.location.lng)
+        ]);
+      setRouteCoordinates(directPath);
+    } finally {
       clearTimeout(planGenerationTimeout);
       setIsGeneratingPlan(false);
+      setIsProcessingAiPoi(false);
     }
+
 
     // After all POI searches are complete, update trip days with all accumulated POIs
     if (pointsOfInterest.length > 0) {
       // Get actual days (non-POI days)
       const actualDays = tripDays.filter((day) => day.type !== 'poi');
-      
+
       // Create a new array with days and POIs interspersed
       const newTripDays = [];
       if (actualDays.length > 0) {
         newTripDays.push(actualDays[0]);
       }
-      
+
       // Make a copy of all POIs to distribute
       const poisToDistribute = [...pointsOfInterest];
-      
+
       // Sort POIs by their proximity to the route or other criteria
       // This is a simplified sort - you may want to use a more sophisticated algorithm
       poisToDistribute.sort((a, b) => {
@@ -1708,7 +2173,7 @@ const Planning = () => {
         // Otherwise sort by popularity if available
         return (b.popularity || 0.5) - (a.popularity || 0.5);
       });
-      
+
       // Distribute POIs between destinations
       for (let i = 1; i < actualDays.length; i++) {
         // Calculate how many POIs to add between each pair of destinations
@@ -1717,20 +2182,20 @@ const Planning = () => {
           3, // Maximum 3 POIs per segment
           Math.ceil(poisToDistribute.length / Math.max(1, actualDays.length - 1))
         );
-        
+
         const poisToAdd = poisToDistribute.splice(0, poisPerSegment);
         newTripDays.push(...poisToAdd);
         newTripDays.push(actualDays[i]);
       }
-      
+
       // Add any remaining POIs at the end
       if (poisToDistribute.length > 0) {
         newTripDays.push(...poisToDistribute);
       }
-      
+
       // Update trip days
       setTripDays(newTripDays);
-      
+
       // Show success message
       Swal.fire({
         title: 'Points of Interest',
@@ -1744,73 +2209,94 @@ const Planning = () => {
   const findPointsOfInterestWithOverpass = async (routeCoordinates) => {
     try {
       console.log("Finding POIs with Overpass API");
-      
+
       // Get a simplified bounding box for the query
       const bounds = getSimplifiedBounds(routeCoordinates, poiDistance);
       console.log("Using bounds with POI distance:", poiDistance, "km");
-      
+
       // Create a query that respects the POI distance parameter
       // We'll use around to find POIs near the route points
       let query = '[out:json];(';
-      
+
       // Sample points along the route to search around
       // For longer routes, we don't want to query every point
       const sampleSize = Math.min(routeCoordinates.length, 10);
       const step = Math.max(1, Math.floor(routeCoordinates.length / sampleSize));
-      
+
       for (let i = 0; i < routeCoordinates.length; i += step) {
         const point = routeCoordinates[i];
         // Add queries for different POI types around this point
         // Convert poiDistance from km to meters
         const radius = poiDistance * 1000;
         query += `
-          node["tourism"="attraction"](around:${radius},${point[0]},${point[1]});
-          node["tourism"="museum"](around:${radius},${point[0]},${point[1]});
-          node["historic"="castle"](around:${radius},${point[0]},${point[1]});
-          node["historic"="monument"](around:${radius},${point[0]},${point[1]});
+          node["tourism"="attraction"]["wikidata"](around:${radius},${point[0]},${point[1]});
+          node["tourism"="museum"]["wikidata"](around:${radius},${point[0]},${point[1]});
+          node["historic"="castle"]["wikidata"](around:${radius},${point[0]},${point[1]});
+          node["historic"="monument"]["wikidata"](around:${radius},${point[0]},${point[1]});
         `;
       }
-      
+
       // Close the query
       query += ');out body;';
-      
+
       // URL encode the query
       const encodedQuery = encodeURIComponent(query);
-      
+
       // Use a GET request with the query as a parameter
       const url = `https://overpass-api.de/api/interpreter?data=${encodedQuery}`;
       console.log("Request URL:", url.substring(0, 100) + "...");
-      
+
       // Send the request
       const response = await axios.get(url, { timeout: 30000 });
-      
+
       // Process the POI data
       const elements = response.data.elements || [];
       console.log(`Found ${elements.length} POIs from Overpass API`);
-      
+
       // Only take a reasonable number of POIs to avoid overwhelming the browser
-      const limitedElements = elements.slice(0, 50);
-      
+      // Since we are filtering by Wikidata (famous places), we can allow more results as they are higher quality
+      const limitedElements = elements.slice(0, 100);
+
       // Transform the POIs to our format
       const newPois = limitedElements
         .map(element => transformOverpassElementToPoi(element))
-        .filter(poi => poi !== null);
-      
+        .filter(poi => poi !== null)
+        .map(poi => {
+          // Fix "Unknown location" by referencing nearest trip destination
+          if (!poi.locality || poi.locality === 'Unknown location' || poi.locality === 'Unknown') {
+            let closest = null;
+            let minDist = Infinity;
+            tripDays.forEach(day => {
+              // Ensure coords are valid numbers
+              const dLat = typeof day.location.lat === 'number' ? day.location.lat : parseFloat(day.location.lat);
+              const dLng = typeof day.location.lng === 'number' ? day.location.lng : parseFloat(day.location.lng);
+              if (!isNaN(dLat) && !isNaN(dLng)) {
+                const d = calculateDistance(poi.lat, poi.lng, dLat, dLng);
+                if (d < minDist) { minDist = d; closest = day.location.name; }
+              }
+            });
+
+            // If within 50km of a known stop, use that context
+            if (minDist < 50 && closest) {
+              return { ...poi, locality: `Near ${closest}` };
+            }
+          }
+          return poi;
+        });
+
       console.log(`Successfully processed ${newPois.length} POIs`);
-      
+
       // Add the new POIs to the existing ones
       if (newPois.length > 0) {
         setPointsOfInterest(prevPois => [...prevPois, ...newPois]);
-        return newPois;
       } else {
-        // Try a fallback query if no POIs were found
-        return await findPointsOfInterestFallback(routeCoordinates);
+        console.log('No POIs found from Overpass API');
       }
+      return newPois;
     } catch (error) {
       console.error('Error with Overpass API:', error);
-      
-      // Try a fallback method
-      return await findPointsOfInterestFallback(routeCoordinates);
+      // Re-throw the error - let the caller handle fallback
+      throw error;
     }
   };
 
@@ -1818,7 +2304,7 @@ const Planning = () => {
   const findPointsOfInterestFallback = async (routeCoordinates) => {
     try {
       console.log("Using fallback method to find POIs");
-      
+
       // Create some hardcoded POIs for Romania
       const hardcodedPois = [
         {
@@ -1870,14 +2356,73 @@ const Planning = () => {
           locality: 'Sibiu',
           description: 'Well-preserved medieval town center',
           selected: false
+        },
+        {
+          id: 'fallback-6',
+          name: 'Sighișoara Citadel',
+          type: 'historic',
+          lat: 46.2197,
+          lng: 24.7920,
+          locality: 'Sighișoara',
+          description: 'Medieval citadel, birthplace of Vlad Dracula',
+          selected: false
+        },
+        {
+          id: 'fallback-7',
+          name: 'Constanța Casino',
+          type: 'historic',
+          lat: 44.1765,
+          lng: 28.6530,
+          locality: 'Constanța',
+          description: 'Art Nouveau casino on the Black Sea coast',
+          selected: false
         }
       ];
-      
-      // Add the hardcoded POIs to the existing ones
-      setPointsOfInterest(prevPois => [...prevPois, ...hardcodedPois]);
-      
-      console.log(`Added ${hardcodedPois.length} fallback POIs`);
-      return hardcodedPois;
+
+      // Filter POIs that are within poiDistance of the route
+      const filteredPois = hardcodedPois.filter(poi => {
+        // Check if POI is within distance of any point on the route
+        if (routeCoordinates && routeCoordinates.length > 0) {
+          // Sample more points for accuracy
+          const step = Math.max(1, Math.floor(routeCoordinates.length / 100));
+          for (let i = 0; i < routeCoordinates.length; i += step) {
+            const routePoint = routeCoordinates[i];
+            const dist = calculateDistance(poi.lat, poi.lng, routePoint[0], routePoint[1]);
+            if (dist <= poiDistance) {
+              console.log(`Fallback POI "${poi.name}" is ${dist.toFixed(1)}km from route - INCLUDING`);
+              return true;
+            }
+          }
+        }
+
+        // Also check against trip day locations
+        for (const day of tripDays) {
+          if (day.location && day.location.lat && day.location.lng) {
+            const dist = calculateDistance(
+              poi.lat, poi.lng,
+              parseFloat(day.location.lat),
+              parseFloat(day.location.lng)
+            );
+            if (dist <= poiDistance) {
+              console.log(`Fallback POI "${poi.name}" is ${dist.toFixed(1)}km from ${day.location.name} - INCLUDING`);
+              return true;
+            }
+          }
+        }
+
+        return false;
+      });
+
+      console.log(`Filtered ${filteredPois.length} POIs within ${poiDistance}km of route (from ${hardcodedPois.length} total)`);
+
+      // Only add POIs that passed the filter
+      if (filteredPois.length > 0) {
+        setPointsOfInterest(prevPois => [...prevPois, ...filteredPois]);
+      } else {
+        console.log('No fallback POIs within distance of route');
+      }
+
+      return filteredPois;
     } catch (error) {
       console.error('Error with fallback POI method:', error);
       throw new Error('All POI search methods failed');
@@ -1891,29 +2436,29 @@ const Planning = () => {
       // Calculate bounds from route
       const lats = coords.map(coord => coord[0]);
       const lngs = coords.map(coord => coord[1]);
-      
+
       // Add the POI distance to the bounds (convert km to approximate degrees)
       // 1 degree is roughly 111 km, so we divide by 111 to get degrees
       const bufferDegrees = distance / 111;
-      
+
       const minLat = Math.min(...lats) - bufferDegrees;
       const maxLat = Math.max(...lats) + bufferDegrees;
       const minLng = Math.min(...lngs) - bufferDegrees;
       const maxLng = Math.max(...lngs) + bufferDegrees;
-      
+
       return `${minLat},${minLng},${maxLat},${maxLng}`;
     } else if (tripDays.length > 0) {
       // Use the first destination with a radius based on poiDistance
       const center = tripDays[0].location;
       const lat = parseFloat(center.lat);
       const lng = parseFloat(center.lng);
-      
+
       // Convert distance to approximate degrees
       const bufferDegrees = distance / 111;
-      
-      return `${lat-bufferDegrees},${lng-bufferDegrees},${lat+bufferDegrees},${lng+bufferDegrees}`;
+
+      return `${lat - bufferDegrees},${lng - bufferDegrees},${lat + bufferDegrees},${lng + bufferDegrees}`;
     }
-    
+
     // Default to a small area in Romania
     return '45.0,25.0,45.5,25.5';
   };
@@ -1922,20 +2467,20 @@ const Planning = () => {
   const transformOverpassElementToPoi = (element) => {
     try {
       const tags = element.tags || {};
-      
+
       // Determine the POI type
       let type = 'Unknown';
       if (tags.tourism) type = tags.tourism;
       else if (tags.historic) type = tags.historic;
       else if (tags.natural) type = tags.natural;
       else if (tags.leisure) type = tags.leisure;
-      
+
       // Get the name
       const name = tags.name || tags['name:en'] || `${type} (Unnamed)`;
-      
+
       // Get the location - handle different coordinate formats
       let lat, lng;
-      
+
       if (typeof element.lat === 'number' && typeof element.lon === 'number') {
         // Node element
         lat = element.lat;
@@ -1949,13 +2494,13 @@ const Planning = () => {
         console.warn(`Skipping POI with invalid coordinates: '${name}'`);
         return null;
       }
-      
+
       // Validate coordinates
       if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
         console.warn(`Skipping POI with out-of-range coordinates: '${name}' (${lat}, ${lng})`);
         return null;
       }
-      
+
       // Create a locality string from address components
       let locality = '';
       if (tags.address) {
@@ -1964,17 +2509,17 @@ const Planning = () => {
         if (address.city) parts.push(address.city);
         else if (address.town) parts.push(address.town);
         else if (address.village) parts.push(address.village);
-        
+
         if (address.county) parts.push(address.county);
         if (address.state) parts.push(address.state);
-        
+
         locality = parts.join(', ');
       } else if (tags.city || tags.town || tags.village) {
         locality = tags.city || tags.town || tags.village;
       } else {
         locality = 'Unknown location';
       }
-      
+
       return {
         id: `${element.type}-${element.id}`,
         name,
@@ -2004,7 +2549,7 @@ const Planning = () => {
           Swal.showLoading();
         }
       });
-      
+
       // Function to remove diacritics
       const removeDiacritics = (text) => {
         if (!text) return '';
@@ -2015,20 +2560,53 @@ const Planning = () => {
           .replace(/â/g, 'a')
           .replace(/î/g, 'i');
       };
-      
+
       // Get all selected POIs
-      const selectedPOIs = pointsOfInterest.filter(poi => poi.selected);
-      
+      let selectedPOIs = pointsOfInterest.filter(poi => poi.selected);
+
+      // Intelligent Route Sorting: Order POIs by their position along the route path
+      if (routeCoordinates && routeCoordinates.length > 0) {
+        // Helper to find the index of the closest point on the route
+        const getRouteIndex = (lat, lng) => {
+          let minDistance = Infinity;
+          let closestIndex = -1;
+          // Sampling for performance (check every ~1km roughly if route is huge)
+          const step = Math.max(1, Math.floor(routeCoordinates.length / 500));
+
+          for (let i = 0; i < routeCoordinates.length; i += step) {
+            // routeCoordinates are [lat, lng]
+            const rLat = routeCoordinates[i][0];
+            const rLng = routeCoordinates[i][1];
+            const distSq = (lat - rLat) ** 2 + (lng - rLng) ** 2;
+
+            if (distSq < minDistance) {
+              minDistance = distSq;
+              closestIndex = i;
+            }
+          }
+          return closestIndex;
+        };
+
+        // Map POIs to their route index and sort
+        const poisWithIndices = selectedPOIs.map(poi => ({
+          ...poi,
+          _routeIndex: getRouteIndex(poi.lat, poi.lng)
+        }));
+
+        poisWithIndices.sort((a, b) => a._routeIndex - b._routeIndex);
+        selectedPOIs = poisWithIndices;
+      }
+
       // Instead of modifying the state which affects the rendered map,
       // we'll create a temporary map for the PDF capture
       const mapElement = document.querySelector('.leaflet-container');
-      
+
       if (!mapElement) {
         console.error('Map element not found');
         Swal.fire('Error', 'Could not capture the map. Please try again.', 'error');
         return;
       }
-      
+
       // Store original map state
       const mapInstance = mapRef.current;
       if (!mapInstance) {
@@ -2036,51 +2614,53 @@ const Planning = () => {
         Swal.fire('Error', 'Could not capture the map. Please try again.', 'error');
         return;
       }
-      
+
       // Create bounds that include the route and selected POIs
       const bounds = L.latLngBounds();
-      
+
       // Add route points to bounds
       if (routeCoordinates && routeCoordinates.length > 0) {
         routeCoordinates.forEach(coord => {
           bounds.extend([coord[0], coord[1]]);
         });
       }
-      
+
       // Add selected POIs to bounds
       selectedPOIs.forEach(poi => {
         bounds.extend([poi.lat, poi.lng]);
       });
-      
+
       // Add trip days to bounds
       tripDays.forEach(day => {
-        bounds.extend([day.location.lat, day.location.lng]);
+        if (day?.location) {
+          bounds.extend([day.location.lat, day.location.lng]);
+        }
       });
-      
+
       // Fit the map to these bounds with padding
       mapInstance.fitBounds(bounds, { padding: [50, 50] });
-      
+
       // Wait for the map to finish rendering
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Hide non-selected POI markers before capture
       const poiMarkers = document.querySelectorAll('.leaflet-marker-icon');
       const hiddenMarkers = [];
-      
+
       poiMarkers.forEach(marker => {
         // Skip route markers (start/end)
         if (marker.src && marker.src.includes('marker-icon-2x-green.png')) {
           // This is likely a selected POI or route marker, keep it visible
           return;
         }
-        
+
         // Check if this is a non-selected POI marker (red markers)
         if (marker.src && marker.src.includes('marker-icon-2x-red.png')) {
           hiddenMarkers.push(marker);
           marker.style.display = 'none';
         }
       });
-      
+
       // Capture the map as canvas
       const mapCanvas = await html2canvas(mapElement, {
         useCORS: true,
@@ -2091,60 +2671,60 @@ const Planning = () => {
         windowHeight: document.documentElement.offsetHeight,
         scale: 1
       });
-      
+
       // Restore hidden markers
       hiddenMarkers.forEach(marker => {
         marker.style.display = '';
       });
-      
+
       // Create new PDF document
       const doc = new jsPDF();
-      
+
       // Add title and header
       doc.setFontSize(22);
       doc.setTextColor(0, 51, 102);
       doc.text(removeDiacritics('Trip Itinerary'), 105, 15, { align: 'center' });
-      
+
       // Add date and basic info
       doc.setFontSize(10);
       doc.setTextColor(102, 102, 102);
       doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
-      
+
       // Add map image
       const imgWidth = 180;
       const imgHeight = (mapCanvas.height * imgWidth) / mapCanvas.width;
       doc.addImage(mapCanvas.toDataURL('image/jpeg', 0.8), 'JPEG', 15, 25, imgWidth, imgHeight);
-      
+
       // Add trip summary section
       let yPosition = 25 + imgHeight + 10; // Start after the map
-      
+
       doc.setFontSize(16);
       doc.setTextColor(0, 51, 102);
       doc.text('Trip Summary', 14, yPosition);
       yPosition += 2;
-      
+
       doc.setDrawColor(0, 51, 102);
       doc.setLineWidth(0.5);
       doc.line(14, yPosition, 196, yPosition);
       yPosition += 8;
-      
+
       doc.setFontSize(12);
       doc.setTextColor(0, 0, 0);
       let totalDistance = 0;
       let totalDuration = 0;
       let startPoint = null;
       let endPoint = null;
-      
+
       if (tripDays.length > 0) {
         startPoint = tripDays[0];
-        doc.text(`Start Point: ${removeDiacritics(tripDays[0].location.name || 'Custom Location')}`, 14, yPosition);
+        doc.text(`Start Point: ${removeDiacritics(tripDays[0]?.location?.name || 'Custom Location')}`, 14, yPosition);
         yPosition += 7;
-        
+
         if (tripDays.length > 1) {
-          endPoint = tripDays[tripDays.length-1];
-          doc.text(`Destination: ${removeDiacritics(tripDays[tripDays.length-1].location.name || 'Custom Location')}`, 14, yPosition);
+          endPoint = tripDays[tripDays.length - 1];
+          doc.text(`Destination: ${removeDiacritics(tripDays[tripDays.length - 1]?.location?.name || 'Custom Location')}`, 14, yPosition);
           yPosition += 7;
-          
+
           // Calculate estimated driving time if we have route details
           if (routeDetails && routeDetails.distance && routeDetails.duration) {
             totalDistance = routeDetails.distance;
@@ -2155,38 +2735,38 @@ const Planning = () => {
             yPosition += 7;
             doc.text(`Points of Interest: ${selectedPOIs.length}`, 14, yPosition);
             yPosition += 7;
-            
+
             // Add transportation mode
             doc.text(`Transportation Mode: ${transportMode.charAt(0).toUpperCase() + transportMode.slice(1)}`, 14, yPosition);
             yPosition += 15;
           }
         }
       }
-      
+
       // Check if we need a new page
       if (yPosition > 250) {
         doc.addPage();
         yPosition = 20;
       }
-      
+
       // Add selected points of interest with coordinates and driving instructions
       if (selectedPOIs.length > 0) {
         doc.setFontSize(16);
         doc.setTextColor(0, 51, 102);
         doc.text(removeDiacritics('Detailed Itinerary'), 14, yPosition);
         yPosition += 2;
-        
+
         doc.setDrawColor(0, 51, 102);
         doc.setLineWidth(0.5);
         doc.line(14, yPosition, 196, yPosition);
         yPosition += 8;
-        
+
         let prevPoint = startPoint ? {
-          lat: startPoint.location.lat,
-          lng: startPoint.location.lng,
-          name: startPoint.location.name
+          lat: startPoint.location?.lat,
+          lng: startPoint.location?.lng,
+          name: startPoint.location?.name
         } : null;
-        
+
         // Add start point as first item in itinerary
         if (prevPoint) {
           doc.setFontSize(12);
@@ -2195,12 +2775,12 @@ const Planning = () => {
           doc.text(`Start: ${removeDiacritics(prevPoint.name || 'Starting Point')}`, 14, yPosition);
           doc.setFont(undefined, 'normal');
           yPosition += 6;
-          
+
           doc.setFontSize(10);
           doc.text(`Coordinates: ${prevPoint.lat.toFixed(6)}, ${prevPoint.lng.toFixed(6)}`, 20, yPosition);
           yPosition += 9;
         }
-        
+
         // Add each POI
         selectedPOIs.forEach((poi, index) => {
           // Calculate distance and time from previous point
@@ -2210,22 +2790,22 @@ const Planning = () => {
             const distance = calculateDistance(prevPoint.lat, prevPoint.lng, poi.lat, poi.lng);
             // Rough time estimation (assuming 60 km/h average speed)
             const timeMinutes = Math.round(distance * 60 / 60);
-            
+
             if (index === 0) {
-              segmentInfo = `Driving from Start: ~${distance.toFixed(1)} km (approx. ${Math.floor(timeMinutes/60)}h ${timeMinutes%60}m)`;
+              segmentInfo = `Driving from Start: ~${distance.toFixed(1)} km (approx. ${Math.floor(timeMinutes / 60)}h ${timeMinutes % 60}m)`;
             } else {
-              segmentInfo = `Driving from previous: ~${distance.toFixed(1)} km (approx. ${Math.floor(timeMinutes/60)}h ${timeMinutes%60}m)`;
+              segmentInfo = `Driving from previous: ~${distance.toFixed(1)} km (approx. ${Math.floor(timeMinutes / 60)}h ${timeMinutes % 60}m)`;
             }
           }
-          
+
           prevPoint = poi;
-          
+
           // Check if we need a new page
           if (yPosition > 250) {
             doc.addPage();
             yPosition = 20;
           }
-          
+
           // Add POI number and name
           doc.setFontSize(12);
           doc.setTextColor(0, 0, 0);
@@ -2233,7 +2813,7 @@ const Planning = () => {
           doc.text(`Stop ${index + 1}: ${removeDiacritics(poi.name || 'Unnamed Location')}`, 14, yPosition);
           doc.setFont(undefined, 'normal');
           yPosition += 6;
-          
+
           // Add POI details
           doc.setFontSize(10);
           doc.text(`Type: ${removeDiacritics(poi.type || 'N/A')}`, 20, yPosition);
@@ -2242,7 +2822,7 @@ const Planning = () => {
           yPosition += 6;
           doc.text(`Location: ${removeDiacritics(poi.locality || 'Location not available')}`, 20, yPosition);
           yPosition += 6;
-          
+
           // Add driving info
           if (segmentInfo) {
             doc.setTextColor(0, 102, 204);
@@ -2250,29 +2830,29 @@ const Planning = () => {
             doc.setTextColor(0, 0, 0);
             yPosition += 6;
           }
-          
+
           // Add description if available
           if (poi.description) {
             const description = removeDiacritics(poi.description);
             doc.text('Description:', 20, yPosition);
             yPosition += 6;
-            
+
             // Handle multi-line descriptions
             const splitDescription = doc.splitTextToSize(description, 170);
             doc.text(splitDescription, 30, yPosition);
-            
+
             // Adjust position based on description length
             yPosition += splitDescription.length * 5;
           }
-          
+
           yPosition += 6;
-          
+
           // Add recommended visit duration if available
           if (poi.visitDuration) {
             doc.text(`Recommended visit: ${poi.visitDuration} minutes`, 20, yPosition);
             yPosition += 6;
           }
-          
+
           // Add separator line between POIs
           if (index < selectedPOIs.length - 1) {
             doc.setDrawColor(200, 200, 200);
@@ -2281,7 +2861,7 @@ const Planning = () => {
             yPosition += 8;
           }
         });
-        
+
         // Add final destination after all POIs
         if (endPoint && endPoint !== startPoint) {
           // Check if we need a new page
@@ -2289,57 +2869,57 @@ const Planning = () => {
             doc.addPage();
             yPosition = 20;
           }
-          
+
           // Calculate distance and time from last POI to destination
           let finalSegmentInfo = '';
           if (prevPoint) {
             const distance = calculateDistance(
-              prevPoint.lat, 
-              prevPoint.lng, 
-              endPoint.location.lat, 
+              prevPoint.lat,
+              prevPoint.lng,
+              endPoint.location.lat,
               endPoint.location.lng
             );
             const timeMinutes = Math.round(distance * 60 / 60);
-            finalSegmentInfo = `Final drive to destination: ~${distance.toFixed(1)} km (approx. ${Math.floor(timeMinutes/60)}h ${timeMinutes%60}m)`;
+            finalSegmentInfo = `Final drive to destination: ~${distance.toFixed(1)} km (approx. ${Math.floor(timeMinutes / 60)}h ${timeMinutes % 60}m)`;
           }
-          
+
           // Add separator line
           doc.setDrawColor(200, 200, 200);
           doc.setLineWidth(0.2);
           doc.line(14, yPosition, 196, yPosition);
           yPosition += 8;
-          
+
           // Add destination details
           doc.setFontSize(12);
           doc.setFont(undefined, 'bold');
           doc.text(`Destination: ${removeDiacritics(endPoint.location.name || 'Final Destination')}`, 14, yPosition);
           doc.setFont(undefined, 'normal');
           yPosition += 6;
-          
+
           doc.setFontSize(10);
           doc.text(`Coordinates: ${endPoint.location.lat.toFixed(6)}, ${endPoint.location.lng.toFixed(6)}`, 20, yPosition);
           yPosition += 6;
-          
+
           if (finalSegmentInfo) {
             doc.setTextColor(0, 102, 204);
             doc.text(finalSegmentInfo, 20, yPosition);
             doc.setTextColor(0, 0, 0);
           }
         }
-        
+
         // Add practical information page
         doc.addPage();
         doc.setFontSize(16);
         doc.setTextColor(0, 51, 102);
         doc.text('Practical Information', 105, 15, { align: 'center' });
-        
+
         doc.setDrawColor(0, 51, 102);
         doc.setLineWidth(0.5);
         doc.line(14, 17, 196, 17);
-        
+
         doc.setFontSize(12);
         doc.setTextColor(0, 0, 0);
-        
+
         // Travel tips section
         doc.setFont(undefined, 'bold');
         doc.text('Travel Tips:', 14, 30);
@@ -2350,7 +2930,7 @@ const Planning = () => {
         doc.text('• Keep emergency contacts and important documents accessible', 20, 54);
         doc.text('• Download offline maps for areas with limited connectivity', 20, 62);
         doc.text('• Respect local customs and traditions', 20, 70);
-        
+
         // Driving tips section
         doc.setFont(undefined, 'bold');
         doc.setFontSize(12);
@@ -2362,7 +2942,7 @@ const Planning = () => {
         doc.text('• Keep a safe distance from other vehicles', 20, 109);
         doc.text('• Have emergency numbers and roadside assistance contacts available', 20, 117);
         doc.text('• Check fuel levels regularly and know where gas stations are located', 20, 125);
-        
+
         // Local information section
         doc.setFont(undefined, 'bold');
         doc.setFontSize(12);
@@ -2377,7 +2957,7 @@ const Planning = () => {
       } else {
         doc.setFontSize(12);
         doc.text('No points of interest selected.', 14, 70);
-        
+
         // Add notes section
         doc.setFontSize(14);
         doc.text('Trip Notes', 14, 85);
@@ -2385,10 +2965,10 @@ const Planning = () => {
         doc.text('• Remember to check opening hours before visiting.', 14, 95);
         doc.text('• Consider weather conditions for your trip.', 14, 105);
       }
-      
+
       // Close the loading dialog
       Swal.close();
-      
+
       // Save the PDF
       doc.save('romania-trip-itinerary.pdf');
     } catch (error) {
@@ -2401,7 +2981,7 @@ const Planning = () => {
   const isPoiInSelectedCategories = (element) => {
     // Include all POIs by default
     const tags = element.tags || {};
-    
+
     // Basic filtering - only include elements with meaningful tags
     return !!(tags.tourism || tags.historic || tags.natural || tags.leisure);
   };
@@ -2425,10 +3005,10 @@ const Planning = () => {
 
     // Add to trip days
     setTripDays(prevDays => [...prevDays, newPoiDay]);
-    
+
     // Mark this POI as added to trip
-    setPointsOfInterest(prevPois => 
-      prevPois.map(p => 
+    setPointsOfInterest(prevPois =>
+      prevPois.map(p =>
         p.id === poi.id ? { ...p, addedToTrip: true } : p
       )
     );
@@ -2464,7 +3044,7 @@ const Planning = () => {
       'gallery': 'Tourism & Attractions',
       'viewpoint': 'Tourism & Attractions',
       'artwork': 'Tourism & Attractions',
-      
+
       // Natural Attractions
       'beach': 'Natural Attractions',
       'peak': 'Natural Attractions',
@@ -2474,7 +3054,7 @@ const Planning = () => {
       'cave': 'Natural Attractions',
       'forest': 'Natural Attractions',
       'nature_reserve': 'Natural Attractions',
-      
+
       // Cultural & Historical Sites
       'castle': 'Cultural & Historical Sites',
       'monument': 'Cultural & Historical Sites',
@@ -2485,7 +3065,7 @@ const Planning = () => {
       'church': 'Cultural & Historical Sites',
       'cathedral': 'Cultural & Historical Sites',
       'monastery': 'Cultural & Historical Sites',
-      
+
       // Recreational & Leisure
       'park': 'Recreational & Leisure',
       'garden': 'Recreational & Leisure',
@@ -2493,7 +3073,7 @@ const Planning = () => {
       'aquarium': 'Recreational & Leisure',
       'theme_park': 'Recreational & Leisure',
       'spa': 'Recreational & Leisure',
-      
+
       // Entertainment & Nightlife
       'theatre': 'Entertainment & Nightlife',
       'cinema': 'Entertainment & Nightlife',
@@ -2501,7 +3081,7 @@ const Planning = () => {
       'nightclub': 'Entertainment & Nightlife',
       'bar': 'Entertainment & Nightlife',
       'restaurant': 'Entertainment & Nightlife',
-      
+
       // Sports & Outdoor Activities
       'stadium': 'Sports & Outdoor Activities',
       'sports_centre': 'Sports & Outdoor Activities',
@@ -2511,7 +3091,7 @@ const Planning = () => {
       'hiking': 'Sports & Outdoor Activities',
       'climbing': 'Sports & Outdoor Activities'
     };
-    
+
     return typeMap[poiType] || 'Tourism & Attractions'; // Default category
   };
 
@@ -2519,19 +3099,19 @@ const Planning = () => {
   const getFilteredPOIs = useCallback(() => {
     // If no filters are selected, show all POIs
     const anyFilterSelected = Object.values(poiFilters).some(value => value);
-    
+
     if (!anyFilterSelected) {
       return pointsOfInterest.filter(poi => poi.name && poi.name !== 'Unnamed');
     }
-    
+
     // Otherwise, filter based on selected categories
     return pointsOfInterest.filter(poi => {
       // Skip unnamed POIs
       if (!poi.name || poi.name === 'Unnamed') return false;
-      
+
       // Get the category for this POI
       const category = categorizePOI(poi.type);
-      
+
       // Include if its category is selected
       return poiFilters[category];
     });
@@ -2539,10 +3119,10 @@ const Planning = () => {
 
   // Add this function to toggle POI selection
   const togglePOISelection = (poiId) => {
-    setPointsOfInterest(prevPois => 
-      prevPois.map(poi => 
-        poi.id === poiId 
-          ? { ...poi, selected: !poi.selected } 
+    setPointsOfInterest(prevPois =>
+      prevPois.map(poi =>
+        poi.id === poiId
+          ? { ...poi, selected: !poi.selected }
           : poi
       )
     );
@@ -2551,123 +3131,397 @@ const Planning = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
-        {/* Header Section */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Trip Planning</h1>
-          <p className="text-gray-600">
-            Add destinations for each day of your trip, then get recommendations for points of interest and optimal routes.
-          </p>
+        {/* Header Section - Welcoming Tourist Guide */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-3 shadow-lg">
+              <MapPinIcon className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Plan Your Adventure</h1>
+              <p className="text-gray-500">Discover amazing places along your route</p>
+            </div>
+          </div>
+
+          {/* Progress Indicator */}
+          <div className="flex items-center gap-4 mt-6 bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <div className={`flex items-center gap-2 ${tripDays.filter(d => d.type !== 'poi' && d.location).length >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${tripDays.filter(d => d.type !== 'poi' && d.location).length >= 1 ? 'bg-blue-100' : 'bg-gray-100'}`}>1</div>
+              <span className="text-sm font-medium hidden sm:inline">Add Stops</span>
+            </div>
+            <div className={`flex-1 h-1 rounded ${tripDays.filter(d => d.type !== 'poi' && d.location).length >= 2 ? 'bg-blue-400' : 'bg-gray-200'}`}></div>
+            <div className={`flex items-center gap-2 ${routeCoordinates.length > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${routeCoordinates.length > 0 ? 'bg-green-100' : 'bg-gray-100'}`}>2</div>
+              <span className="text-sm font-medium hidden sm:inline">Find Attractions</span>
+            </div>
+            <div className={`flex-1 h-1 rounded ${pointsOfInterest.filter(p => p.selected).length > 0 ? 'bg-green-400' : 'bg-gray-200'}`}></div>
+            <div className={`flex items-center gap-2 ${pointsOfInterest.filter(p => p.selected).length > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${pointsOfInterest.filter(p => p.selected).length > 0 ? 'bg-emerald-100' : 'bg-gray-100'}`}>3</div>
+              <span className="text-sm font-medium hidden sm:inline">Pick Favorites</span>
+            </div>
+          </div>
         </div>
 
-        {/* Main Content - Three Column Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          {/* Left Panel: Search and Trip Days */}
-          <div className="md:col-span-3 space-y-6">
-            {/* Search Bar */}
-            <div className="bg-white p-4 sm:p-6 rounded-lg shadow-lg space-y-4">
-              <div className="relative">
-                <div className="flex flex-col gap-3">
-                  <div className="relative flex-1">
-                    <div className="flex items-center gap-2 p-2 border rounded-lg focus-within:ring-2 focus-within:ring-blue-500">
-                      <MagnifyingGlassIcon className="h-5 w-5 text-gray-500" />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={handleSearchChange}
-                        placeholder="Search for a location"
-                        className="w-full outline-none text-gray-700"
-                      />
-                      {isSearching && (
-                        <ArrowPathIcon className="h-4 w-4 text-gray-400 animate-spin" />
-                      )}
-                    </div>
+        {/* Main Content - Two Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-auto">
+          {/* Left Panel: Sidebar - Clean Tourist-Friendly Design */}
+          <div className="lg:col-span-4 xl:col-span-3 space-y-4 h-auto pr-2">
 
-                    {/* Search Results Dropdown */}
-                    {searchResults.length > 0 && (
-                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-60 overflow-auto">
-                        {searchResults.map((result, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleLocationSelect(result)}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
-                          >
-                            {result.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+            {/* Step 1: Add Your Destinations */}
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <span className="bg-white text-blue-600 rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold shadow">1</span>
+                  <div>
+                    <h2 className="text-white font-bold text-lg">Add Your Stops</h2>
+                    <p className="text-blue-100 text-xs">Where do you want to go?</p>
                   </div>
                 </div>
               </div>
+
+              <div className="p-5 min-h-[130px]">
+                {/* Search Input */}
+                <div className="relative mb-4">
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus-within:border-blue-500 focus-within:bg-white transition-all">
+                    <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={handleSearchChange}
+                      placeholder="Search city, landmark, or address..."
+                      className="w-full bg-transparent outline-none text-gray-700 placeholder-gray-400"
+                    />
+                    {isSearching && (
+                      <ArrowPathIcon className="h-4 w-4 text-blue-500 animate-spin" />
+                    )}
+                  </div>
+
+                  {/* Search Results Dropdown */}
+                  {searchResults.length > 0 && (
+                    <div className="absolute left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 max-h-64 overflow-auto" style={{ zIndex: 9999 }}>
+                      {searchResults.map((result, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleLocationSelect(result)}
+                          className="w-full text-left px-4 py-3 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none border-b border-gray-50 last:border-0 flex items-center gap-3"
+                        >
+                          <MapPinIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          <span className="text-gray-700">{result.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Destination List */}
+                {tripDays.filter(d => d.type !== 'poi' && d.location).length > 0 && (
+                  <div className="space-y-2">
+                    {tripDays.filter(d => d.type !== 'poi' && d.location).map((day, index) => (
+                      <div
+                        key={day.id || index}
+                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors group"
+                      >
+                        <span className="bg-blue-100 text-blue-700 rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold flex-shrink-0">
+                          {index + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium text-gray-800 truncate">{day.location?.name || 'Unknown Location'}</h3>
+                          <p className="text-xs text-gray-500 truncate">
+                            {day.location?.city || day.location?.country || 'Added location'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => openInGoogleMaps(day)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
+                            title="View in Maps"
+                          >
+                            <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleRemoveDay(day.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                            title="Remove"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Route Visualization Line */}
+                    {tripDays.filter(d => d.type !== 'poi' && d.location).length >= 2 && (
+                      <div className="flex items-center gap-2 text-xs text-gray-400 py-2 px-3">
+                        <div className="flex-1 border-t border-dashed border-gray-300"></div>
+                        <span>Route</span>
+                        <div className="flex-1 border-t border-dashed border-gray-300"></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                {tripDays.filter(d => d.type !== 'poi' && d.location).length >= 2 && (
+                  <div className="mt-4 space-y-2">
+                    {tripDays.filter(d => d.type !== 'poi' && d.location).length > 2 && (
+                      <button
+                        onClick={optimizeTripOrder}
+                        className="w-full px-4 py-2.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl hover:bg-indigo-100 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <ArrowPathIcon className="h-4 w-4" />
+                        Optimize Route Order
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Trip Days */}
-            {tripDays.length > 0 && (
-              <div className="mt-4 border-t pt-4">
-                <h2 className="text-lg font-semibold mb-2">Trip Days</h2>
-                <div className="space-y-3">
-                  {tripDays.map((day) => (
-                    <div key={day.id} className="border-b pb-3 mb-3 last:border-b-0 last:mb-0 last:pb-0">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 mr-3 min-w-0">
-                          <div className="flex items-center flex-wrap gap-2 mb-1">
-                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full flex-shrink-0">
-                              Destination
-                            </span>
-                            <h3 className="font-medium truncate">{day.location.name}</h3>
-                          </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <p className="text-sm text-gray-600 truncate">
-                              {day.location.city && day.location.country
-                                ? `${day.location.city}, ${day.location.country}`
-                                : day.location.country || 'Location details not available'}
-                            </p>
-                            <button
-                              onClick={() => openInGoogleMaps(day)}
-                              className="text-blue-600 hover:text-blue-800 ml-2 flex-shrink-0"
-                              title="View in Google Maps"
-                            >
-                              <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveDay(day.id)}
-                          className="text-red-500 hover:text-red-700 flex-shrink-0 p-1"
-                          title="Remove this day"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
-                      </div>
+            {/* Step 2: Generate Your Plan */}
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+              <div className={`px-5 py-4 ${tripDays.filter(d => d.type !== 'poi' && d.location).length >= 2 ? 'bg-gradient-to-r from-green-600 to-green-700' : 'bg-gray-200'}`}>
+                <div className="flex items-center gap-3">
+                  <span className={`rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold shadow ${tripDays.filter(d => d.type !== 'poi' && d.location).length >= 2 ? 'bg-white text-green-600' : 'bg-gray-300 text-gray-500'}`}>2</span>
+                  <div>
+                    <h2 className={`font-bold text-lg ${tripDays.filter(d => d.type !== 'poi' && d.location).length >= 2 ? 'text-white' : 'text-gray-500'}`}>Find Attractions</h2>
+                    <p className={`text-xs ${tripDays.filter(d => d.type !== 'poi' && d.location).length >= 2 ? 'text-green-100' : 'text-gray-400'}`}>Get route recommendations or discover places</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* Route Recommendation Section */}
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <SparklesIcon className="h-5 w-5 text-indigo-600" />
+                    <h3 className="font-semibold text-gray-800">AI Route Suggestions</h3>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">Get AI-powered itinerary recommendations based on your starting point</p>
+
+                  <div className="flex flex-wrap items-center gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">Routes:</span>
+                      <select
+                        value={numRoutesToRecommend}
+                        onChange={(e) => setNumRoutesToRecommend(parseInt(e.target.value))}
+                        className="px-2 py-1 border border-gray-200 rounded-lg text-sm"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
                     </div>
-                  ))}
+
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={returnToStart}
+                        onChange={(e) => setReturnToStart(e.target.checked)}
+                        className="rounded text-indigo-600"
+                      />
+                      <span className="text-gray-600">Return to start</span>
+                    </label>
+                  </div>
 
                   <button
-                    onClick={generatePlan}
-                    disabled={tripDays.length < 2 || isGeneratingPlan}
-                    className="w-full mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    onClick={recommendRoutes}
+                    disabled={isRecommending || tripDays.filter(d => d.type !== 'poi' && d.location).length < 1}
+                    className="w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
                   >
-                    {isGeneratingPlan ? (
+                    {isRecommending ? (
                       <>
-                        <ArrowPathIcon className="h-5 w-5 mr-2 animate-spin" />
-                        Generating Plan...
+                        <ArrowPathIcon className="animate-spin h-4 w-4" />
+                        Generating routes...
                       </>
                     ) : (
                       <>
-                        <PlusIcon className="h-5 w-5 mr-2" />
-                        Generate Trip Plan
+                        <SparklesIcon className="h-4 w-4" />
+                        Recommend {numRoutesToRecommend} Route{numRoutesToRecommend > 1 ? 's' : ''}
                       </>
                     )}
                   </button>
                 </div>
+
+                {/* Recommended Routes Display */}
+                {recommendedRoutes.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-500 uppercase">Click a route to apply:</p>
+                    <div className="grid gap-2 max-h-60 overflow-y-auto">
+                      {recommendedRoutes.map((route, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => applyRecommendedRoute(route.stops)}
+                          className="bg-white border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer p-3 rounded-lg"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <h4 className="font-medium text-sm text-gray-800">{route.name}</h4>
+                              <p className="text-xs text-gray-500 mt-0.5">{route.stops.length} stops • {route.stops.join(' → ')}</p>
+                            </div>
+                            <span className="text-indigo-600 text-xs font-medium">Apply</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Divider */}
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <div className="flex-1 border-t border-gray-200"></div>
+                  <span>or discover attractions on your route</span>
+                  <div className="flex-1 border-t border-gray-200"></div>
+                </div>
+
+                {/* Discover Attractions Button */}
+                <button
+                  onClick={generatePlan}
+                  disabled={tripDays.filter(d => d.type !== 'poi' && d.location).length < 2 || isGeneratingPlan}
+                  className="w-full px-4 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed font-bold text-base flex items-center justify-center gap-2 shadow-lg shadow-green-200 disabled:shadow-none transition-all"
+                >
+                  {isGeneratingPlan ? (
+                    <>
+                      <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                      Finding attractions...
+                    </>
+                  ) : (
+                    <>
+                      <SparklesIcon className="h-5 w-5" />
+                      Discover Attractions
+                    </>
+                  )}
+                </button>
+
+                {tripDays.filter(d => d.type !== 'poi' && d.location).length < 2 && (
+                  <p className="text-center text-xs text-gray-400">
+                    Add at least 2 destinations to discover attractions
+                  </p>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Filters (Expanded by default) */}
+            <details className="bg-white rounded-xl shadow-lg overflow-hidden group" open>
+              <summary className="px-5 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <AdjustmentsHorizontalIcon className="h-5 w-5 text-gray-400" />
+                  <span className="font-medium text-gray-700">Filters</span>
+                </div>
+                <span className="text-xs text-gray-400 group-open:hidden">Click to expand</span>
+              </summary>
+
+              <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-4">
+                {/* Trip Duration */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Trip Duration</h3>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={tripDuration}
+                      onChange={(e) => setTripDuration(parseInt(e.target.value) || 1)}
+                      className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center"
+                    />
+                    <span className="text-sm text-gray-600">days</span>
+                  </div>
+                </div>
+
+                {/* Interests */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Your Interests</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { key: 'culture', label: '🎭 Culture', icon: '🎭' },
+                      { key: 'nature', label: '🌲 Nature', icon: '🌲' },
+                      { key: 'history', label: '🏛️ History', icon: '🏛️' },
+                      { key: 'adventure', label: '🏔️ Adventure', icon: '🏔️' },
+                      { key: 'food', label: '🍽️ Food', icon: '🍽️' },
+                      { key: 'art', label: '🎨 Art', icon: '🎨' },
+                    ].map((interest) => (
+                      <button
+                        key={interest.key}
+                        onClick={() => {
+                          setInterests(prev => ({
+                            ...prev,
+                            [interest.key]: !prev[interest.key]
+                          }));
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${interests[interest.key]
+                          ? 'bg-indigo-100 text-indigo-700 border-indigo-300'
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                          }`}
+                      >
+                        {interest.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Transport Mode */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Transport Mode</h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['driving', 'walking', 'cycling'].map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => { setTransportMode(mode); if (mode === 'driving') setHasCar(true); }}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium capitalize border transition-all ${transportMode === mode
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                          }`}
+                      >
+                        {mode === 'driving' ? '🚗' : mode === 'walking' ? '🚶' : '🚴'} {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Search Radius */}
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Search Radius</h3>
+                  <div className="flex gap-2">
+                    {[5, 10, 25, 50].map(dist => (
+                      <button
+                        key={dist}
+                        onClick={() => setPoiDistance(dist)}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${poiDistance === dist
+                          ? 'bg-blue-100 text-blue-700 border-blue-300'
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                      >
+                        {dist} km
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* AI Assistant Toggle */}
+                <div className="pt-2 border-t border-gray-100">
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div className="flex items-center gap-2">
+                      <SparklesIcon className="h-4 w-4 text-indigo-500" />
+                      <span className="text-sm font-medium text-gray-700">AI-Powered Suggestions</span>
+                    </div>
+                    <div className={`w-11 h-6 rounded-full transition-colors ${isUsingAiForPoi ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                      <input
+                        type="checkbox"
+                        checked={isUsingAiForPoi}
+                        onChange={() => setIsUsingAiForPoi(!isUsingAiForPoi)}
+                        className="sr-only"
+                      />
+                      <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${isUsingAiForPoi ? 'translate-x-5' : 'translate-x-0.5'} mt-0.5`}></div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </details>
+
           </div>
 
           {/* Center Panel: Map */}
-          <div className="md:col-span-6 order-first md:order-none mb-6 md:mb-0">
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-              <div className="relative">
+          <div className="lg:col-span-8 xl:col-span-9 lg:h-[1000px] h-[300px]">
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden h-full relative">
+              <div className="relative h-full">
                 <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
                   <button
                     onClick={() => setIsMapClickMode(!isMapClickMode)}
@@ -2690,7 +3544,29 @@ const Planning = () => {
                     <p className="text-sm font-medium">Click anywhere on the map to add a location</p>
                   </div>
                 )}
-                <div className="map-container" style={{ height: "500px", width: "100%", marginBottom: "20px" }}>
+
+                {/* Map Legend */}
+                <div className="absolute bottom-4 left-4 z-10 bg-white/95 p-3 rounded-lg shadow-md text-xs space-y-1.5">
+                  <p className="font-semibold text-gray-700 mb-2">Legend</p>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                    <span className="text-gray-600">Your destinations</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                    <span className="text-gray-600">Attractions</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                    <span className="text-gray-600">Selected POIs</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+                    <span className="text-gray-600">Accommodations</span>
+                  </div>
+                </div>
+
+                <div className="map-container" style={{ height: "100%", width: "100%" }}>
                   <MapContainer
                     center={[45.9443, 25.0094]} // Center of Romania
                     zoom={7}
@@ -2701,17 +3577,17 @@ const Planning = () => {
                       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
-                    
+
                     {/* Map controller to fit bounds */}
                     {tripDays.length > 0 && (
-                      <MapController 
-                        locations={tripDays.map(day => day.location)} 
+                      <MapController
+                        locations={tripDays.map(day => day.location)}
                       />
                     )}
-                    
+
                     {/* Map click handler */}
                     <MapEvents onClick={handleMapClick} />
-                    
+
                     {/* Display route */}
                     {routeCoordinates.length > 0 && (
                       <Polyline
@@ -2756,433 +3632,131 @@ const Planning = () => {
                       </CircleMarker>
                     ))}
 
-                    {/* Display POIs */}
-                    {pointsOfInterest.map((poi) => (
-                      <Marker
-                        key={poi.id}
-                        position={[poi.lat, poi.lng]}
-                        icon={createCustomIcon(poi.selected ? 'green' : 'red')}
-                        className="poi-marker"
-                        eventHandlers={{
-                          click: () => togglePOISelection(poi.id)
-                        }}
-                      >
-                        <Popup>
-                          <div className="space-y-2">
-                            <h3 className="font-medium">{poi.name}</h3>
-                            <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
-                            {poi.description && (
-                              <p className="text-xs text-gray-500">{poi.description}</p>
-                            )}
-                            <button
-                              onClick={() => togglePOISelection(poi.id)}
-                              className={`px-2 py-1 text-xs rounded ${
-                                poi.selected
+                    {/* Display POIs - Safe Render */}
+                    {pointsOfInterest && pointsOfInterest.map((poi) => {
+                      if (!poi || !poi.lat || !poi.lng) return null;
+                      // Use orange for overnight stops, green for selected, red for regular POIs
+                      const markerColor = poi.isOvernightStop
+                        ? '#f97316' // Orange for accommodation
+                        : (poi.selected ? 'green' : 'red');
+                      return (
+                        <Marker
+                          key={poi.id || Math.random()}
+                          position={[poi.lat, poi.lng]}
+                          icon={createCustomIcon(markerColor)}
+                          className="poi-marker"
+                          eventHandlers={{
+                            click: () => togglePOISelection(poi.id)
+                          }}
+                        >
+                          <Popup>
+                            <div className="space-y-2">
+                              <h3 className="font-medium flex items-center gap-2">
+                                {poi.name || 'Unknown Place'}
+                                {poi.isOvernightStop && (
+                                  <span className="bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">
+                                    🏨 Overnight Stop
+                                  </span>
+                                )}
+                              </h3>
+                              <p className="text-sm text-gray-600 capitalize">{poi.type}</p>
+                              {poi.description && (
+                                <p className="text-xs text-gray-500">{poi.description}</p>
+                              )}
+                              {poi.isOvernightStop && (
+                                <p className="text-xs text-orange-600 font-medium">
+                                  Recommended stop for the night
+                                </p>
+                              )}
+                              <button
+                                onClick={() => togglePOISelection(poi.id)}
+                                className={`px-2 py-1 text-xs rounded ${poi.selected
                                   ? 'bg-green-500 text-white'
                                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                              }`}
-                            >
-                              {poi.selected ? 'Selected' : 'Select'}
-                            </button>
-                          </div>
-                        </Popup>
-                      </Marker>
-                    ))}
+                                  }`}
+                              >
+                                {poi.selected ? 'Selected' : 'Select'}
+                              </button>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
 
                     {/* Display Trip Days */}
-                    {tripDays.map((day, index) => (
-                      <Marker
-                        key={day.id}
-                        position={[day.location.lat, day.location.lng]}
-                        icon={createCustomIcon('#3b82f6')}
-                      >
-                        <Popup>
-                          <div className="space-y-2">
-                            <h3 className="font-medium flex items-center">
-                              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                                Day {index + 1}
-                              </span>
-                              {day.location.name}
-                            </h3>
-                            <p className="text-sm text-gray-600">
-                              {day.location.city && day.location.country
-                                ? `${day.location.city}, ${day.location.country}`
-                                : day.location.country || 'Location details not available'}
-                            </p>
-                          </div>
-                        </Popup>
-                      </Marker>
-                    ))}
+                    {tripDays
+                      .filter(day => day && day.location && day.location.lat && day.location.lng)
+                      .map((day, index) => (
+                        <Marker
+                          key={day.id || index}
+                          position={[day.location.lat, day.location.lng]}
+                          icon={createCustomIcon('#3b82f6')}
+                        >
+                          <Popup>
+                            <div className="space-y-2">
+                              <h3 className="font-medium flex items-center">
+                                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
+                                  Day {index + 1}
+                                </span>
+                                {day.location?.name || 'Unknown Location'}
+                              </h3>
+                              <p className="text-sm text-gray-600">
+                                {day.location?.city && day.location?.country
+                                  ? `${day.location.city}, ${day.location.country}`
+                                  : day.location?.country || 'Location details not available'}
+                              </p>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      ))}
+
+                    {/* Display Booking App Properties (Orange Markers) */}
+                    {bookingAppProperties && bookingAppProperties.map((property) => {
+                      if (!property || !property.lat || !property.lng) return null;
+                      return (
+                        <Marker
+                          key={property.id}
+                          position={[property.lat, property.lng]}
+                          icon={createCustomIcon('#f97316')} // Orange for accommodations
+                        >
+                          <Popup>
+                            <div className="space-y-2 min-w-[200px]">
+                              <h3 className="font-medium flex items-center gap-2">
+                                🏨 {property.name}
+                              </h3>
+                              <div className="flex items-center gap-2">
+                                <span className="bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">
+                                  StayHub Property
+                                </span>
+                                {property.starRating && (
+                                  <span className="text-yellow-500 text-sm">
+                                    {'⭐'.repeat(Math.min(property.starRating, 5))}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 capitalize">{property.propertyType || 'Accommodation'}</p>
+                              <p className="text-xs text-gray-500">{property.locality}</p>
+                              {property.description && (
+                                <p className="text-xs text-gray-500">{property.description}</p>
+                              )}
+                              <button
+                                onClick={() => window.open(`/properties/${property.propertyId}`, '_blank')}
+                                className="w-full px-3 py-1.5 text-sm bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
+                              >
+                                View & Book
+                              </button>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
                   </MapContainer>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Panel: Filters and Options */}
-          <div className="md:col-span-3 space-y-6">
-            {/* Trip Preferences */}
-            <div className="bg-white p-6 rounded-lg shadow-lg space-y-4">
-              <h2 className="text-lg font-semibold mb-2">Trip Preferences</h2>
-
-              {/* Interests */}
-              <div className="mb-3">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Trip Interests</h3>
-                <div className="flex flex-wrap gap-3">
-                  {Object.entries(interests).map(([interest, isChecked]) => (
-                    <button
-                      key={interest}
-                      onClick={() => setSelectedInterest(interest === selectedInterest ? null : interest)}
-                      className={`px-3 py-1.5 rounded-full text-sm ${
-                        interest === selectedInterest
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      <span className="capitalize">{interest}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Trip Style */}
-              <div className="mb-3">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Trip Style</h3>
-                <div className="flex flex-wrap gap-3">
-                  {Object.entries(tripStyle).map(([style, isChecked]) => (
-                    <label key={style} className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => handleTripStyleChange(style)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="ml-2 text-sm text-gray-700 capitalize">{style}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mb-3">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={hasCar}
-                    onChange={handleCarChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-700 font-medium">I have a car</span>
-                </label>
-                {tripDays.length < 2 && (
-                  <p className="text-xs text-gray-500 mt-1 ml-6">
-                    Add at least two destinations to see tourist attractions along the route
-                  </p>
-                )}
-                {tripDays.length >= 2 && (
-                  <p className="text-xs text-blue-600 mt-1 ml-6">
-                    Showing tourist attractions between destinations
-                  </p>
-                )}
-              </div>
-
-              {/* Generate Plan Button */}
-              {tripDays.length >= 2 && (
-                <div className="mt-4">
-                  <div className="mb-3">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isUsingAiForPoi}
-                        onChange={() => setIsUsingAiForPoi(!isUsingAiForPoi)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="ml-2 text-sm text-gray-700 font-medium">Use AI for points of interest</span>
-                    </label>
-                    <p className="text-xs text-gray-500 mt-1 ml-6">
-                      {isUsingAiForPoi
-                        ? "Using Ollama to find interesting places along your route"
-                        : "Using traditional search for points of interest"}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      generatePlan().catch(err => {
-                        console.error('Error in generate plan:', err);
-                        setIsGeneratingPlan(false);
-                      });
-                    }}
-                    disabled={isGeneratingPlan}
-                    className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                  >
-                    {isGeneratingPlan ? (
-                      <>
-                        <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      'Generate Again'
-                    )}
-                  </button>
-                  <p className="text-xs text-gray-500 mt-1 text-center">
-                    This will calculate the route between all your destinations in order and find named points of interest along the way
-                  </p>
-                </div>
-              )}
-
-              <div className="mb-3">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">POI Distance</h3>
-                <select
-                  value={poiDistance}
-                  onChange={(e) => setPoiDistance(Number(e.target.value))}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                >
-                  <option value={10}>10 km</option>
-                  <option value={25}>25 km</option>
-                  <option value={50}>50 km</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Maximum distance of points of interest from your route</p>
-              </div>
-
-              <div className="mb-3">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Transportation Mode</h3>
-                <div className="flex flex-wrap gap-3">
-                  {['driving', 'walking', 'cycling'].map((mode) => (
-                    <label key={mode} className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        name="transportMode"
-                        checked={transportMode === mode}
-                        onChange={() => setTransportMode(mode)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="ml-2 text-sm text-gray-700 capitalize">{mode}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Category Selection Dropdowns */}
-              <div className="mb-4">
-                {/* Tourism & Attractions */}
-                <details className="bg-white rounded-lg shadow-sm border">
-                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                    <span>Tourism & Attractions</span>
-                    <span className="text-xs text-blue-600">{selectedCategories.tourism.length} selected</span>
-                  </summary>
-                  <div className="px-4 py-3 border-t">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {categoryOptions.tourism.map((option) => (
-                        <label key={option.value} className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedCategories.tourism.includes(option.value)}
-                            onChange={() => handleCategoryChange('tourism', option.value)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-              </div>
-              <div className="mb-4">
-                {/* Natural Attractions */}
-                <details className="bg-white rounded-lg shadow-sm border">
-                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                    <span>Natural Attractions</span>
-                    <span className="text-xs text-blue-600">{selectedCategories.natural.length} selected</span>
-                  </summary>
-                  <div className="px-4 py-3 border-t">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {categoryOptions.natural.map((option) => (
-                        <label key={option.value} className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedCategories.natural.includes(option.value)}
-                            onChange={() => handleCategoryChange('natural', option.value)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-              </div>
-              <div className="mb-4">
-                {/* Cultural & Historical Sites */}
-                <details className="bg-white rounded-lg shadow-sm border">
-                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                    <span>Cultural & Historical Sites</span>
-                    <span className="text-xs text-blue-600">{selectedCategories.historic.length} selected</span>
-                  </summary>
-                  <div className="px-4 py-3 border-t">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {categoryOptions.historic.map((option) => (
-                        <label key={option.value} className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedCategories.historic.includes(option.value)}
-                            onChange={() => handleCategoryChange('historic', option.value)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-              </div>
-              <div className="mb-4">
-                {/* Recreational & Leisure */}
-                <details className="bg-white rounded-lg shadow-sm border">
-                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                    <span>Recreational & Leisure</span>
-                    <span className="text-xs text-blue-600">{selectedCategories.leisure.length} selected</span>
-                  </summary>
-                  <div className="px-4 py-3 border-t">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {categoryOptions.leisure.map((option) => (
-                        <label key={option.value} className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedCategories.leisure.includes(option.value)}
-                            onChange={() => handleCategoryChange('leisure', option.value)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-              </div>
-              <div className="mb-4">
-                {/* Entertainment & Nightlife */}
-                <details className="bg-white rounded-lg shadow-sm border">
-                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                    <span>Entertainment & Nightlife</span>
-                    <span className="text-xs text-blue-600">{selectedCategories.entertainment.length} selected</span>
-                  </summary>
-                  <div className="px-4 py-3 border-t">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {categoryOptions.entertainment.map((option) => (
-                        <label key={option.value} className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedCategories.entertainment.includes(option.value)}
-                            onChange={() => handleCategoryChange('entertainment', option.value)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-              </div>
-              <div className="mb-4">
-                {/* Sports & Outdoor Activities */}
-                <details className="bg-white rounded-lg shadow-sm border">
-                  <summary className="px-4 py-2 cursor-pointer font-medium flex justify-between items-center">
-                    <span>Sports & Outdoor Activities</span>
-                    <span className="text-xs text-blue-600">{selectedCategories.sports.length} selected</span>
-                  </summary>
-                  <div className="px-4 py-3 border-t">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {categoryOptions.sports.map((option) => (
-                        <label key={option.value} className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedCategories.sports.includes(option.value)}
-                            onChange={() => handleCategoryChange('sports', option.value)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-              </div>
-            </div>
-
-            {/* Your Destinations & Points of Interest */}
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-xl font-semibold mb-4 flex items-center">
-                <MapPinIcon className="h-5 w-5 mr-2 text-blue-600" />
-                Your Destinations & Points of Interest
-              </h2>
-
-              {tripDays.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p>No destinations added yet.</p>
-                  <p className="text-sm mt-2">Search and add locations to plan your route.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {tripDays.map((day) => (
-                    <div key={day.id} className="border rounded-lg p-3 hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 mr-2 min-w-0">
-                          <div className="flex items-center flex-wrap gap-1 mb-1">
-                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0">
-                              Destination
-                            </span>
-                            <h3 className="font-medium text-sm truncate">{day.location.name}</h3>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs text-gray-600 truncate">
-                              {day.location.city && day.location.country
-                                ? `${day.location.city}, ${day.location.country}`
-                                : day.location.country || 'Location details not available'}
-                            </p>
-                            <button
-                              onClick={() => openInGoogleMaps(day)}
-                              className="text-blue-600 hover:text-blue-800 ml-1 flex-shrink-0"
-                              title="View in Google Maps"
-                            >
-                              <ArrowTopRightOnSquareIcon className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveDay(day.id)}
-                          className="text-red-500 hover:text-red-700 flex-shrink-0"
-                          title="Remove this day"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {tripDays.length >= 2 && (
-                    <button
-                      onClick={generatePlan}
-                      disabled={isGeneratingPlan}
-                      className="w-full mt-3 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                    >
-                      {isGeneratingPlan ? (
-                        <>
-                          <ArrowPathIcon className="h-4 w-4 mr-1 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <PlusIcon className="h-4 w-4 mr-1" />
-                          Generate Trip Plan
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        </div >
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8 hidden">
           {/* This section is now hidden as we moved it to the right panel */}
@@ -3190,101 +3764,7 @@ const Planning = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
           {/* All Points of Interest */}
-          {pointsOfInterest.length > 0 && (
-            <div className="bg-white p-4 sm:p-6 rounded-lg shadow-lg col-span-1 lg:col-span-3">
-              <h2 className="text-xl font-semibold mb-4 flex items-center">
-                <MapPinIcon className="h-5 w-5 mr-2 text-red-600" />
-                All Points of Interest
-              </h2>
-              <p className="text-sm text-gray-600 mb-4">
-                Select points of interest to include in your trip ({pointsOfInterest.length} found)
-              </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pointsOfInterest.map((poi) => (
-                  <div
-                    key={poi.id}
-                    className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
-                      selectedPOI === poi.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                    } ${poi.selected ? 'border-green-500' : ''}`}
-                    onClick={() => handlePOIClick(poi)}
-                  >
-                    <div className="flex flex-col h-full">
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-medium text-lg line-clamp-2">{poi.name}</h3>
-                        <div className="flex space-x-1 ml-2 flex-shrink-0">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openInGoogleMaps(poi);
-                            }}
-                            className="p-1 text-blue-600 hover:text-blue-800"
-                            title="Open in Google Maps"
-                          >
-                            <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                          {poi.type || 'Point of Interest'}
-                        </span>
-                        {poi.locality && (
-                          <span className="bg-gray-100 text-gray-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                            {poi.locality}
-                          </span>
-                        )}
-                        {poi.distanceToRoute && (
-                          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full">
-                            {poi.distanceToRoute.toFixed(1)}km
-                          </span>
-                        )}
-                      </div>
-                      
-                      <p className="text-sm text-gray-600 mb-3 flex-grow line-clamp-3">
-                        {poi.description || `A ${poi.type || 'point of interest'} in ${poi.locality || 'this area'}.`}
-                      </p>
-                      
-                      <div className="flex justify-between items-center mt-auto pt-2 border-t">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Toggle selection of this POI
-                            setPointsOfInterest(
-                              pointsOfInterest.map((p) =>
-                                p.id === poi.id ? { ...p, selected: !p.selected } : p
-                              )
-                            );
-                          }}
-                          className={`px-3 py-1 text-sm rounded-full ${
-                            poi.selected
-                              ? 'bg-green-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {poi.selected ? 'Selected' : 'Add to Trip'}
-                        </button>
-                        
-                        <a
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            openInGoogleMaps(poi);
-                          }}
-                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
-                        >
-                          <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
-                          View in Maps
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Route Points of Interest */}
           {routePOIs.length > 0 && (
@@ -3301,9 +3781,8 @@ const Planning = () => {
                 {routePOIs.map((poi) => (
                   <div
                     key={poi.id}
-                    className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
-                      selectedPOI === poi.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                    } ${poi.selected ? 'border-green-500' : ''}`}
+                    className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${selectedPOI === poi.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                      } ${poi.selected ? 'border-green-500' : ''}`}
                     onClick={() => handlePOIClick(poi)}
                   >
                     <div className="flex flex-col h-full">
@@ -3322,7 +3801,7 @@ const Planning = () => {
                           </button>
                         </div>
                       </div>
-                      
+
                       <div className="flex flex-wrap gap-2 mb-2">
                         <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full">
                           {poi.type || 'Point of Interest'}
@@ -3343,11 +3822,11 @@ const Planning = () => {
                           </span>
                         )}
                       </div>
-                      
+
                       <p className="text-sm text-gray-600 mb-3 flex-grow line-clamp-3">
                         {poi.description || `A ${poi.type || 'point of interest'} in ${poi.locality || 'this area'}.`}
                       </p>
-                      
+
                       <div className="flex justify-between items-center mt-auto pt-2 border-t">
                         <button
                           onClick={(e) => {
@@ -3359,15 +3838,14 @@ const Planning = () => {
                               )
                             );
                           }}
-                          className={`px-3 py-1 text-sm rounded-full ${
-                            poi.selected
-                              ? 'bg-green-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
+                          className={`px-3 py-1 text-sm rounded-full ${poi.selected
+                            ? 'bg-green-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
                         >
                           {poi.selected ? 'Selected' : 'Add to Trip'}
                         </button>
-                        
+
                         <a
                           href="#"
                           onClick={(e) => {
@@ -3389,245 +3867,151 @@ const Planning = () => {
           )}
 
           {/* Points of Interest */}
-          {pointsOfInterest.length > 0 && (
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-xl font-semibold mb-4">Points of Interest</h2>
 
-              <div className="space-y-6">
-                {tripDays.map((day, index) => {
-                  const dayPOIs = pointsOfInterest.filter((poi) => poi.dayId === day.id);
+        </div>
+      </div >
 
-                  if (dayPOIs.length === 0) return null;
 
-                  return (
-                    <div key={day.id} className="space-y-3">
-                      <h3 className="font-medium flex items-center">
-                        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full mr-2">
-                          Day {index + 1}
-                        </span>
-                        {day.location.city || day.location.name}
-                      </h3>
+      {/* Screen-wide Results Section Below Map */}
+      {
+        pointsOfInterest.length > 0 && (
+          <div className="mt-8 bg-white p-6 rounded-lg shadow-lg w-full">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+              <h2 className="text-2xl font-bold flex items-center text-gray-800">
+                <MapPinIcon className="h-7 w-7 mr-3 text-blue-600" />
+                Found Points of Interest ({pointsOfInterest.length})
+              </h2>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={recommendBestPOIs}
+                  disabled={isRecommending}
+                  className="flex items-center space-x-2 text-sm px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-bold transition-colors shadow-sm"
+                >
+                  {isRecommending ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <SparklesIcon className="h-4 w-4" />}
+                  <span>AI Top Picks</span>
+                </button>
 
-                      <div className="grid grid-cols-1 gap-2">
-                        {dayPOIs.map((poi) => (
-                          <div
-                            key={poi.id}
-                            className={`text-sm border-l-2 ${selectedPOI === poi.id ? 'border-green-500 bg-green-50' : 'border-blue-500'} pl-3 py-2 pr-2 rounded-r flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors`}
-                            onClick={() => handlePOIClick(poi)}
-                          >
-                            <div>
-                              {editingPOI === poi.id ? (
-                                <input
-                                  type="text"
-                                  value={newPOIName}
-                                  onChange={(e) => setNewPOIName(e.target.value)}
-                                  className="w-full p-1 border rounded"
-                                  onClick={(e) => e.stopPropagation()}
-                                  autoFocus
-                                />
-                              ) : (
-                                <>
-                                  <p className="font-medium">{poi.name}</p>
-                                  <p className="text-xs text-gray-600 capitalize">{poi.type}</p>
-                                  <a
-                                    href="#"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      openInGoogleMaps(poi);
-                                    }}
-                                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center mt-1"
-                                  >
-                                    <ArrowTopRightOnSquareIcon className="h-3 w-3 mr-1" />
-                                    View in Google Maps
-                                  </a>
-                                </>
-                              )}
-                            </div>
-                            <div className="flex space-x-1">
-                              {editingPOI === poi.id ? (
-                                <>
-                                  <button
-                                    onClick={(e) => handleSavePOI(e, poi.id)}
-                                    className="p-1 text-green-600 hover:text-green-800"
-                                    title="Save changes"
-                                  >
-                                    <PlusIcon className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={handleCancelEdit}
-                                    className="p-1 text-red-600 hover:text-red-800"
-                                    title="Cancel editing"
-                                  >
-                                    <XMarkIcon className="h-4 w-4" />
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={(e) => handleEditPOI(e, poi)}
-                                    className="p-1 text-blue-600 hover:text-blue-800"
-                                    title="Edit"
-                                  >
-                                    <PencilIcon className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => handleDeletePOI(e, poi.id)}
-                                    className="p-1 text-red-600 hover:text-red-800"
-                                    title="Delete"
-                                  >
-                                    <TrashIcon className="h-4 w-4" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+                <button
+                  onClick={generatePDF}
+                  className="flex items-center space-x-2 text-sm px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md font-bold transition-colors shadow-sm"
+                >
+                  <DocumentArrowDownIcon className="h-4 w-4" />
+                  <span>PDF Plan</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const allSelected = pointsOfInterest.every(p => p.selected);
+                    setPointsOfInterest(pointsOfInterest.map(p => ({ ...p, selected: !allSelected })));
+                  }}
+                  className="text-sm px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md font-medium transition-colors"
+                >
+                  {pointsOfInterest.every(p => p.selected) ? 'Deselect All' : 'Select All'}
+                </button>
               </div>
             </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Add Select All button for POIs */}
-      {pointsOfInterest.length > 0 && (
-        <div className="flex justify-end mb-4 px-4">
-          <Button
-            onClick={() => {
-              // Toggle all POIs based on current state
-              const allSelected = pointsOfInterest.every(poi => poi.selected);
-              setPointsOfInterest(
-                pointsOfInterest.map(poi => ({
-                  ...poi,
-                  selected: !allSelected
-                }))
-              );
-            }}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-1 px-3 rounded text-sm"
-          >
-            {pointsOfInterest.every(poi => poi.selected) ? 'Deselect All' : 'Select All'}
-          </Button>
-        </div>
-      )}
 
-      {/* POI Section */}
-      {pointsOfInterest.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow-lg mt-6">
-          <h2 className="text-lg font-semibold mb-4">
-            Select points of interest to include in your trip ({pointsOfInterest.filter(poi => poi.name && poi.name !== 'Unnamed').length} found)
-          </h2>
-          
-          {/* POI Filters */}
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Filter by category:</h3>
-            <div className="flex flex-wrap gap-2">
-              {Object.keys(poiFilters).map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setPoiFilters({
-                    ...poiFilters,
-                    [category]: !poiFilters[category]
-                  })}
-                  className={`px-3 py-1.5 rounded-full text-xs ${
-                    poiFilters[category]
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {pointsOfInterest.map((poi) => (
+                <div
+                  key={poi.id}
+                  onClick={() => handlePOIClick(poi)}
+                  className={`bg-white border rounded-xl overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-200 group ${poi.selected ? 'ring-2 ring-green-500 border-green-500 bg-green-50/10' : 'border-gray-200'
+                    }`}
                 >
-                  {category}
-                  <span className="ml-1">
-                    ({pointsOfInterest.filter(poi => 
-                      poi && // Check if poi exists
-                      categorizePOI(poi.type || '') === category && 
-                      poi.name && 
-                      poi.name !== 'Unnamed'
-                    ).length})
-                  </span>
-                </button>
+                  <div className="p-5">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-gray-900 line-clamp-1 group-hover:text-blue-600 transition-colors" title={poi?.name}>{poi?.name || 'Unnamed'}</h3>
+                      <span className={`flex-shrink-0 ml-2 px-2 py-1 text-xs rounded-full font-medium ${poi?.type === 'restaurant' ? 'bg-orange-100 text-orange-800' :
+                        poi?.type === 'hotel' ? 'bg-indigo-100 text-indigo-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                        {poi?.type || 'POI'}
+                      </span>
+                    </div>
+
+                    {poi?.locality && (
+                      <div className="flex items-center text-sm text-gray-500 mb-3">
+                        <MapPinIcon className="h-3 w-3 mr-1 flex-shrink-0" />
+                        <span className="truncate">{poi.locality}</span>
+                      </div>
+                    )}
+
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2 min-h-[2.5em]">
+                      {poi?.description || `Discover ${poi?.name} in ${poi?.locality || 'this area'}.`}
+                    </p>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                      <a
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openInGoogleMaps(poi);
+                        }}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+                      >
+                        <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 mr-1" />
+                        Map
+                      </a>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPointsOfInterest(
+                            pointsOfInterest.map((p) =>
+                              p.id === poi.id ? { ...p, selected: !p.selected } : p
+                            )
+                          );
+                        }}
+                        className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-all shadow-sm ${poi.selected
+                          ? 'bg-green-500 text-white hover:bg-green-600'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                      >
+                        {poi.selected ? 'Added' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
-          
-          {/* POI List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {getFilteredPOIs().map((poi) => (
-              <div
-                key={poi.id || Math.random().toString(36).substr(2, 9)} // Ensure unique key even if id is missing
-                className={`border rounded-lg p-4 transition-all ${
-                  poi.selected
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-medium text-gray-900">{poi.name || 'Unnamed'}</h3>
-                    <p className="text-sm text-gray-500 capitalize">{poi.type || 'Unknown'}</p>
-                    {poi.locality && (
-                      <p className="text-xs text-gray-500 mt-1">{poi.locality}</p>
-                    )}
-                    {poi.description && (
-                      <p className="text-xs text-gray-600 mt-2 line-clamp-2">{poi.description}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => togglePOISelection(poi.id)}
-                    className={`ml-2 p-1.5 rounded-full ${
-                      poi.selected
-                        ? 'bg-green-500 text-white hover:bg-green-600'
-                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                    }`}
-                    style={{ backgroundColor: poi.selected ? '#10b981' : '' }}
-                  >
-                    <CheckIcon 
-                      className="h-4 w-4" 
-                      style={{ color: poi.selected ? 'white' : 'currentColor' }} 
-                    />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          {getFilteredPOIs().length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              No points of interest match your selected filters.
-            </div>
-          )}
-        </div>
-      )}
+        )
+      }
+
+      {/* Add Select All button for POIs */}
+
 
       {/* Add this after the POI section */}
-      {pointsOfInterest.filter(poi => poi.selected).length > 0 && (
-        <div className="container mx-auto px-4 mt-6 mb-10 text-center">
-          <button 
-            onClick={generatePDF}
-            className="mx-2 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Create Trip Layout
-          </button>
-          
-          {!isGeneratingPlan && (
-            <button 
-              onClick={() => {
-                setIsGeneratingPlan(true);
-                generatePlan().then(() => {
-                  // Hide the button after generating
-                  setIsGeneratingPlan(false);
-                });
-              }}
-              className="mx-2 px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
+      {
+        pointsOfInterest.filter(poi => poi.selected).length > 0 && (
+          <div className="container mx-auto px-4 mt-6 mb-10 text-center">
+            <button
+              onClick={generatePDF}
+              className="mx-2 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
-              Generate Again
+              Create Trip Layout
             </button>
-          )}
-        </div>
-      )}
-    </div>
+
+            {!isGeneratingPlan && (
+              <button
+                onClick={() => {
+                  setIsGeneratingPlan(true);
+                  generatePlan().then(() => {
+                    // Hide the button after generating
+                    setIsGeneratingPlan(false);
+                  });
+                }}
+                className="mx-2 px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Generate Again
+              </button>
+            )}
+          </div>
+        )
+      }
+    </div >
   );
 };
 

@@ -21,9 +21,19 @@ app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5001'],
+  origin: ['http://localhost:3000', 'http://localhost:5001', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:5173'],
   credentials: true
 }));
+
+// Log endpoint for client-side events
+app.post('/api/logs', (req, res) => {
+  const { type, content } = req.body;
+  console.log(`\n\n[CLIENT LOG] ${type}:`);
+  console.log('----------------------------------------');
+  console.log(typeof content === 'object' ? JSON.stringify(content, null, 2) : content);
+  console.log('----------------------------------------\n');
+  res.status(200).send('Logged');
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
