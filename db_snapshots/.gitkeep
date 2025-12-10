@@ -1,0 +1,2 @@
+# Keep this directory but ignore old snapshots
+# The pre-commit hook will add fresh snapshots
