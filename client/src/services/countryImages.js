@@ -56,6 +56,79 @@ export const COUNTRY_PRESETS = {
   },
 };
 
+/**
+ * Popular destinations per country (name + coords). Images are fetched from
+ * Pexels at runtime by city name, so no image URLs are hardcoded here. Used to
+ * populate the landing hero's "Popular destinations in {country}" when the user
+ * searches somewhere new. Extend freely.
+ */
+export const COUNTRY_CITIES = {
+  Romania: [
+    { name: 'Brașov', lat: 45.6579, lon: 25.6012 },
+    { name: 'Cluj-Napoca', lat: 46.7712, lon: 23.6236 },
+    { name: 'Sibiu', lat: 45.7983, lon: 24.1256 },
+    { name: 'Constanța', lat: 44.1598, lon: 28.6348 },
+  ],
+  France: [
+    { name: 'Paris', lat: 48.8566, lon: 2.3522 },
+    { name: 'Nice', lat: 43.7102, lon: 7.262 },
+    { name: 'Lyon', lat: 45.764, lon: 4.8357 },
+    { name: 'Bordeaux', lat: 44.8378, lon: -0.5792 },
+  ],
+  Italy: [
+    { name: 'Rome', lat: 41.9028, lon: 12.4964 },
+    { name: 'Venice', lat: 45.4408, lon: 12.3155 },
+    { name: 'Florence', lat: 43.7696, lon: 11.2558 },
+    { name: 'Milan', lat: 45.4642, lon: 9.19 },
+  ],
+  Spain: [
+    { name: 'Barcelona', lat: 41.3874, lon: 2.1686 },
+    { name: 'Madrid', lat: 40.4168, lon: -3.7038 },
+    { name: 'Seville', lat: 37.3891, lon: -5.9845 },
+    { name: 'Valencia', lat: 39.4699, lon: -0.3763 },
+  ],
+  'United Kingdom': [
+    { name: 'London', lat: 51.5074, lon: -0.1278 },
+    { name: 'Edinburgh', lat: 55.9533, lon: -3.1883 },
+    { name: 'Manchester', lat: 53.4808, lon: -2.2426 },
+    { name: 'Bath', lat: 51.3811, lon: -2.3599 },
+  ],
+  Germany: [
+    { name: 'Berlin', lat: 52.52, lon: 13.405 },
+    { name: 'Munich', lat: 48.1351, lon: 11.582 },
+    { name: 'Hamburg', lat: 53.5511, lon: 9.9937 },
+    { name: 'Cologne', lat: 50.9375, lon: 6.9603 },
+  ],
+  Greece: [
+    { name: 'Athens', lat: 37.9838, lon: 23.7275 },
+    { name: 'Santorini', lat: 36.3932, lon: 25.4615 },
+    { name: 'Thessaloniki', lat: 40.6401, lon: 22.9444 },
+    { name: 'Mykonos', lat: 37.4467, lon: 25.3289 },
+  ],
+  Netherlands: [
+    { name: 'Amsterdam', lat: 52.3676, lon: 4.9041 },
+    { name: 'Rotterdam', lat: 51.9244, lon: 4.4777 },
+    { name: 'Utrecht', lat: 52.0907, lon: 5.1214 },
+    { name: 'The Hague', lat: 52.0705, lon: 4.3007 },
+  ],
+  Portugal: [
+    { name: 'Lisbon', lat: 38.7223, lon: -9.1393 },
+    { name: 'Porto', lat: 41.1579, lon: -8.6291 },
+    { name: 'Faro', lat: 37.0194, lon: -7.9304 },
+    { name: 'Sintra', lat: 38.8029, lon: -9.3817 },
+  ],
+  'United States': [
+    { name: 'New York', lat: 40.7128, lon: -74.006 },
+    { name: 'Los Angeles', lat: 34.0522, lon: -118.2437 },
+    { name: 'Miami', lat: 25.7617, lon: -80.1918 },
+    { name: 'San Francisco', lat: 37.7749, lon: -122.4194 },
+  ],
+};
+
+/** Cities for a country (falls back to the default country's cities). */
+export const citiesForCountry = (country) =>
+  COUNTRY_CITIES[country] || COUNTRY_CITIES[DEFAULT_COUNTRY] || [];
+
 /** Generic, permanent property-card fallbacks by property type. */
 const PROPERTY_FALLBACKS = {
   apartment: 'https://images.pexels.com/photos/7587828/pexels-photo-7587828.jpeg',

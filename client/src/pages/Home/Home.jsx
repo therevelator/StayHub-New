@@ -21,6 +21,7 @@ import {
   detectCountry,
   fetchPhotos,
   propertyImage,
+  citiesForCountry,
   DEFAULT_COUNTRY,
 } from '../../services/countryImages';
 import DatePicker from 'react-datepicker';
@@ -79,6 +80,7 @@ const Home = () => {
   const [activeHero, setActiveHero] = useState(0);
   const [properties, setProperties] = useState([]);
   const [popularDestinations, setPopularDestinations] = useState([]);
+  const [highlights, setHighlights] = useState(getPreset(DEFAULT_COUNTRY).highlights);
   const preset = useMemo(() => getPreset(country), [country]);
   const [filteredProperties, setFilteredProperties] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
@@ -336,23 +338,53 @@ const Home = () => {
     return () => clearInterval(id);
   }, [heroImages]);
 
-  // When we learn the user's country, swap presets and fetch fresh hero photos.
+  // Load a country's vibe: hero photos + popular destinations (with per-city
+  // images), all from free Pexels/geocoding. Works for any country.
+  const loadCountry = useCallback(async (rawCountry) => {
+    const detected = rawCountry || DEFAULT_COUNTRY;
+    setCountry(detected);
+
+    // Hero images for the country (fallback to the curated preset).
+    const heroPhotos = await fetchPhotos(`${detected} travel landscape`, 5);
+    if (heroPhotos.length > 0) {
+      setHeroImages(heroPhotos);
+      setActiveHero(0);
+    } else {
+      setHeroImages(getPreset(detected).hero);
+    }
+
+    // Popular destinations: fetch one photo per city.
+    const cities = citiesForCountry(detected);
+    const withImages = await Promise.all(
+      cities.map(async (c) => {
+        const [photo] = await fetchPhotos(`${c.name} ${detected} city`, 1);
+        return { ...c, image: photo || '' };
+      })
+    );
+    setPopularDestinations(withImages);
+
+    // "Why visit" highlights: generic categories, country-specific images.
+    const cats = [
+      { title: 'Rich History & Culture', q: 'landmark castle architecture', text: `Explore ${detected}'s storied past — historic towns, monuments and living traditions.` },
+      { title: 'Breathtaking Nature', q: 'nature landscape scenery', text: `From coastlines to mountains, ${detected} offers unforgettable outdoor adventures.` },
+      { title: 'Delicious Cuisine', q: 'traditional food cuisine', text: `Savour ${detected}'s local dishes, markets and celebrated wines.` },
+    ];
+    const highlightCards = await Promise.all(
+      cats.map(async (cat) => {
+        const [photo] = await fetchPhotos(`${detected} ${cat.q}`, 1);
+        return { title: cat.title, text: cat.text, image: photo || '' };
+      })
+    );
+    setHighlights(highlightCards);
+  }, []);
+
+  // When we learn the user's country from geolocation, load it.
   useEffect(() => {
     if (!userLocation) return;
     let cancelled = false;
     (async () => {
       const detected = await detectCountry(userLocation);
-      if (cancelled) return;
-      setCountry(detected);
-      const nextPreset = getPreset(detected);
-      setPopularDestinations(nextPreset.destinations);
-      const fresh = await fetchPhotos(`${detected} travel landscape`, 5);
-      if (!cancelled && fresh.length > 0) {
-        setHeroImages(fresh);
-        setActiveHero(0);
-      } else if (!cancelled) {
-        setHeroImages(nextPreset.hero);
-      }
+      if (!cancelled) await loadCountry(detected);
     })();
     return () => {
       cancelled = true;
@@ -435,10 +467,10 @@ const Home = () => {
         }
       } else {
         try {
-          // Geocode the entered location
+          // Geocode the entered location (addressdetails gives us the country).
           console.log('Geocoding location:', location);
-          const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`;
-          const geocodeResponse = await fetch(geocodeUrl);
+          const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(location)}`;
+          const geocodeResponse = await fetch(geocodeUrl, { headers: { 'Accept-Language': 'en' } });
           const geocodeData = await geocodeResponse.json();
 
           if (!geocodeData.length) {
@@ -452,6 +484,12 @@ const Home = () => {
             lat: parseFloat(geocodeData[0].lat),
             lon: parseFloat(geocodeData[0].lon)
           };
+
+          // Switch the hero + destinations to the searched country.
+          const searchedCountry = geocodeData[0].address?.country;
+          if (searchedCountry && searchedCountry !== country) {
+            loadCountry(searchedCountry);
+          }
         } catch (error) {
           console.error('Geocoding error:', error);
           throw new Error('Failed to find the location. Please try a different location.');
@@ -791,7 +829,7 @@ const Home = () => {
     }
   };
 
-  const heroTitleCountry = preset.label || country;
+  const heroTitleCountry = country;
 
   return (
     <div className="lp-root min-h-screen bg-gray-50">
@@ -1168,7 +1206,7 @@ const Home = () => {
                 <p className="lp-section-sub">A few reasons to pack your bags</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {preset.highlights.map((h) => (
+                {highlights.map((h) => (
                   <div key={h.title} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden group">
                     <div className="h-52 overflow-hidden">
                       <img
