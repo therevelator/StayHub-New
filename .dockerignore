@@ -1,0 +1,9 @@
+**/node_modules
+client/dist
+dist
+.git
+.github
+cypress
+cypress.config.js
+**/*.log
+.DS_Store
