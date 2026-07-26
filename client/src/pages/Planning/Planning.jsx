@@ -92,6 +92,92 @@ const MapEvents = ({ onClick }) => {
   return null;
 };
 
+// A city/locality autocomplete backed by Nominatim (OpenStreetMap). Manages its
+// own debounced query + suggestion dropdown so it can be reused for the origin,
+// each intermediate stop and the destination.
+const CityAutocomplete = ({ value, onChange, placeholder, dotColor, onRemove, onEnter }) => {
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const timer = useRef(null);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  const runQuery = (q) => {
+    if (timer.current) clearTimeout(timer.current);
+    if (!q || q.trim().length < 3) { setResults([]); setOpen(false); return; }
+    timer.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(q)}`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const data = await r.json();
+        if (Array.isArray(data)) {
+          const seen = new Set();
+          const opts = [];
+          for (const d of data) {
+            const a = d.address || {};
+            const place = a.city || a.town || a.village || a.municipality || a.county || d.name;
+            const label = [place, a.country].filter(Boolean).join(', ') || d.display_name;
+            if (place && !seen.has(label)) { seen.add(label); opts.push({ label }); }
+          }
+          setResults(opts);
+          setOpen(opts.length > 0);
+        }
+      } catch { /* ignore lookup errors */ } finally {
+        setLoading(false);
+      }
+    }, 350);
+  };
+
+  const handleChange = (e) => { onChange(e.target.value); runQuery(e.target.value); };
+  const pick = (o) => { onChange(o.label); setResults([]); setOpen(false); };
+
+  return (
+    <div className="relative" ref={boxRef}>
+      <div className="flex items-center gap-2 p-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-primary-500">
+        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor}`} />
+        <input
+          type="text"
+          value={value}
+          onChange={handleChange}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { setOpen(false); onEnter?.(); } }}
+          placeholder={placeholder}
+          className="w-full outline-none text-gray-700 text-sm"
+        />
+        {loading && <ArrowPathIcon className="h-4 w-4 text-gray-400 animate-spin flex-shrink-0" />}
+        {onRemove && (
+          <button onClick={onRemove} className="text-red-500 hover:text-red-700 flex-shrink-0" title="Remove stop">
+            <XMarkIcon className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute z-[1000] left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-56 overflow-auto">
+          {results.map((o, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => pick(o)}
+              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Planning = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -2770,50 +2856,33 @@ const Planning = () => {
 
                     <div className="grid gap-2">
                       {/* Origin */}
-                      <div className="flex items-center gap-2 p-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-primary-500">
-                        <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" title="Origin" />
-                        <input
-                          type="text"
-                          value={aiOrigin}
-                          onChange={(e) => setAiOrigin(e.target.value)}
-                          placeholder="From — origin (optional), e.g. Bucharest, Romania"
-                          className="w-full outline-none text-gray-700 text-sm"
-                        />
-                      </div>
+                      <CityAutocomplete
+                        value={aiOrigin}
+                        onChange={setAiOrigin}
+                        placeholder="From — origin (optional), e.g. Bucharest, Romania"
+                        dotColor="bg-green-500"
+                      />
 
                       {/* Intermediate stops */}
                       {aiWaypoints.map((wp, i) => (
-                        <div key={i} className="flex items-center gap-2 p-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-primary-500">
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0" title={`Stop ${i + 1}`} />
-                          <input
-                            type="text"
-                            value={wp}
-                            onChange={(e) => setAiWaypoints(aiWaypoints.map((w, idx) => (idx === i ? e.target.value : w)))}
-                            placeholder={`Stop ${i + 1} — intermediate destination`}
-                            className="w-full outline-none text-gray-700 text-sm"
-                          />
-                          <button
-                            onClick={() => setAiWaypoints(aiWaypoints.filter((_, idx) => idx !== i))}
-                            className="text-red-500 hover:text-red-700 flex-shrink-0"
-                            title="Remove stop"
-                          >
-                            <XMarkIcon className="h-4 w-4" />
-                          </button>
-                        </div>
+                        <CityAutocomplete
+                          key={i}
+                          value={wp}
+                          onChange={(v) => setAiWaypoints(aiWaypoints.map((w, idx) => (idx === i ? v : w)))}
+                          placeholder={`Stop ${i + 1} — intermediate destination`}
+                          dotColor="bg-blue-500"
+                          onRemove={() => setAiWaypoints(aiWaypoints.filter((_, idx) => idx !== i))}
+                        />
                       ))}
 
                       {/* Destination */}
-                      <div className="flex items-center gap-2 p-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-primary-500">
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0" title="Destination" />
-                        <input
-                          type="text"
-                          value={aiDestination}
-                          onChange={(e) => setAiDestination(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') generateAiGuide(); }}
-                          placeholder="To — destination, e.g. Brasov, Romania"
-                          className="w-full outline-none text-gray-700 text-sm"
-                        />
-                      </div>
+                      <CityAutocomplete
+                        value={aiDestination}
+                        onChange={setAiDestination}
+                        placeholder="To — destination, e.g. Brasov, Romania"
+                        dotColor="bg-red-500"
+                        onEnter={generateAiGuide}
+                      />
 
                       <button
                         onClick={() => setAiWaypoints([...aiWaypoints, ''])}
