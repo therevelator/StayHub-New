@@ -12,17 +12,29 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+// Build the hidden prompt from the traveller's filters. This runs server-side
+// only — the client never sees or sends the prompt text, just the raw filters.
+const buildPreferenceLines = ({ interests, tripStyle, transportMode, hasCar }) => {
+  const lines = [];
+  if (interests?.length) lines.push(`The traveller is interested in: ${interests.join(', ')}.`);
+  if (tripStyle?.length) lines.push(`Trip style: ${tripStyle.join(', ')}. Tailor the pace, budget level and vibe of the suggestions to this.`);
+  if (transportMode) {
+    lines.push(`They will get around by ${transportMode}. Keep each day's places reachable that way and grouped so travel between them is reasonable.`);
+  }
+  if (hasCar) lines.push('They have a car, so day-trips a bit further out are fine.');
+  return lines.join('\n');
+};
+
 // Ask Gemini for a structured, day-by-day itinerary as JSON.
-const generateItinerary = async ({ destination, days, interests }) => {
+const generateItinerary = async ({ destination, days, interests, tripStyle, transportMode, hasCar }) => {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is not configured');
 
-  const interestLine = interests?.length
-    ? `The traveller is interested in: ${interests.join(', ')}.`
-    : '';
+  const preferenceLines = buildPreferenceLines({ interests, tripStyle, transportMode, hasCar });
 
-  const prompt = `You are a travel guide. Plan a ${days}-day trip to ${destination}. ${interestLine}
-For each day give 3-4 real places to visit (landmarks, museums, parks, neighbourhoods, viewpoints, notable restaurants), in a sensible geographic order.
+  const prompt = `You are a travel guide. Plan a ${days}-day trip to ${destination}.
+${preferenceLines}
+For each day give 3-4 real places to visit (landmarks, museums, parks, neighbourhoods, viewpoints, notable restaurants), in a sensible geographic order that matches the preferences above.
 For every place include its real approximate latitude and longitude.
 Respond ONLY with JSON in exactly this shape:
 {"days":[{"day":1,"title":"short day theme","summary":"one sentence","places":[{"name":"...","category":"landmark|museum|nature|food|shopping|nightlife|viewpoint","description":"one short sentence","lat":0.0,"lon":0.0}]}]}`;
@@ -89,13 +101,27 @@ const hotelsNear = async (lat, lon, limit = 3, maxKm = 150) => {
 
 export const generateGuide = async (req, res) => {
   try {
-    const { destination, days = 3, interests = [] } = req.body || {};
+    const {
+      destination,
+      days = 3,
+      interests = [],
+      tripStyle = [],
+      transportMode = '',
+      hasCar = false,
+    } = req.body || {};
     if (!destination) {
       return res.status(400).json({ status: 'error', message: 'destination is required' });
     }
     const nDays = Math.min(Math.max(parseInt(days) || 3, 1), 7);
 
-    const rawDays = await generateItinerary({ destination, days: nDays, interests });
+    const rawDays = await generateItinerary({
+      destination,
+      days: nDays,
+      interests,
+      tripStyle,
+      transportMode,
+      hasCar,
+    });
 
     // Enrich each day: keep only places with coords, and attach nearby hotels
     // from our platform at the day's centre.
