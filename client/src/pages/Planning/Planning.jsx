@@ -2054,6 +2054,17 @@ const Planning = () => {
 
   const generateGuidePdf = () => {
     if (!aiGuide) return;
+    // jsPDF's built-in fonts use WinAnsi encoding, which does not cover
+    // Romanian diacritics (ș, ț, ă…). Fold everything to ASCII so place names
+    // render correctly instead of as garbage glyphs.
+    const t = (s) =>
+      String(s ?? '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/ș|ş/g, 's')
+        .replace(/ț|ţ/g, 't')
+        .replace(/ă|â/g, 'a')
+        .replace(/î/g, 'i');
     const doc = new jsPDF('p', 'mm', 'a4');
     const PW = 210, PH = 297, M = 16, CW = PW - M * 2, BOTTOM = 278;
 
@@ -2082,7 +2093,7 @@ const Planning = () => {
     doc.setFillColor(...amber); doc.rect(0, 46, PW, 2, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(26); doc.setTextColor(255);
     doc.text('Travel Guide', M, 25);
-    const routeLabel = [aiGuide.origin, ...(aiGuide.waypoints || []), aiGuide.destination].filter(Boolean).join('   →   ');
+    const routeLabel = [aiGuide.origin, ...(aiGuide.waypoints || []), aiGuide.destination].filter(Boolean).map(t).join('   >   ');
     doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(255);
     doc.text(doc.splitTextToSize(routeLabel, CW), M, 35);
     doc.setFontSize(8.5); doc.text('Personalised by StayHub AI', M, 43);
@@ -2095,7 +2106,8 @@ const Planning = () => {
     if (selInt.length) chips.push(selInt.join(', '));
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     let cx = M;
-    chips.forEach((c) => {
+    chips.forEach((c0) => {
+      const c = t(c0);
       const w = doc.getTextWidth(c) + 8;
       if (cx + w > PW - M) { cx = M; y += 9; }
       doc.setFillColor(243, 244, 246); doc.roundedRect(cx, y - 5, w, 7, 2, 2, 'F');
@@ -2115,11 +2127,11 @@ const Planning = () => {
         ensure(9);
         doc.setFillColor(...amber); doc.circle(M + 3, y - 1.4, 1, 'F');
         doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...ink);
-        doc.text(p.name, M + 7, y);
+        doc.text(t(p.name), M + 7, y);
         y += 4.6;
         if (p.description) {
           doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...gray);
-          const l = doc.splitTextToSize(p.description, CW - 10); ensure(l.length * 4.2);
+          const l = doc.splitTextToSize(t(p.description), CW - 10); ensure(l.length * 4.2);
           doc.text(l, M + 7, y); y += l.length * 4.2;
         }
         y += 2;
@@ -2133,23 +2145,23 @@ const Planning = () => {
       ensure(22);
       doc.setFillColor(...col); doc.roundedRect(M, y - 5, CW, 10, 2, 2, 'F');
       doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(255);
-      const dtitle = `Day ${day.day}${day.city ? ` · ${day.city}` : ''}${day.title ? `  —  ${day.title}` : ''}`;
+      const dtitle = t(`Day ${day.day}${day.city ? ` · ${day.city}` : ''}${day.title ? `  —  ${day.title}` : ''}`);
       doc.text(doc.splitTextToSize(dtitle, CW - 8)[0], M + 4, y + 1.5);
       y += 13;
       if (day.summary) {
         doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.setTextColor(...gray);
-        const l = doc.splitTextToSize(day.summary, CW - 4); ensure(l.length * 4.5);
+        const l = doc.splitTextToSize(t(day.summary), CW - 4); ensure(l.length * 4.5);
         doc.text(l, M + 2, y); y += l.length * 4.5 + 2;
       }
       (day.places || []).forEach((p) => {
         ensure(9);
         doc.setFillColor(...col); doc.circle(M + 4, y - 1.4, 1, 'F');
         doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(...ink);
-        doc.text(p.name, M + 8, y);
+        doc.text(t(p.name), M + 8, y);
         y += 4.6;
         if (p.description) {
           doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...gray);
-          const l = doc.splitTextToSize(p.description, CW - 12); ensure(l.length * 4.2);
+          const l = doc.splitTextToSize(t(p.description), CW - 12); ensure(l.length * 4.2);
           doc.text(l, M + 8, y); y += l.length * 4.2;
         }
         y += 2;
@@ -2163,7 +2175,7 @@ const Planning = () => {
         y += 8;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...ink);
         day.hotels.forEach((h) => {
-          const line = `${h.name}${h.fromPrice ? ` — from $${Math.round(h.fromPrice)}/night` : ''}   (${h.distanceKm} km)`;
+          const line = t(`${h.name}${h.fromPrice ? ` — from $${Math.round(h.fromPrice)}/night` : ''}   (${h.distanceKm} km)`);
           doc.text(line, M + 6, y); y += 5;
         });
         y += 3;
