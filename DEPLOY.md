@@ -60,13 +60,26 @@ npm run db:init --prefix server
 This executes [`server/src/db/schema.sql`](server/src/db/schema.sql) against the
 connected database (creates all 19 tables). It reads the same `DB_*` variables.
 
-> Re-running it re-creates the tables (drops existing) — only run it again if you
-> intend to reset the schema.
+Then load the demo data + demo accounts:
 
-The app starts empty; create data through the UI (register → become a host →
-add a property/rooms). If you want to preload your local demo data, export it
-locally and import it into the Railway DB with a MySQL client — keep that dump
-private (it contains user emails/password hashes), don't commit it.
+```
+npm run db:seed --prefix server
+```
+
+This loads [`server/src/db/seed-demo.sql`](server/src/db/seed-demo.sql) — 10
+properties, 18 rooms, and three ready-to-use accounts:
+
+| Role  | Email                | Password    |
+|-------|----------------------|-------------|
+| Admin | `admin@stayhub.demo` | `Demo1234!` |
+| Host  | `host@stayhub.demo`  | `Demo1234!` |
+| Guest | `guest@stayhub.demo` | `Demo1234!` |
+
+The host account owns all the seeded properties. The seed contains no real user
+data — only these demo accounts.
+
+> Re-running `db:init` re-creates the tables (drops existing) — only run it again
+> if you intend to reset. `db:seed` uses REPLACE, so it's safe to re-run.
 
 ## 5. Expose the app
 

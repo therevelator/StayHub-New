@@ -1,6 +1,6 @@
-// One-time database initializer: loads schema.sql into the configured MySQL.
-// Run once after provisioning the database, e.g. on Railway:
-//   npm run db:init --prefix server
+// Loads a .sql file into the configured MySQL. Defaults to schema.sql.
+//   npm run db:init --prefix server    -> loads schema.sql (creates tables)
+//   npm run db:seed --prefix server    -> loads seed-demo.sql (demo data)
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,7 +11,8 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const run = async () => {
-  const schemaPath = path.join(__dirname, 'schema.sql');
+  const file = process.argv[2] || 'schema.sql';
+  const schemaPath = path.join(__dirname, file);
   const schema = fs.readFileSync(schemaPath, 'utf8');
 
   const conn = await mysql.createConnection({
@@ -23,10 +24,10 @@ const run = async () => {
     multipleStatements: true,
   });
 
-  console.log(`Loading schema into "${process.env.DB_NAME || 'stayhub'}" ...`);
+  console.log(`Loading ${file} into "${process.env.DB_NAME || 'stayhub'}" ...`);
   await conn.query(schema);
   await conn.end();
-  console.log('Schema loaded ✅');
+  console.log(`${file} loaded ✅`);
 };
 
 run().catch((err) => {
