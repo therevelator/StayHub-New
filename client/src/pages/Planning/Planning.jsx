@@ -261,19 +261,20 @@ const Planning = () => {
     const { lat, lng } = e.latlng;
     setIsSearching(true);
 
-    // Reverse geocode the clicked location
+    // Reverse geocode the clicked location (free Nominatim)
     axios
       .get(
-        `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}&language=en`
+        `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${lat}&lon=${lng}`,
+        { headers: { 'Accept-Language': 'en' } }
       )
       .then((response) => {
-        if (response.data.results.length > 0) {
-          const result = response.data.results[0];
+        if (response.data && response.data.address) {
+          const result = response.data;
           const location = {
-            name: result.formatted,
+            name: result.display_name,
             lat,
             lng,
-            components: result.components,
+            components: result.address,
           };
           handleLocationSelect(location);
         }
@@ -496,16 +497,17 @@ const Planning = () => {
     setIsSearching(true);
     try {
       const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}&limit=5`
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(query)}`,
+        { headers: { 'Accept-Language': 'en' } }
       );
       const data = await response.json();
 
-      if (data.results) {
-        const locations = data.results.map((result) => ({
-          name: result.formatted,
-          lat: result.geometry.lat,
-          lng: result.geometry.lng,
-          components: result.components,
+      if (Array.isArray(data)) {
+        const locations = data.map((result) => ({
+          name: result.display_name,
+          lat: parseFloat(result.lat),
+          lng: parseFloat(result.lon),
+          components: result.address || {},
         }));
         setSearchResults(locations);
       }

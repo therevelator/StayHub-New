@@ -23,13 +23,14 @@ const AddressForm = ({ formData, setFormData, errors }) => {
     setAddressFound(false);
 
     try {
-      const geocodingUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(address)}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}`;
-      const response = await fetch(geocodingUrl);
+      const geocodingUrl = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+      const response = await fetch(geocodingUrl, { headers: { 'Accept-Language': 'en' } });
       const data = await response.json();
 
-      if (data.results && data.results.length > 0) {
-        const result = data.results[0];
-        const { lat, lng } = result.geometry;
+      if (Array.isArray(data) && data.length > 0) {
+        const result = data[0];
+        const lat = parseFloat(result.lat);
+        const lng = parseFloat(result.lon);
         
         setFormData(prev => ({
           ...prev,

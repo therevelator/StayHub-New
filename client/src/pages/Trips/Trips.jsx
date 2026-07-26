@@ -14,6 +14,17 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { debounce } from 'lodash';
 import { format } from 'date-fns';
 
+// Convert a Nominatim boundingbox ([south, north, west, east] strings) into the
+// { southwest, northeast } shape the map filtering expects.
+const nominatimBounds = (bb) => {
+  if (!Array.isArray(bb) || bb.length < 4) return undefined;
+  const [south, north, west, east] = bb.map(parseFloat);
+  return {
+    southwest: { lat: south, lng: west },
+    northeast: { lat: north, lng: east },
+  };
+};
+
 // Fix Leaflet default marker icon issue
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -79,16 +90,17 @@ const [markerClusterGroup, setMarkerClusterGroup] = useState(null);
     setIsSearching(true);
     try {
       const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}&limit=5`
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(query)}`,
+        { headers: { 'Accept-Language': 'en' } }
       );
       const data = await response.json();
-      
-      if (data.results) {
-        const locations = data.results.map(result => ({
-          name: result.formatted,
-          lat: result.geometry.lat,
-          lng: result.geometry.lng,
-          bounds: result.bounds
+
+      if (Array.isArray(data)) {
+        const locations = data.map(result => ({
+          name: result.display_name,
+          lat: parseFloat(result.lat),
+          lng: parseFloat(result.lon),
+          bounds: nominatimBounds(result.boundingbox)
         }));
         setSearchResults(locations);
       }
@@ -132,16 +144,17 @@ const [markerClusterGroup, setMarkerClusterGroup] = useState(null);
     setIsSearching(true);
     try {
       const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(searchQuery)}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}&limit=1`
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(searchQuery)}`,
+        { headers: { 'Accept-Language': 'en' } }
       );
       const data = await response.json();
-      
-      if (data.results && data.results.length > 0) {
+
+      if (Array.isArray(data) && data.length > 0) {
         const location = {
-          name: data.results[0].formatted,
-          lat: data.results[0].geometry.lat,
-          lng: data.results[0].geometry.lng,
-          bounds: data.results[0].bounds
+          name: data[0].display_name,
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon),
+          bounds: nominatimBounds(data[0].boundingbox)
         };
         handleLocationSelect(location);
       }
