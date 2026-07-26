@@ -3,6 +3,7 @@
     "client": "npm run dev --prefix client",
     "server": "npm start --prefix server",
     "start": "concurrently \"npm run client\" \"npm run server\"",
+    "start:ci": "concurrently \"npm run dev --prefix client -- --host 127.0.0.1 --port 3000 --strictPort\" \"npm start --prefix server\"",
     "test:e2e": "cypress run",
     "cypress:run": "cypress run",
     "cypress:open": "cypress open"

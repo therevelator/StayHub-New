@@ -23,7 +23,10 @@ jobs:
           --health-retries=15
 
     env:
-      # Backend
+      # Backend. Everything uses 127.0.0.1 (explicit IPv4) so the dev server,
+      # wait-on and Cypress's Chrome all agree on the address — `localhost` can
+      # resolve to IPv6 for one tool and IPv4 for another, which makes cy.visit
+      # fail with "could not load" even though the server is up.
       PORT: 5001
       NODE_ENV: development
       DB_HOST: 127.0.0.1
@@ -33,11 +36,11 @@ jobs:
       DB_PORT: 3306
       JWT_SECRET: ci-test-secret
       JWT_EXPIRES_IN: 24h
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: http://127.0.0.1:3000
       # Frontend — must point at the backend above
-      VITE_API_URL: http://localhost:5001/api
+      VITE_API_URL: http://127.0.0.1:5001/api
       # Cypress talks to the backend directly for setup/teardown
-      CYPRESS_apiUrl: http://localhost:5001/api
+      CYPRESS_apiUrl: http://127.0.0.1:5001/api
 
     steps:
       - uses: actions/checkout@v4
@@ -68,11 +71,12 @@ jobs:
         uses: cypress-io/github-action@v6
         with:
           install: false
-          # Boots the client (:3000) and the server (:5001) together.
-          start: npm start
-          wait-on: 'http://localhost:3000, http://localhost:5001/api/health'
+          # Boots the client (127.0.0.1:3000) and the server (:5001) together.
+          start: npm run start:ci
+          wait-on: 'http://127.0.0.1:3000, http://127.0.0.1:5001/api/health'
           wait-on-timeout: 120
           browser: chrome
+          config: baseUrl=http://127.0.0.1:3000
 
       - name: Upload failure artifacts
         if: failure()
