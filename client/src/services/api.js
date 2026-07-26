@@ -1,9 +1,24 @@
 import axios from 'axios';
 import Swal from 'sweetalert2';
 
+// Resolve the API base URL.
+// - In production (served from a real host by the Express server), always use a
+//   same-origin relative "/api" so there are no CORS concerns and no build-time
+//   URL baked in.
+// - Locally (localhost / 127.0.0.1) use VITE_API_URL (dev backend / Vite proxy).
+const resolveApiBase = () => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1') return '/api';
+  }
+  return import.meta.env.VITE_API_URL || '/api';
+};
+
+const API_BASE = resolveApiBase();
+
 // Create a base API instance for authenticated requests
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -44,7 +59,7 @@ api.interceptors.response.use(
 
 // Create a public API instance for endpoints that don't require authentication
 export const publicApi = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
   },

@@ -917,3 +917,7 @@ client/node_modules/.vite/deps/@headlessui_react.js
 cypress/screenshots/
 cypress/videos/
 cypress/downloads/
+
+# Build output
+client/dist/
+dist/

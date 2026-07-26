@@ -8,7 +8,8 @@
     "dev": "nodemon src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed": "node src/scripts/seedProperties.js",
-    "migrate": "node src/db/runMigrations.js"
+    "migrate": "node src/db/runMigrations.js",
+    "db:init": "node src/db/init.js"
   },
   "keywords": [],
   "author": "",

@@ -6,7 +6,9 @@
     "start:ci": "concurrently \"npm run dev --prefix client -- --host 127.0.0.1 --port 3000 --strictPort\" \"npm start --prefix server\"",
     "test:e2e": "cypress run",
     "cypress:run": "cypress run",
-    "cypress:open": "cypress open"
+    "cypress:open": "cypress open",
+    "build:railway": "npm ci --prefix server && npm ci --include=dev --prefix client && npm run build --prefix client",
+    "start:railway": "npm start --prefix server"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.3",
