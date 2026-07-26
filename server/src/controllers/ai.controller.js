@@ -12,32 +12,12 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-// Build the hidden prompt from the traveller's filters. This runs server-side
-// only — the client never sees or sends the prompt text, just the raw filters.
-const buildPreferenceLines = ({ interests, tripStyle, transportMode, hasCar }) => {
-  const lines = [];
-  if (interests?.length) lines.push(`The traveller is interested in: ${interests.join(', ')}.`);
-  if (tripStyle?.length) lines.push(`Trip style: ${tripStyle.join(', ')}. Tailor the pace, budget level and vibe of the suggestions to this.`);
-  if (transportMode) {
-    lines.push(`They will get around by ${transportMode}. Keep each day's places reachable that way and grouped so travel between them is reasonable.`);
-  }
-  if (hasCar) lines.push('They have a car, so day-trips a bit further out are fine.');
-  return lines.join('\n');
-};
+const hasCoords = (p) => p && typeof p.lat === 'number' && typeof p.lon === 'number';
 
-// Ask Gemini for a structured, day-by-day itinerary as JSON.
-const generateItinerary = async ({ destination, days, interests, tripStyle, transportMode, hasCar }) => {
+// Call Gemini with a prompt, expecting a JSON object back.
+const callGemini = async (prompt) => {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is not configured');
-
-  const preferenceLines = buildPreferenceLines({ interests, tripStyle, transportMode, hasCar });
-
-  const prompt = `You are a travel guide. Plan a ${days}-day trip to ${destination}.
-${preferenceLines}
-For each day give 3-4 real places to visit (landmarks, museums, parks, neighbourhoods, viewpoints, notable restaurants), in a sensible geographic order that matches the preferences above.
-For every place include its real approximate latitude and longitude.
-Respond ONLY with JSON in exactly this shape:
-{"days":[{"day":1,"title":"short day theme","summary":"one sentence","places":[{"name":"...","category":"landmark|museum|nature|food|shopping|nightlife|viewpoint","description":"one short sentence","lat":0.0,"lon":0.0}]}]}`;
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
@@ -46,7 +26,7 @@ Respond ONLY with JSON in exactly this shape:
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.6 },
       }),
     }
   );
@@ -60,15 +40,93 @@ Respond ONLY with JSON in exactly this shape:
   }
 
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  let parsed;
   try {
-    parsed = JSON.parse(text);
+    return JSON.parse(text);
   } catch {
-    // Strip code fences if the model wrapped the JSON.
     const cleaned = text.replace(/```json|```/g, '').trim();
-    parsed = JSON.parse(cleaned);
+    return JSON.parse(cleaned);
   }
-  return parsed?.days || [];
+};
+
+// Build the hidden prompt from the traveller's filters. This runs server-side
+// only — the client never sees or sends the prompt text, just the raw filters.
+const buildPreferenceLines = ({ interests, tripStyle, transportMode, hasCar }) => {
+  const lines = [];
+  if (interests?.length) {
+    lines.push(
+      `STRICT REQUIREMENT — the traveller selected these interests: ${interests.join(', ')}. ` +
+        `Every place you suggest MUST fit at least one of these interests. ` +
+        `Do NOT include anything that does not clearly match them.`
+    );
+  } else {
+    lines.push('No specific interests were selected, so suggest the most iconic, well-rounded highlights.');
+  }
+  if (tripStyle?.length) {
+    lines.push(`Trip style: ${tripStyle.join(', ')}. Match the pace, budget level and vibe to this.`);
+  }
+  if (transportMode) {
+    lines.push(`They travel by ${transportMode}. Keep each day's places reachable that way and sensibly grouped.`);
+  }
+  if (hasCar) lines.push('They have a car, so day-trips a little further out are fine.');
+  return lines.join('\n');
+};
+
+// Ask Gemini for a structured, route-aware, day-by-day itinerary as JSON.
+const generateItinerary = async ({
+  origin,
+  destination,
+  waypoints,
+  days,
+  interests,
+  tripStyle,
+  transportMode,
+  hasCar,
+  poiDistance,
+}) => {
+  const preferenceLines = buildPreferenceLines({ interests, tripStyle, transportMode, hasCar });
+
+  const stops = [...(waypoints || []), destination].filter(Boolean);
+  const hasRoute = Boolean(origin) && origin.trim().toLowerCase() !== destination.trim().toLowerCase();
+  const routeIsDrivable = hasRoute && (transportMode === 'driving' || hasCar);
+
+  const routeLine = hasRoute
+    ? `This is a journey: start in "${origin}"` +
+      (waypoints?.length ? `, travelling through ${waypoints.map((w) => `"${w}"`).join(', ')}` : '') +
+      `, and finishing in "${destination}".`
+    : `The destination is "${destination}".`;
+
+  // Along-the-route stops only make sense for a real drivable journey.
+  const routeStopsInstruction = routeIsDrivable
+    ? `- "routeStops": 4-8 real attractions located ALONG the driving route between the stops, each WITHIN ${poiDistance} km of the road and OUTSIDE the main stop cities (${stops.join(', ')}). They must match the interests above. Each: {"name","category","description","lat","lon"}.`
+    : `- "routeStops": an empty array [].`;
+
+  const daysScope = stops.length > 1
+    ? `covering the stop cities (${stops.join(', ')}), allocating days sensibly across them`
+    : `for ${destination}`;
+
+  const prompt = `You are an expert travel guide planning a ${days}-day trip.
+${routeLine}
+${preferenceLines}
+
+Respond ONLY with JSON in EXACTLY this shape:
+{
+  "route": {"points":[{"name":"City name","type":"origin|waypoint|destination","lat":0.0,"lon":0.0}]},
+  "routeStops": [{"name":"...","category":"landmark|museum|nature|food|shopping|nightlife|viewpoint","description":"one short sentence","lat":0.0,"lon":0.0}],
+  "days": [{"day":1,"city":"which stop city this day is in","title":"short day theme","summary":"one sentence","places":[{"name":"...","category":"landmark|museum|nature|food|shopping|nightlife|viewpoint","description":"one short sentence","lat":0.0,"lon":0.0}]}]
+}
+
+Rules:
+- "route.points": list ${hasRoute ? 'the origin, each waypoint in order, and the destination' : 'just the destination'} with real coordinates.
+${routeStopsInstruction}
+- "days": a ${days}-day plan ${daysScope}. Each day has 3-4 real places in a sensible geographic order. Every place MUST match the selected interests.
+- Use real, accurate latitude/longitude for everything.`;
+
+  const parsed = await callGemini(prompt);
+  return {
+    route: parsed?.route || { points: [] },
+    routeStops: Array.isArray(parsed?.routeStops) ? parsed.routeStops : [],
+    days: Array.isArray(parsed?.days) ? parsed.days : [],
+  };
 };
 
 // Recommend up to `limit` of OUR properties nearest to a coordinate, but only
@@ -102,34 +160,41 @@ const hotelsNear = async (lat, lon, limit = 3, maxKm = 150) => {
 export const generateGuide = async (req, res) => {
   try {
     const {
+      origin = '',
       destination,
+      waypoints = [],
       days = 3,
       interests = [],
       tripStyle = [],
       transportMode = '',
       hasCar = false,
+      poiDistance = 25,
     } = req.body || {};
     if (!destination) {
       return res.status(400).json({ status: 'error', message: 'destination is required' });
     }
-    const nDays = Math.min(Math.max(parseInt(days) || 3, 1), 7);
+    const nDays = Math.min(Math.max(parseInt(days) || 3, 1), 10);
+    const cleanWaypoints = (Array.isArray(waypoints) ? waypoints : [])
+      .map((w) => (typeof w === 'string' ? w.trim() : ''))
+      .filter(Boolean);
 
-    const rawDays = await generateItinerary({
-      destination,
+    const { route, routeStops, days: rawDays } = await generateItinerary({
+      origin: origin.trim(),
+      destination: destination.trim(),
+      waypoints: cleanWaypoints,
       days: nDays,
       interests,
       tripStyle,
       transportMode,
       hasCar,
+      poiDistance: Math.min(Math.max(parseInt(poiDistance) || 25, 5), 100),
     });
 
     // Enrich each day: keep only places with coords, and attach nearby hotels
     // from our platform at the day's centre.
-    const enriched = [];
+    const enrichedDays = [];
     for (const day of rawDays) {
-      const places = (day.places || []).filter(
-        (p) => typeof p.lat === 'number' && typeof p.lon === 'number'
-      );
+      const places = (day.places || []).filter(hasCoords);
       const centre = places.length
         ? {
             lat: places.reduce((s, p) => s + p.lat, 0) / places.length,
@@ -137,8 +202,9 @@ export const generateGuide = async (req, res) => {
           }
         : null;
       const hotels = centre ? await hotelsNear(centre.lat, centre.lon, 3) : [];
-      enriched.push({
+      enrichedDays.push({
         day: day.day,
+        city: day.city || null,
         title: day.title,
         summary: day.summary,
         places,
@@ -146,7 +212,17 @@ export const generateGuide = async (req, res) => {
       });
     }
 
-    res.json({ status: 'success', data: { destination, days: enriched } });
+    res.json({
+      status: 'success',
+      data: {
+        origin: origin.trim() || null,
+        destination: destination.trim(),
+        waypoints: cleanWaypoints,
+        route: { points: (route?.points || []).filter(hasCoords) },
+        routeStops: routeStops.filter(hasCoords),
+        days: enrichedDays,
+      },
+    });
   } catch (error) {
     console.error('AI guide error:', error.message);
     const status = error.status === 429 ? 429 : 500;
