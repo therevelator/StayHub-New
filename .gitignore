@@ -918,6 +918,3 @@ cypress/screenshots/
 cypress/videos/
 cypress/downloads/
 
-# Build output
-client/dist/
-dist/
