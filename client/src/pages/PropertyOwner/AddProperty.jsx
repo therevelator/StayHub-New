@@ -35,7 +35,7 @@ const AddProperty = () => {
     try {
       const response = await api.post('/owner/properties', formData);
       if (response.data.status === 'success') {
-        navigate('/owner/dashboard');
+        navigate('/dashboard');
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create property');

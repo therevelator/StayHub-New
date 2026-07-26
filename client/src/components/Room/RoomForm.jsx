@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/react/20/solid';
+import '../../pages/Admin/adminForms.css';
 
 const ROOM_TYPES = ['Standard Room', 'Deluxe Room', 'Suite', 'Studio', 'Villa'];
 const BED_TYPES = ['Single Bed', 'Double Bed', 'Queen Bed', 'King Bed', 'Bunk Bed'];
@@ -249,11 +250,11 @@ const RoomForm = ({ room, onSubmit, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500 bg-opacity-75">
+    <div className="admin-modal fixed inset-0 z-50 overflow-y-auto bg-gray-900/60">
       <div className="min-h-screen px-4 text-center">
         <span className="inline-block h-screen align-middle" aria-hidden="true">&#8203;</span>
-        
-        <div className="inline-block w-full max-w-2xl p-6 my-8 text-left align-middle bg-white rounded-lg shadow-xl transform transition-all">
+
+        <div className="admin-modal__card inline-block w-full max-w-2xl p-6 my-8 text-left align-middle bg-white rounded-lg shadow-xl transform transition-all">
           <div className="absolute right-0 top-0 pr-4 pt-4">
             <button
               type="button"
@@ -266,7 +267,7 @@ const RoomForm = ({ room, onSubmit, onClose }) => {
           </div>
 
           <div className="mt-3">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-8">{room ? 'Edit Room' : 'Add Room'}</h2>
+            <h2 className="admin-modal__title mb-8">{room ? 'Edit Room' : 'Add Room'}</h2>
             
             <form onSubmit={handleSubmit} className="space-y-8">
               <div className="space-y-6">

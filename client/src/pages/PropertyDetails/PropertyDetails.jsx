@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { heroImage, roomImage } from '../../services/countryImages';
 import {
   MapPin,
   Star,
@@ -19,9 +20,16 @@ import {
   Clock,
   Shield,
   Home,
-  Image as ImageIcon
+  Image as ImageIcon,
+  UtensilsCrossed,
+  Dumbbell,
+  Waves,
+  ParkingCircle
 } from 'lucide-react';
 import './PropertyDetails.css';
+
+// Sensible defaults so the amenities section never looks empty.
+const DEFAULT_AMENITIES = ['Free WiFi', 'Air Conditioning', 'Parking', 'Breakfast', 'Flat-screen TV', '24/7 Reception'];
 
 const PropertyDetails = () => {
   const { propertyId } = useParams();
@@ -171,29 +179,47 @@ const PropertyDetails = () => {
     return parts.join(', ');
   };
 
-  const getAmenityIcon = (amenity) => {
-    const name = typeof amenity === 'string' ? amenity.toLowerCase() : (amenity.name || '').toLowerCase();
-    if (name.includes('wifi')) return <Wifi className="w-5 h-5" />;
-    if (name.includes('park')) return <Car className="w-5 h-5" />;
-    if (name.includes('coffee') || name.includes('breakfast')) return <Coffee className="w-5 h-5" />;
-    if (name.includes('ac') || name.includes('air')) return <Wind className="w-5 h-5" />;
-    if (name.includes('tv')) return <Tv className="w-5 h-5" />;
+  const getAmenityIcon = (name = '') => {
+    const n = name.toLowerCase();
+    if (n.includes('wifi') || n.includes('internet')) return <Wifi className="w-5 h-5" />;
+    if (n.includes('park')) return <ParkingCircle className="w-5 h-5" />;
+    if (n.includes('coffee') || n.includes('breakfast')) return <Coffee className="w-5 h-5" />;
+    if (n.includes('ac') || n.includes('air') || n.includes('condition')) return <Wind className="w-5 h-5" />;
+    if (n.includes('tv') || n.includes('television')) return <Tv className="w-5 h-5" />;
+    if (n.includes('kitchen') || n.includes('restaurant') || n.includes('dining')) return <UtensilsCrossed className="w-5 h-5" />;
+    if (n.includes('gym') || n.includes('fitness')) return <Dumbbell className="w-5 h-5" />;
+    if (n.includes('pool') || n.includes('spa') || n.includes('sea') || n.includes('beach')) return <Waves className="w-5 h-5" />;
+    if (n.includes('bath')) return <Bath className="w-5 h-5" />;
     return <CheckCircle className="w-5 h-5" />;
   };
 
-  // Get property hero image
-  const heroImage = property.photos?.[0]?.url || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1600';
+  // Amenity label from a string or object; falls back to a sensible default set.
+  const amenityLabel = (a) =>
+    (typeof a === 'string' ? a : a?.name || a?.amenity || a?.label || '').trim();
+
+  const amenityList = (() => {
+    const raw = Array.isArray(property.amenities) ? property.amenities.map(amenityLabel).filter(Boolean) : [];
+    return (raw.length ? raw : DEFAULT_AMENITIES).slice(0, 8);
+  })();
+
+  const heroSrc = heroImage(property, 1600, 700);
+  const reviewCount = property.total_reviews ?? property.review_count ?? 0;
 
   return (
     <div className="property-page-container">
       {/* Hero Section */}
       <div className="property-hero">
-        <img src={heroImage} alt={property.name} className="hero-background" />
+        <img
+          src={heroSrc}
+          alt={property.name}
+          className="hero-background"
+          onError={(e) => { e.currentTarget.src = heroImage(property, 1600, 700, { fallbackOnly: true }); }}
+        />
         <div className="hero-overlay">
           <div className="hero-content">
             <div className="hero-rating">
               <Star className="w-5 h-5 text-yellow-400" fill="currentColor" />
-              <span>{property.star_rating || 4.5} ({property.total_reviews || 0} reviews)</span>
+              <span>{Number(property.star_rating || 4.5).toFixed(1)} ({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})</span>
             </div>
             <h1 className="hero-title">{property.name}</h1>
             <div className="hero-location">
@@ -230,10 +256,10 @@ const PropertyDetails = () => {
               Popular Amenities
             </h2>
             <div className="amenities-grid">
-              {property.amenities && (Array.isArray(property.amenities) ? property.amenities : []).slice(0, 8).map((amenity, idx) => (
+              {amenityList.map((amenity, idx) => (
                 <div key={idx} className="amenity-item">
                   {getAmenityIcon(amenity)}
-                  <span>{typeof amenity === 'string' ? amenity : amenity.name}</span>
+                  <span>{amenity}</span>
                 </div>
               ))}
             </div>
@@ -289,19 +315,24 @@ const PropertyDetails = () => {
       {/* Rooms Section */}
       <div className="rooms-section">
         <div className="rooms-header">
-          <h2>Available Accommodations</h2>
+          <h2>Available Rooms</h2>
           <p>Choose the perfect room for your stay</p>
         </div>
 
         <div className="rooms-grid">
           {property.rooms?.map((room) => {
             const price = getRoomPrice(room);
-            const roomImage = room.images?.[0] || room.images?.[0]?.url || 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=800';
 
             return (
               <div key={room.id} className="room-card">
                 <div className="room-image-wrapper">
-                  <img src={roomImage} alt={room.name} className="room-image" />
+                  <img
+                    src={roomImage(room, 800, 600)}
+                    alt={room.name}
+                    className="room-image"
+                    loading="lazy"
+                    onError={(e) => { e.currentTarget.src = roomImage(room, 800, 600, { fallbackOnly: true }); }}
+                  />
                   <span className="room-type-badge">{room.room_type}</span>
                 </div>
 

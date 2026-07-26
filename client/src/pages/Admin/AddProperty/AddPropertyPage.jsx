@@ -11,6 +11,8 @@ import PhotosEdit from '../EditProperty/components/PhotosEdit';
 import StatusEdit from '../EditProperty/components/StatusEdit';
 import { toast } from 'react-hot-toast';
 import Swal from 'sweetalert2';
+import { HomeModernIcon } from '@heroicons/react/24/outline';
+import '../adminForms.css';
 
 const TABS = ['Basic Info', 'Location', 'Policies', 'Rooms', 'Photos', 'Status'];
 
@@ -220,7 +222,7 @@ const AddPropertyPage = () => {
       if (user.isAdmin) {
         navigate('/admin/properties');
       } else if (user.isHost) {
-        navigate('/owner/properties');
+        navigate('/properties');
       } else {
         navigate('/');
       }
@@ -285,30 +287,33 @@ const AddPropertyPage = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Add New Property</h1>
+    <div className="admin-shell">
+      <div className="admin-header">
+        <div>
+          <span className="admin-header__eyebrow">
+            <HomeModernIcon className="h-4 w-4" /> New listing
+          </span>
+          <h1 className="admin-header__title">Add New Property</h1>
+          <p className="admin-header__subtitle">
+            Fill in the details below, then add rooms and publish your listing.
+          </p>
+        </div>
       </div>
 
       <Tab.Group selectedIndex={selectedIndex} onChange={setSelectedIndex}>
-        <Tab.List className="flex space-x-1 rounded-xl bg-primary-900/20 p-1 mb-8">
+        <Tab.List className="admin-tabs">
           {TABS.map((tab) => (
             <Tab
               key={tab}
               className={({ selected }) =>
-                `w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-primary-700
-                ring-white ring-opacity-60 ring-offset-2 ring-offset-primary-400 focus:outline-none focus:ring-2
-                ${selected
-                  ? 'bg-white shadow'
-                  : 'text-primary-500 hover:bg-white/[0.12] hover:text-primary-600'
-                }`
+                `admin-tab ${selected ? 'admin-tab--active' : ''}`
               }
             >
               {tab}
             </Tab>
           ))}
         </Tab.List>
-        <Tab.Panels>
+        <Tab.Panels className="admin-panel">
           <Tab.Panel>
             <BasicInfoEdit 
               property={property} 

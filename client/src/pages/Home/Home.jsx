@@ -8,14 +8,26 @@ import {
   UserIcon,
   HomeIcon,
   AdjustmentsHorizontalIcon,
-  XMarkIcon
+  XMarkIcon,
+  StarIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
+import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
 import api from '../../services/api';
-import { searchPhotos } from '../../services/pexels';
+import {
+  sized,
+  getPreset,
+  detectCountry,
+  fetchPhotos,
+  propertyImage,
+  DEFAULT_COUNTRY,
+} from '../../services/countryImages';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import '../../styles/searchBar.css';
 import '../../styles/homeCustom.css';
+import './LandingHero.css';
 import FilterContainer from '../../components/FilterContainer/FilterContainer';
 import Swal from 'sweetalert2';
 
@@ -62,9 +74,12 @@ const Home = () => {
   const [radius, setRadius] = useState(25);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [backgroundImage, setBackgroundImage] = useState('');
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const [heroImages, setHeroImages] = useState(getPreset(DEFAULT_COUNTRY).hero);
+  const [activeHero, setActiveHero] = useState(0);
   const [properties, setProperties] = useState([]);
   const [popularDestinations, setPopularDestinations] = useState([]);
+  const preset = useMemo(() => getPreset(country), [country]);
   const [filteredProperties, setFilteredProperties] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
@@ -300,36 +315,53 @@ const Home = () => {
     }
   }, []);
 
+  // Fetch fresh hero photos for a searched location (free Pexels). Falls back
+  // silently to the current curated hero images on any failure.
   const updateBackgroundImage = useCallback(async (searchLocation) => {
-    if (!searchLocation) return;
-    try {
-      // Clean up the location name (remove extra spaces, commas, etc)
-      const cleanLocation = searchLocation.split(',')[0].trim();
-      const photos = await searchPhotos(`${cleanLocation} city landmarks`);
-      if (photos && photos.length > 0) {
-        setBackgroundImage(photos[0].src.landscape);
-      }
-    } catch (error) {
-      console.error('Error updating background image:', error);
-      // Fallback to Unsplash if Pexels fails
-      const fallbackUrl = `https://source.unsplash.com/1920x1080/?${encodeURIComponent(cleanLocation)},city`;
-      setBackgroundImage(fallbackUrl);
+    if (!searchLocation || searchLocation === 'Current Location') return;
+    const cleanLocation = searchLocation.split(',')[0].trim();
+    const photos = await fetchPhotos(`${cleanLocation} travel landmark`, 4);
+    if (photos.length > 0) {
+      setHeroImages(photos);
+      setActiveHero(0);
     }
   }, []);
 
-  // Load popular destinations on mount
+  // Cross-fade the hero background every few seconds.
   useEffect(() => {
-    const destinations = [
-      { name: 'Paris', lat: 48.8566, lon: 2.3522 },
-      { name: 'London', lat: 51.5074, lon: -0.1278 },
-      { name: 'New York', lat: 40.7128, lon: -74.0060 },
-      { name: 'Tokyo', lat: 35.6762, lon: 139.6503 }
-    ];
-    const destinationsWithImages = destinations.map(city => ({
-      ...city,
-      image: `https://source.unsplash.com/400x300/?${city.name.toLowerCase()},city`
-    }));
-    setPopularDestinations(destinationsWithImages);
+    if (heroImages.length < 2) return;
+    const id = setInterval(() => {
+      setActiveHero((i) => (i + 1) % heroImages.length);
+    }, 6000);
+    return () => clearInterval(id);
+  }, [heroImages]);
+
+  // When we learn the user's country, swap presets and fetch fresh hero photos.
+  useEffect(() => {
+    if (!userLocation) return;
+    let cancelled = false;
+    (async () => {
+      const detected = await detectCountry(userLocation);
+      if (cancelled) return;
+      setCountry(detected);
+      const nextPreset = getPreset(detected);
+      setPopularDestinations(nextPreset.destinations);
+      const fresh = await fetchPhotos(`${detected} travel landscape`, 5);
+      if (!cancelled && fresh.length > 0) {
+        setHeroImages(fresh);
+        setActiveHero(0);
+      } else if (!cancelled) {
+        setHeroImages(nextPreset.hero);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation]);
+
+  // Load popular destinations on mount from the current country preset.
+  useEffect(() => {
+    setPopularDestinations(getPreset(DEFAULT_COUNTRY).destinations);
   }, []);
   
   // Handle POI selection
@@ -717,231 +749,284 @@ const Home = () => {
     }
   };
 
+  // Click a popular destination card -> run a search centered on that city.
+  const handleDestinationSearch = (destination) => {
+    setLocation(destination.name);
+    setProperties([]);
+    setFilteredProperties([]);
+    setLoading(true);
+    setError('');
+    (async () => {
+      try {
+        const searchParamsLocal = {
+          guests,
+          type: propertyType,
+          radius,
+          checkIn: checkInDate,
+          checkOut: checkOutDate,
+          location: destination.name,
+          lat: destination.lat,
+          lon: destination.lon,
+        };
+        const response = await api.get('/properties/search', { params: searchParamsLocal });
+        if (response.data.status === 'success') {
+          const withDistance = response.data.data.map((property) => ({
+            ...property,
+            distance: calculateDistance(destination.lat, destination.lon, property.latitude, property.longitude),
+          }));
+          setProperties(withDistance);
+          setFilteredProperties(withDistance);
+          setSearchParams(searchParamsLocal);
+        } else {
+          setProperties([]);
+        }
+      } catch (err) {
+        setError(err.message || 'An error occurred while searching');
+      } finally {
+        setLoading(false);
+      }
+    })();
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: window.innerHeight * 0.6, behavior: 'smooth' });
+    }
+  };
+
+  const heroTitleCountry = preset.label || country;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4 text-center">
-          Find Your Perfect Stay
-        </h1>
-        <p className="text-lg text-gray-600 text-center mb-8">
-          Discover amazing properties at the best prices
-        </p>
-
-      </div>
-
-      {/* Quick Filters */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex gap-4 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-primary-50 text-primary-700 font-medium text-sm hover:bg-primary-100 transition-colors">
-              Properties
-            </button>
-            <button 
-              onClick={() => navigate('/trips')}
-              className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors"
-            >
-              Trips
-            </button>
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
-              Mountain View
-            </button>
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
-              City Center
-            </button>
-            <button className="flex-shrink-0 px-4 py-2 rounded-full bg-gray-50 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors">
-              Pet Friendly
-            </button>
+    <div className="lp-root min-h-screen bg-gray-50">
+      {/* ===================== HERO ===================== */}
+      <section className="lp-hero">
+        {heroImages.map((img, i) => (
+          <div
+            key={`${img}-${i}`}
+            className={`lp-hero__bg ${i === activeHero ? 'is-active' : ''}`}
+            style={{ backgroundImage: `url(${sized(img, 1920, 1080)})` }}
+          />
+        ))}
+        <div className="lp-hero__overlay" />
+        <div className="lp-hero__inner">
+          <span className="lp-hero__eyebrow">
+            <SparklesIcon className="h-4 w-4" /> Discover {heroTitleCountry}
+          </span>
+          <h1 className="lp-hero__title">
+            Find your <span>perfect stay</span>
+            <br /> in {heroTitleCountry}
+          </h1>
+          <p className="lp-hero__subtitle">
+            From cozy mountain cabins to city apartments and seaside villas —
+            book unique places to stay at the best prices.
+          </p>
+          <div className="lp-hero__stats">
+            <div className="lp-hero__stat">
+              <b>{properties.length ? `${properties.length}` : '20+'}</b>
+              <span>Places to stay</span>
+            </div>
+            <div className="lp-hero__stat">
+              <b>4.8★</b>
+              <span>Average guest rating</span>
+            </div>
+            <div className="lp-hero__stat">
+              <b>24/7</b>
+              <span>Traveler support</span>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Main Content */}
-      <div className="relative">
-        {/* Hero Section */}
-        <div className="relative h-[300px] bg-gray-900">
-          <div className="absolute inset-0">
-            <img
-              src={`${backgroundImage}?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&h=600&q=80`}
-              className="w-full h-full object-cover opacity-60 transition-opacity duration-300"
-              alt="Hero background"
+      {/* ===================== SEARCH CARD ===================== */}
+      <div className="lp-search">
+        <form onSubmit={handleSearch} className="lp-search__card">
+          <div className="lp-field">
+            <label className="lp-field__label">Where</label>
+            <div className="flex items-center gap-2">
+              <MapPinIcon className="h-4 w-4 text-primary-500 flex-shrink-0" />
+              <input
+                type="text"
+                placeholder="Anywhere"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="lp-field">
+            <label className="lp-field__label">Property type</label>
+            <select
+              value={propertyType}
+              onChange={(e) => setPropertyType(e.target.value)}
+            >
+              {propertyTypes.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="lp-field">
+            <label className="lp-field__label">Guests</label>
+            <select
+              value={guests}
+              onChange={(e) => setGuests(parseInt(e.target.value))}
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                <option key={n} value={n}>
+                  {n} {n === 1 ? 'guest' : 'guests'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="lp-field">
+            <label className="lp-field__label">Radius</label>
+            <select
+              value={radius}
+              onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
+            >
+              {radiusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="lp-field">
+            <label className="lp-field__label">Check-in</label>
+            <DatePicker
+              selected={checkInDate}
+              onChange={(date) => setCheckInDate(date)}
+              placeholderText="Add date"
+              dateFormat="MMM d, yyyy"
+              minDate={new Date()}
             />
           </div>
-          <div className="relative z-10 h-full flex flex-col items-center justify-center px-4">
-            <h1 className="text-4xl font-bold text-white mb-2">
-              Find Your Perfect Stay
-            </h1>
-            <p className="text-base text-white text-center">
-              Discover amazing properties at the best prices, from cozy apartments to luxury villas
-            </p>
+
+          <div className="lp-field">
+            <label className="lp-field__label">Check-out</label>
+            <DatePicker
+              selected={checkOutDate}
+              onChange={(date) => setCheckOutDate(date)}
+              placeholderText="Add date"
+              dateFormat="MMM d, yyyy"
+              minDate={checkInDate || new Date()}
+            />
           </div>
-        </div>
 
-        {/* Search Form - Desktop: right-aligned, Mobile: centered */}
-        <div className="container mx-auto px-4">
-          <form onSubmit={handleSearch} className="search-form-container">
-            <div className="search-bar">
-            <div className="search-section">
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  placeholder="Destination..."
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 pl-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <MapPinIcon className="h-5 w-5 text-gray-400" />
-                </div>
-              </div>
-            </div>
+          <button
+            type="submit"
+            className="lp-search__btn"
+            disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
+          >
+            <MagnifyingGlassIcon className="h-5 w-5" />
+            {loading ? 'Searching…' : 'Search'}
+          </button>
+        </form>
+      </div>
 
-            <div className="search-section">
-              <select
-                value={propertyType}
-                onChange={(e) => setPropertyType(e.target.value)}
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              >
-                <option value="">Any Type</option>
-                {propertyTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="search-section">
-              <select
-                value={guests}
-                onChange={(e) => setGuests(parseInt(e.target.value))}
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              >
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5+</option>
-              </select>
-            </div>
-
-            <div className="search-section">
-              <select
-                value={radius}
-                onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              >
-                {radiusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="search-section">
-              <DatePicker
-                selected={checkInDate}
-                onChange={date => setCheckInDate(date)}
-                placeholderText="Check-in date"
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                dateFormat="MMM d, yyyy"
-                minDate={new Date()}
-              />
-            </div>
-
-            <div className="search-section">
-              <DatePicker
-                selected={checkOutDate}
-                onChange={date => setCheckOutDate(date)}
-                placeholderText="Check-out date"
-                className="block w-full rounded-md border-gray-300 pl-3 pr-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                dateFormat="MMM d, yyyy"
-                minDate={checkInDate || new Date()}
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="search-button"
-              disabled={loading || ((!location || location === 'Current Location') && isLoadingLocation)}
-            >
-              <MagnifyingGlassIcon className="h-5 w-5" />
-            </button>
-            </div>
-          </form>
+      {/* ===================== QUICK CHIPS ===================== */}
+      <div className="container mx-auto px-4 mt-8">
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+          <button className="lp-chip is-active">
+            <HomeIcon className="h-4 w-4 inline mr-1 -mt-0.5" /> All stays
+          </button>
+          <button onClick={() => navigate('/trips')} className="lp-chip">
+            My trips
+          </button>
+          <button
+            onClick={() => { setPropertyType('villa'); }}
+            className="lp-chip"
+          >
+            Villas
+          </button>
+          <button
+            onClick={() => { setPropertyType('apartment'); }}
+            className="lp-chip"
+          >
+            Apartments
+          </button>
+          <button
+            onClick={() => { setPropertyType('hotel'); }}
+            className="lp-chip"
+          >
+            Hotels
+          </button>
+          <button
+            onClick={() => { setPropertyType('guesthouse'); }}
+            className="lp-chip"
+          >
+            Guesthouses
+          </button>
         </div>
       </div>
 
+      {/* ===================== MAIN CONTENT ===================== */}
       <div className="container mx-auto px-4 mt-10">
         <div className="flex flex-col xl:flex-row gap-8">
-          {/* Filters */}
-          <div className="hidden xl:block xl:w-1/5 xl:flex-shrink-0 xl:-mt-[96px]">
-            <FilterContainer 
-              onFilterChange={handleFilterChange} 
-              properties={properties} 
+          {/* Filters sidebar */}
+          <div className="hidden xl:block xl:w-1/5 xl:flex-shrink-0">
+            <FilterContainer
+              onFilterChange={handleFilterChange}
+              properties={properties}
             />
           </div>
 
-          {/* Right Content Area */}
-          <div className="order-2 lg:order-none lg:w-4/5 lg:flex-grow">
-            {/* Error Message */}
+          {/* Right content */}
+          <div className="order-2 lg:order-none xl:w-4/5 xl:flex-grow">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-8" role="alert">
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-8" role="alert">
                 <span className="block sm:inline">{error}</span>
               </div>
             )}
 
-            {/* Filter Toggle Button (Mobile/Tablet Only) */}
-            <div className="lg:hidden mb-4">
+            {/* Mobile filter toggle */}
+            <div className="xl:hidden mb-4">
               <button
                 onClick={toggleFilters}
-                className="w-full flex items-center justify-center bg-white border border-gray-300 rounded-md px-4 py-2 text-gray-700"
+                className="w-full flex items-center justify-center bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-gray-700 font-medium shadow-sm"
               >
                 <AdjustmentsHorizontalIcon className="h-5 w-5 mr-2" />
                 {showFilters ? 'Hide Filters' : 'Show Filters'}
               </button>
             </div>
-
-            {/* Mobile/Tablet Filters (Collapsible) */}
-            <div className={`lg:hidden mb-6 ${showFilters ? 'block' : 'hidden'}`}>
+            <div className={`xl:hidden mb-6 ${showFilters ? 'block' : 'hidden'}`}>
               <FilterContainer onFilterChange={handleFilterChange} properties={properties} />
             </div>
-            {/* Popular Destinations */}
+
+            {/* Popular destinations */}
             {popularDestinations.length > 0 && (
-              <div className="mb-12">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Popular Destinations</h2>
+              <div className="mb-14">
+                <div className="mb-6">
+                  <h2 className="lp-section-title">Popular destinations in {heroTitleCountry}</h2>
+                  <p className="lp-section-sub">Handpicked places travelers love right now</p>
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {popularDestinations.map((destination) => (
-                    <div 
-                      key={destination.name} 
-                      className={`relative h-40 rounded-lg overflow-hidden cursor-pointer group ${selectedPOI === destination.name ? 'ring-4 ring-primary-500' : ''}`}
-                      onClick={() => handlePOIClick(destination)}
+                    <div
+                      key={destination.name}
+                      className="relative h-48 rounded-2xl overflow-hidden cursor-pointer group shadow-sm"
+                      onClick={() => handleDestinationSearch(destination)}
                     >
                       <img
-                        src={destination.image}
+                        src={sized(destination.image, 500, 400)}
                         alt={destination.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
-                        <div className="absolute bottom-4 left-4">
-                          <h3 className="text-white font-semibold text-lg">{destination.name}</h3>
-                        </div>
-                        <div className="absolute top-2 right-2 flex space-x-2">
-                          <button 
-                            onClick={(e) => openInGoogleMaps(destination, e)}
-                            className="p-1.5 bg-white/80 hover:bg-white rounded-full text-gray-700 transition-colors"
-                            title="Open in Google Maps"
-                          >
-                            <MapPinIcon className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={(e) => handleDeletePOI(destination.name, e)}
-                            className="p-1.5 bg-white/80 hover:bg-red-100 rounded-full text-gray-700 hover:text-red-500 transition-colors"
-                            title="Remove destination"
-                          >
-                            <XMarkIcon className="h-4 w-4" />
-                          </button>
-                        </div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                      <div className="absolute bottom-4 left-4 right-4">
+                        <h3 className="text-white font-semibold text-lg drop-shadow">{destination.name}</h3>
+                        <span className="text-white/80 text-xs font-medium">Explore stays →</span>
+                      </div>
+                      <div className="absolute top-2 right-2 flex space-x-2">
+                        <button
+                          onClick={(e) => openInGoogleMaps(destination, e)}
+                          className="p-1.5 bg-white/85 hover:bg-white rounded-full text-gray-700 transition-colors"
+                          title="Open in Google Maps"
+                        >
+                          <MapPinIcon className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -949,19 +1034,22 @@ const Home = () => {
               </div>
             )}
 
-            {/* Results Grid - Move this here, between Popular Destinations and Why Visit Romania */}
-            <div className="mb-12">
+            {/* Results grid */}
+            <div className="mb-14">
               {filteredProperties.length > 0 && (
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Properties</h2>
+                <div className="mb-6 flex items-end justify-between">
+                  <div>
+                    <h2 className="lp-section-title">Available stays</h2>
+                    <p className="lp-section-sub">{filteredProperties.length} {filteredProperties.length === 1 ? 'property' : 'properties'} found</p>
+                  </div>
+                </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredProperties.length === 0 && (
-                  <div className="col-span-full text-center py-10">
+                  <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-gray-100">
                     <div className="text-gray-500 mb-6">
-                      {loading ? 'Searching...' : properties.length > 0 ? 'No properties match your filters' : 'No properties found'}
+                      {loading ? 'Searching…' : properties.length > 0 ? 'No properties match your filters' : 'Search a destination to see available stays'}
                     </div>
-                    
-                    {/* Show recommendations button when no properties found */}
                     {!loading && (
                       <button
                         onClick={() => {
@@ -975,92 +1063,96 @@ const Home = () => {
                               icon: 'info',
                               showConfirmButton: false,
                               allowOutsideClick: false,
-                              didOpen: () => {
-                                Swal.showLoading();
-                              }
+                              didOpen: () => { Swal.showLoading(); },
                             });
                           } else {
                             Swal.fire({
                               title: 'Location Access Required',
                               text: 'Please allow access to your location to use this feature.',
                               icon: 'warning',
-                              confirmButtonText: 'OK'
+                              confirmButtonText: 'OK',
                             });
                           }
                         }}
-                        className="bg-primary-600 text-white px-6 py-2 rounded-full hover:bg-primary-700 transition-colors flex items-center mx-auto"
+                        className="lp-search__btn mx-auto"
                         disabled={isLoadingLocation}
                       >
-                        <MapPinIcon className="h-5 w-5 mr-2" />
-                        {isLoadingLocation ? 'Getting location...' : 'Show Recommendations Near Me'}
+                        <MapPinIcon className="h-5 w-5" />
+                        {isLoadingLocation ? 'Getting location…' : 'Show stays near me'}
                       </button>
                     )}
                   </div>
                 )}
+
                 {filteredProperties.map((property) => (
                   <div
                     key={property.id}
-                    className="bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer group"
+                    className="lp-card"
                     onClick={() => handlePropertyClick(property.id)}
                   >
-                    <div className="relative">
+                    <div className="lp-card__media">
                       <img
-                        src={property.imageUrl || '/placeholder-property.jpg'}
-                        alt={property.name}
-                        className="w-full h-56 object-cover group-hover:scale-110 transition-transform duration-300"
+                        src={propertyImage(property, 800, 600)}
+                        alt={property.name || 'Property'}
+                        loading="lazy"
+                        onError={(e) => { e.currentTarget.src = propertyImage({ property_type: property.property_type }, 800, 600); }}
                       />
-                      <div className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
-                        <HeartIcon className="h-5 w-5 text-gray-600" />
+                      {property.property_type && (
+                        <span className="lp-badge">{property.property_type}</span>
+                      )}
+                      <div className="lp-heart">
+                        <HeartIcon className="h-5 w-5" />
                       </div>
                     </div>
-                    <div className="p-5">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    <div className="lp-card__body">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1 line-clamp-1">
                         {property.name || 'Unnamed Property'}
                       </h3>
-                      <p className="text-gray-600 mb-2">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (property.latitude && property.longitude) {
-                              const url = `https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`;
-                              window.open(url, '_blank');
-                            }
-                          }}
-                          className="inline-flex items-center hover:text-primary-600 transition-colors"
-                          title="Open in Google Maps"
-                        >
-                          <MapPinIcon className="h-4 w-4 mr-1" />
-                          {`${property.city}, ${property.country}`}
-                          {property.distance && (
-                            <span className="ml-2 text-sm text-gray-500">
-                              ({formatDistance(property.distance)})
-                            </span>
-                          )}
-                        </button>
-                      </p>
-                      <p className="text-gray-600 mb-4">
-                        <UserIcon className="h-4 w-4 inline mr-1" />
-                        {property.total_max_occupancy} guests max
-                      </p>
-                      <div className="flex justify-between items-center">
-                        <span className="text-primary-600 font-semibold">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (property.latitude && property.longitude) {
+                            window.open(`https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`, '_blank');
+                          }
+                        }}
+                        className="inline-flex items-center text-sm text-gray-500 hover:text-primary-600 transition-colors mb-2"
+                        title="Open in Google Maps"
+                      >
+                        <MapPinIcon className="h-4 w-4 mr-1 flex-shrink-0" />
+                        <span className="line-clamp-1">{`${property.city}, ${property.country}`}</span>
+                        {property.distance != null && (
+                          <span className="ml-1.5 text-gray-400 whitespace-nowrap">· {formatDistance(property.distance)}</span>
+                        )}
+                      </button>
+                      <div className="flex items-center gap-3 text-sm text-gray-500">
+                        <span className="inline-flex items-center">
+                          <UserIcon className="h-4 w-4 mr-1" />
+                          {property.total_max_occupancy || property.guests || 1} guests
+                        </span>
+                        {property.rating > 0 && (
+                          <span className="inline-flex items-center text-amber-500">
+                            <StarSolid className="h-4 w-4 mr-1" />
+                            {Number(property.rating).toFixed(1)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="lp-card__footer">
+                        <span>
                           {searchParams.checkIn && searchParams.checkOut ? (
                             <>
-                              ${Number(property.price).toFixed(2)}/night
-                              <span className="text-xs block">for selected dates</span>
+                              <span className="text-lg font-bold text-gray-900">${Number(property.price).toFixed(0)}</span>
+                              <span className="text-sm text-gray-500"> / night</span>
                             </>
                           ) : (
-                            <span className="text-sm text-gray-600">Select dates to see prices</span>
+                            <span className="text-sm text-gray-500">Select dates for prices</span>
                           )}
                         </span>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePropertyClick(property.id);
-                          }}
-                          className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); handlePropertyClick(property.id); }}
+                          className="lp-card__btn"
                         >
-                          View Details
+                          View details
                         </button>
                       </div>
                     </div>
@@ -1069,50 +1161,53 @@ const Home = () => {
               </div>
             </div>
 
-            {/* Why Visit Romania Section */}
-            <div className="mb-12">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Why Visit Romania</h2>
+            {/* Why visit */}
+            <div className="mb-16">
+              <div className="mb-6">
+                <h2 className="lp-section-title">Why visit {heroTitleCountry}</h2>
+                <p className="lp-section-sub">A few reasons to pack your bags</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <img 
-                    src="https://source.unsplash.com/800x600/?romania,castle" 
-                    alt="Romanian Castles" 
-                    className="w-full h-48 object-cover"
-                  />
-                  <div className="p-5">
-                    <h3 className="text-lg font-semibold mb-2">Rich History & Culture</h3>
-                    <p className="text-gray-600">
-                      Explore medieval castles, fortified churches, and well-preserved historic towns that showcase Romania's fascinating past.
-                    </p>
+                {preset.highlights.map((h) => (
+                  <div key={h.title} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden group">
+                    <div className="h-52 overflow-hidden">
+                      <img
+                        src={sized(h.image, 800, 600)}
+                        alt={h.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    </div>
+                    <div className="p-5">
+                      <h3 className="text-lg font-semibold mb-2 text-gray-900">{h.title}</h3>
+                      <p className="text-gray-600 text-sm leading-relaxed">{h.text}</p>
+                    </div>
                   </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Trust strip */}
+            <div className="mb-16 grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="flex items-start gap-3 p-5 bg-white rounded-2xl border border-gray-100">
+                <ShieldCheckIcon className="h-8 w-8 text-primary-500 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-gray-900">Secure booking</h4>
+                  <p className="text-sm text-gray-500">Your payment and data are always protected.</p>
                 </div>
-                
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <img 
-                    src="https://source.unsplash.com/800x600/?romania,mountains" 
-                    alt="Romanian Landscapes" 
-                    className="w-full h-48 object-cover"
-                  />
-                  <div className="p-5">
-                    <h3 className="text-lg font-semibold mb-2">Breathtaking Nature</h3>
-                    <p className="text-gray-600">
-                      From the Carpathian Mountains to the Danube Delta, Romania offers diverse landscapes and outdoor adventures.
-                    </p>
-                  </div>
+              </div>
+              <div className="flex items-start gap-3 p-5 bg-white rounded-2xl border border-gray-100">
+                <StarIcon className="h-8 w-8 text-primary-500 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-gray-900">Verified stays</h4>
+                  <p className="text-sm text-gray-500">Every property is reviewed before it goes live.</p>
                 </div>
-                
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <img 
-                    src="https://source.unsplash.com/800x600/?romania,food" 
-                    alt="Romanian Cuisine" 
-                    className="w-full h-48 object-cover"
-                  />
-                  <div className="p-5">
-                    <h3 className="text-lg font-semibold mb-2">Delicious Cuisine</h3>
-                    <p className="text-gray-600">
-                      Taste traditional Romanian dishes like sarmale, mămăligă, and mici, accompanied by excellent local wines.
-                    </p>
-                  </div>
+              </div>
+              <div className="flex items-start gap-3 p-5 bg-white rounded-2xl border border-gray-100">
+                <SparklesIcon className="h-8 w-8 text-primary-500 flex-shrink-0" />
+                <div>
+                  <h4 className="font-semibold text-gray-900">Best price promise</h4>
+                  <p className="text-sm text-gray-500">Great local rates with no hidden fees.</p>
                 </div>
               </div>
             </div>

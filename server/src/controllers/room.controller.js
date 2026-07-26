@@ -322,14 +322,19 @@ export const getRoomAvailability = async (req, res) => {
       }
     });
 
-    // Overlay booking information for each room
+    // Overlay booking information for each room.
+    // A booking occupies only the nights actually slept in: [check_in, check_out).
+    // The check-out day itself stays free — the guest leaves that morning, so it
+    // can be used as a new check-in date (back-to-back bookings).
     bookings.forEach(booking => {
       const start = new Date(booking.check_in_date);
       const end = new Date(booking.check_out_date);
       const dates = eachDayOfInterval({ start, end });
-      
+
       dates.forEach(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
+        // Skip the check-out day so it remains bookable as a check-in.
+        if (dateStr === booking.check_out_date) return;
         if (roomAvailabilityMaps[booking.room_id] && roomAvailabilityMaps[booking.room_id][dateStr]) {
           roomAvailabilityMaps[booking.room_id][dateStr] = {
             ...roomAvailabilityMaps[booking.room_id][dateStr],
@@ -875,12 +880,14 @@ export const getRoomReservations = async (req, res) => {
 };
 
 const generateBookingReference = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let reference = 'BK-';
-  for (let i = 0; i < 8; i++) {
-    reference += chars.charAt(Math.floor(Math.random() * chars.length));
+  // Phone-friendly: unambiguous charset (no 0/O, 1/I/L, etc.) and grouped
+  // into short blocks so it's easy to read out loud, e.g. "SH-8K2-P9Q".
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return reference;
+  return `SH-${code.slice(0, 3)}-${code.slice(3)}`;
 };
 
 export const updateRoomAvailability = async (req, res) => {

@@ -523,26 +523,41 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* Fully Booked */
+/* Fully Booked — both nights taken, not selectable (solid red) */
 .tile-booked-full {
-  background: #f1f5f9 !important;
-  color: #cbd5e1 !important;
+  background: #fecaca !important;
+  color: #b91c1c !important;
   text-decoration: line-through;
   cursor: not-allowed !important;
 }
 
 /* Booking Start (Available -> Booked) */
-/* Left half available (transparent/white), Right half booked (gray) */
+/* Left half available (white), Right half booked (red) — check-out only */
 .tile-booked-start {
-  background: linear-gradient(90deg, #fff 50%, #f1f5f9 50%) !important;
-  color: #64748b !important;
+  background: linear-gradient(90deg, #fff 50%, #fecaca 50%) !important;
+  color: #b91c1c !important;
 }
 
 /* Booking End (Booked -> Available) */
-/* Left half booked (gray), Right half available (transparent/white) */
+/* Left half booked (red), Right half available (white) — check-in only */
 .tile-booked-end {
-  background: linear-gradient(90deg, #f1f5f9 50%, #fff 50%) !important;
-  color: #64748b !important;
+  background: linear-gradient(90deg, #fecaca 50%, #fff 50%) !important;
+  color: #b91c1c !important;
+}
+
+/* Owner maintenance — amber, not bookable */
+.tile-maintenance {
+  background: #fde68a !important;
+  color: #92400e !important;
+  cursor: not-allowed !important;
+}
+
+/* Owner blocked — gray, not bookable */
+.tile-blocked {
+  background: #e5e7eb !important;
+  color: #6b7280 !important;
+  text-decoration: line-through;
+  cursor: not-allowed !important;
 }
 
 /* User Selection: Start (Check-in) */
@@ -556,7 +571,7 @@
 
 /* If selection start is ON a booking end (Booked -> Selected) */
 .tile-booked-end.tile-selection-start {
-  background: linear-gradient(90deg, #f1f5f9 50%, #2A9D8F 50%) !important;
+  background: linear-gradient(90deg, #fecaca 50%, #2A9D8F 50%) !important;
 }
 
 /* User Selection: End (Check-out) */
@@ -570,7 +585,7 @@
 
 /* If selection end is ON a booking start (Selected -> Booked) */
 .tile-booked-start.tile-selection-end {
-  background: linear-gradient(90deg, #2A9D8F 50%, #f1f5f9 50%) !important;
+  background: linear-gradient(90deg, #2A9D8F 50%, #fecaca 50%) !important;
 }
 
 /* User Selection: Between */
@@ -653,6 +668,10 @@
 
 .legend-booked {
   background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+}
+
+.legend-maintenance {
+  background: #fde68a;
 }
 
 .legend-selected {

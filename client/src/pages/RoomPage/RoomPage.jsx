@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { Calendar } from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, startOfDay } from 'date-fns';
 import {
   BedDouble,
   Bath,
@@ -30,6 +30,24 @@ import {
 import Swal from 'sweetalert2';
 import './RoomPage.css';
 
+/**
+ * Coerce a value into an array. Room `beds`/`amenities` come from the DB in
+ * inconsistent shapes: a real array, a JSON string, or even a double/triple
+ * JSON-encoded string. Unwrap up to a few layers and always return an array so
+ * `.map` never throws.
+ */
+const toArray = (val) => {
+  let v = val;
+  for (let i = 0; i < 4 && typeof v === 'string'; i++) {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(v) ? v : [];
+};
+
 const RoomPage = () => {
   const navigate = useNavigate();
   const { roomId, propertyId } = useParams();
@@ -37,6 +55,7 @@ const RoomPage = () => {
   const [property, setProperty] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [authRequired, setAuthRequired] = useState(false);
   const [availableDates, setAvailableDates] = useState([]);
   const [bookingDates, setBookingDates] = useState([]);
   const [checkInDate, setCheckInDate] = useState(null);
@@ -119,70 +138,52 @@ const RoomPage = () => {
       const { requested_room, other_rooms } = availabilityResponse.data.data;
 
       if (requested_room?.availability) {
-        const bookingIds = new Set();
         const dateMap = {};
-
         Object.entries(requested_room.availability).forEach(([dateStr, info]) => {
           dateMap[dateStr] = { ...info };
-          if (info.booking_id) bookingIds.add(info.booking_id);
         });
 
-        const bookings = {};
-        bookingIds.forEach(id => {
-          bookings[id] = { dates: [], checkInDate: null, checkOutDate: null };
-        });
+        // A night is unavailable if it is occupied by a booking OR the owner
+        // has marked it for maintenance / blocked it.
+        const isNightTaken = (dateStr) => {
+          const info = dateMap[dateStr];
+          if (!info) return false; // outside the fetched range -> treat as free
+          return (
+            info.status === 'occupied' ||
+            info.status === 'maintenance' ||
+            info.status === 'blocked' ||
+            !!info.booking_id
+          );
+        };
+        const prevDay = (dateStr) => {
+          const d = new Date(dateStr);
+          d.setDate(d.getDate() - 1);
+          return format(d, 'yyyy-MM-dd');
+        };
 
-        Object.entries(dateMap).forEach(([dateStr, info]) => {
-          if (info.booking_id && bookings[info.booking_id]) {
-            bookings[info.booking_id].dates.push(dateStr);
-          }
-        });
+        // Per-night rules:
+        //  - a day can be a CHECK-IN only if its own night is free;
+        //  - a day can be a CHECK-OUT only if the previous night is free
+        //    (that previous night would have been the guest's last night).
+        // This makes back-to-back days (a check-out and a check-in on the same
+        // date, so the night is occupied) fully blocked -> shown solid red.
+        Object.keys(dateMap).forEach((dateStr) => {
+          const info = dateMap[dateStr];
+          const takenTonight = isNightTaken(dateStr);
+          const takenPrevNight = isNightTaken(prevDay(dateStr));
 
-        Object.values(bookings).forEach(booking => {
-          if (booking.dates.length > 0) {
-            booking.dates.sort();
-            booking.checkInDate = booking.dates[0];
-            const lastOccupiedDate = new Date(booking.dates[booking.dates.length - 1]);
-            const checkoutDate = new Date(lastOccupiedDate);
-            checkoutDate.setDate(checkoutDate.getDate() + 1);
-            booking.checkOutDate = format(checkoutDate, 'yyyy-MM-dd');
-          }
-        });
+          // Owner-set states get their own colour and are never bookable.
+          info.isMaintenance = info.status === 'maintenance';
+          info.isBlocked = info.status === 'blocked';
+          const special = info.isMaintenance || info.isBlocked;
 
-        // Reset flags
-        Object.values(dateMap).forEach(info => {
-          info.canCheckIn = false;
-          info.canCheckOut = false;
-          info.isBookingStart = false;
-          info.isBookingEnd = false;
-        });
+          info.canCheckIn = !takenTonight;
+          info.canCheckOut = !takenPrevNight;
 
-        Object.values(bookings).forEach(booking => {
-          // Booking Start Date: User can Check-out (morning free), but NOT Check-in (night taken)
-          if (dateMap[booking.checkInDate]) {
-            dateMap[booking.checkInDate].isBookingStart = true;
-            dateMap[booking.checkInDate].canCheckOut = true;
-          }
-
-          // Booking End Date: User can Check-in (afternoon free), but NOT Check-out (morning taken by this booking)
-          // Note: Booking End Date might not be in dateMap if it's outside the fetched range or not occupied
-          // We need to ensure it exists in dateMap if we want to render it
-          if (!dateMap[booking.checkOutDate]) {
-            // If it's not in map (e.g. next month or just not returned as 'occupied'), 
-            // we might assume it's available. But for rendering the "split", we need to know.
-            // For now, only mark if it exists.
-          } else {
-            dateMap[booking.checkOutDate].isBookingEnd = true;
-            dateMap[booking.checkOutDate].canCheckIn = true;
-          }
-        });
-
-        // Also mark fully available days as canCheckIn/canCheckOut
-        Object.values(dateMap).forEach(info => {
-          if (info.status === 'available' && !info.booking_id) {
-            info.canCheckIn = true;
-            info.canCheckOut = true;
-          }
+          // Booking visual states (skip maintenance/blocked, they have their own).
+          info.isFullyBooked = takenTonight && takenPrevNight && !special;   // both nights taken -> solid red
+          info.isBookingStart = takenTonight && !takenPrevNight && !special; // first night of a stay -> half (check-out only)
+          info.isBookingEnd = !takenTonight && takenPrevNight && !special;   // day after a stay ends -> half (check-in only)
         });
 
         requested_room.availability = dateMap;
@@ -207,8 +208,33 @@ const RoomPage = () => {
       setAlternativeRooms(processedAlternativeRooms);
     } catch (error) {
       console.error('Error fetching availability:', error);
-      setError(error.response?.data?.message || 'Failed to fetch availability');
+      if (error.response?.status === 401) {
+        setAuthRequired(true);
+        setError('You need to be logged in to view availability and make a reservation.');
+      } else {
+        setError(error.response?.data?.message || 'Failed to fetch availability');
+      }
     }
+  };
+
+  // Send the guest to login, then bring them right back to this room.
+  const goToLogin = () => {
+    const returnUrl = `/property/${propertyId}/room/${roomId}`;
+    navigate(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+  };
+
+  const promptLogin = () => {
+    Swal.fire({
+      icon: 'info',
+      title: 'Please log in',
+      text: 'Your session has expired or you are not logged in. To see availability and make a reservation, please log in.',
+      showCancelButton: true,
+      confirmButtonText: 'Log in',
+      cancelButtonText: 'Not now',
+      confirmButtonColor: '#2A9D8F'
+    }).then((result) => {
+      if (result.isConfirmed) goToLogin();
+    });
   };
 
   useEffect(() => {
@@ -257,7 +283,13 @@ const RoomPage = () => {
         console.log('RoomPage: Availability fetched');
       } catch (error) {
         console.error('Error fetching data:', error);
-        setError(error.response?.data?.message || 'Failed to fetch room details');
+        if (error.response?.status === 401) {
+          setAuthRequired(true);
+          setError('You need to be logged in to view availability and make a reservation.');
+          promptLogin();
+        } else {
+          setError(error.response?.data?.message || 'Failed to fetch room details');
+        }
       } finally {
         console.log('RoomPage: Finally block, setting loading false');
         setLoading(false);
@@ -272,7 +304,9 @@ const RoomPage = () => {
   // Calculate total price when dates change
   useEffect(() => {
     if (checkInDate && checkOutDate && room?.price_per_night) {
-      const nights = differenceInDays(checkOutDate, checkInDate);
+      // Normalize to midnight so a stray time component can't truncate the
+      // count (e.g. 25 14:00 -> 26 00:00 would otherwise read as 0 nights).
+      const nights = differenceInDays(startOfDay(checkOutDate), startOfDay(checkInDate));
       setTotalNights(nights);
       setTotalPrice(nights * room.price_per_night);
     } else {
@@ -305,6 +339,15 @@ const RoomPage = () => {
 
     const canSelectForCheckIn = dateInfo.canCheckIn;
     const canSelectForCheckOut = dateInfo.canCheckOut;
+
+    if (dateInfo.isMaintenance || dateInfo.isBlocked) {
+      Swal.fire({
+        icon: 'warning',
+        title: dateInfo.isMaintenance ? 'Under Maintenance' : 'Date Blocked',
+        text: `${format(selectedDate, 'MMMM d, yyyy')} is not available for booking.`,
+      });
+      return;
+    }
 
     if (!canSelectForCheckIn && !canSelectForCheckOut) {
       Swal.fire({
@@ -379,9 +422,17 @@ const RoomPage = () => {
 
     // Booking States (Backgrounds)
     if (dateInfo) {
-      if (dateInfo.isBookingStart) classes.push('tile-booked-start');
-      if (dateInfo.isBookingEnd) classes.push('tile-booked-end');
-      if (dateInfo.booking_id && !dateInfo.isBookingStart) classes.push('tile-booked-full');
+      if (dateInfo.isMaintenance) {
+        classes.push('tile-maintenance');         // owner maintenance -> amber
+      } else if (dateInfo.isBlocked) {
+        classes.push('tile-blocked');             // owner blocked -> gray
+      } else if (dateInfo.isFullyBooked) {
+        classes.push('tile-booked-full');        // both nights taken -> solid red
+      } else if (dateInfo.isBookingStart) {
+        classes.push('tile-booked-start');        // check-out only -> half
+      } else if (dateInfo.isBookingEnd) {
+        classes.push('tile-booked-end');          // check-in only -> half
+      }
     }
 
     return classes.join(' ');
@@ -512,14 +563,26 @@ const RoomPage = () => {
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <X className="w-8 h-8 text-red-500" />
           </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Oops!</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            {authRequired ? 'Please log in' : 'Oops!'}
+          </h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => navigate(-1)}
-            className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-          >
-            Go Back
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            {authRequired && (
+              <button
+                onClick={goToLogin}
+                className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+              >
+                Log in
+              </button>
+            )}
+            <button
+              onClick={() => navigate(-1)}
+              className={`px-6 py-2 rounded-lg transition-colors ${authRequired ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-primary-500 text-white hover:bg-primary-600'}`}
+            >
+              Go Back
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -630,14 +693,14 @@ const RoomPage = () => {
           </section>
 
           {/* Bed Configuration */}
-          {room?.beds && (
+          {toArray(room?.beds).length > 0 && (
             <section className="detail-section">
               <h2 className="section-title">
                 <BedDouble className="w-5 h-5" />
                 Bed Configuration
               </h2>
               <div className="beds-grid">
-                {(typeof room.beds === 'string' ? JSON.parse(room.beds) : room.beds).map((bed, idx) => (
+                {toArray(room?.beds).map((bed, idx) => (
                   <div key={idx} className="bed-item">
                     <BedDouble className="w-8 h-8 text-primary-500" />
                     <span className="bed-count">{bed.count}x</span>
@@ -683,14 +746,14 @@ const RoomPage = () => {
           </section>
 
           {/* Amenities */}
-          {room?.amenities && (
+          {toArray(room?.amenities).length > 0 && (
             <section className="detail-section">
               <h2 className="section-title">
                 <Sofa className="w-5 h-5" />
                 Amenities
               </h2>
               <div className="amenities-grid">
-                {(typeof room.amenities === 'string' ? JSON.parse(room.amenities) : room.amenities).map((amenity, idx) => (
+                {toArray(room?.amenities).map((amenity, idx) => (
                   <div key={idx} className="amenity-tag">
                     {getAmenityIcon(amenity)}
                     <span>{amenity}</span>
@@ -741,6 +804,10 @@ const RoomPage = () => {
                 <div className="legend-item">
                   <div className="legend-dot legend-selected"></div>
                   <span>Selected</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-dot legend-maintenance"></div>
+                  <span>Maintenance</span>
                 </div>
               </div>
             </div>

@@ -12,6 +12,8 @@ import PhotosEdit from './components/PhotosEdit';
 import StatusEdit from './components/StatusEdit';
 import LoadingSpinner from '../../../components/LoadingSpinner/index';
 import { useAuth } from '../../../context/AuthContext';
+import { PencilSquareIcon } from '@heroicons/react/24/outline';
+import '../adminForms.css';
 
 const EditPropertyPage = () => {
   const { id } = useParams();
@@ -207,29 +209,30 @@ const EditPropertyPage = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Edit Property</h1>
-        <button
-          onClick={handleCancel}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-        >
+    <div className="admin-shell">
+      <div className="admin-header">
+        <div>
+          <span className="admin-header__eyebrow">
+            <PencilSquareIcon className="h-4 w-4" /> Property
+          </span>
+          <h1 className="admin-header__title">Edit Property</h1>
+          <p className="admin-header__subtitle">
+            {property.name ? `Update “${property.name}” details and rooms` : 'Update your property details and rooms'}
+          </p>
+        </div>
+        <button onClick={handleCancel} className="af-btn af-btn--ghost">
           Cancel
         </button>
       </div>
 
       <Tab.Group manual>
         {/* manual prop prevents auto-switching */}
-        <Tab.List className="flex space-x-1 rounded-xl bg-primary-900/20 p-1">
+        <Tab.List className="admin-tabs">
           {['Basic Info', 'Location', 'Policies', 'Rooms', 'Photos', 'Status'].map((category) => (
             <Tab
               key={category}
               className={({ selected }) =>
-                `w-full rounded-lg py-2.5 text-sm font-medium leading-5
-                 ${selected
-                  ? 'bg-white text-primary-700 shadow'
-                  : 'text-gray-700 hover:bg-white/[0.12] hover:text-primary-600'
-                }`
+                `admin-tab ${selected ? 'admin-tab--active' : ''}`
               }
             >
               {category}
@@ -237,7 +240,7 @@ const EditPropertyPage = () => {
           ))}
         </Tab.List>
 
-        <Tab.Panels className="mt-8">
+        <Tab.Panels className="admin-panel">
           <Tab.Panel>
             <BasicInfoEdit
               property={property}

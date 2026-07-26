@@ -25,7 +25,7 @@ export const PropertyDashboard = () => {
       } catch (error) {
         console.error('Error fetching property details:', error);
         toast.error('Failed to fetch property details');
-        navigate('/owner/dashboard');
+        navigate('/dashboard');
       } finally {
         setLoading(false);
       }
@@ -50,7 +50,7 @@ export const PropertyDashboard = () => {
           <h1 className="text-2xl font-bold">{property.name}</h1>
           <p className="text-gray-500">{property.address}</p>
         </div>
-        <Button onClick={() => navigate('/owner/dashboard')}>
+        <Button onClick={() => navigate('/dashboard')}>
           Back to Dashboard
         </Button>
       </div>

@@ -1,0 +1,333 @@
+/* ============================================================
+   StayHub — Landing redesign (hero + search + cards)
+   Scoped under .lp- prefixes so it never clashes with the
+   shared searchBar.css / homeCustom.css.
+   ============================================================ */
+
+.lp-hero {
+  position: relative;
+  min-height: 78vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Rotating background layers cross-fade */
+.lp-hero__bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transform: scale(1.06);
+  transition: opacity 1.2s ease-in-out, transform 8s ease-out;
+  z-index: -2;
+}
+.lp-hero__bg.is-active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.lp-hero__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(3, 18, 8, 0.35) 0%, rgba(3, 18, 8, 0.15) 35%, rgba(3, 18, 8, 0.78) 100%),
+    linear-gradient(90deg, rgba(21, 87, 75, 0.35) 0%, rgba(0, 0, 0, 0) 60%);
+}
+
+.lp-hero__inner {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 5rem 1.25rem 2.5rem;
+  text-align: center;
+  color: #fff;
+}
+
+.lp-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(6px);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 1.25rem;
+}
+
+.lp-hero__title {
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+}
+.lp-hero__title span {
+  color: #6BCEC5;
+}
+
+.lp-hero__subtitle {
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  max-width: 620px;
+  margin: 0 auto 2rem;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.lp-hero__stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+  margin-top: 2.25rem;
+  color: rgba(255, 255, 255, 0.92);
+}
+.lp-hero__stat b {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+.lp-hero__stat span {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+/* ---------- Search card ---------- */
+.lp-search {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  max-width: 1080px;
+  margin: -3.75rem auto 0;
+  padding: 0 1.25rem;
+}
+.lp-search__card {
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 1.25rem;
+  box-shadow: 0 24px 60px -20px rgba(3, 18, 8, 0.45);
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 900px) {
+  .lp-search__card {
+    grid-template-columns: 1.7fr 1fr 0.9fr 0.8fr 1fr 1fr auto;
+    align-items: center;
+    padding: 0.6rem 0.6rem 0.6rem 1rem;
+  }
+}
+.lp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.75rem;
+  transition: background 0.15s ease;
+}
+.lp-field + .lp-field {
+  border-top: 1px solid #eef1f0;
+}
+@media (min-width: 900px) {
+  .lp-field + .lp-field {
+    border-top: none;
+    border-left: 1px solid #eef1f0;
+  }
+}
+.lp-field:hover {
+  background: #f6faf9;
+}
+.lp-field__label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6C757D;
+}
+.lp-field input,
+.lp-field select,
+.lp-field .react-datepicker-wrapper input {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #212529;
+  background: transparent;
+  width: 100%;
+}
+.lp-field select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.lp-field input::placeholder {
+  color: #adb5bd;
+  font-weight: 500;
+}
+.lp-search__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 52px;
+  padding: 0 1.5rem;
+  border-radius: 0.85rem;
+  background: linear-gradient(135deg, #2A9D8F 0%, #1F7A6D 100%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 10px 22px -8px rgba(42, 157, 143, 0.7);
+  white-space: nowrap;
+}
+.lp-search__btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px -8px rgba(42, 157, 143, 0.85);
+}
+.lp-search__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- Chips ---------- */
+.lp-chip {
+  flex-shrink: 0;
+  padding: 0.5rem 1.1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid #e3e8e7;
+  background: #fff;
+  color: #495057;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.lp-chip:hover {
+  border-color: #2A9D8F;
+  color: #1F7A6D;
+}
+.lp-chip.is-active {
+  background: #2A9D8F;
+  border-color: #2A9D8F;
+  color: #fff;
+}
+
+/* ---------- Property card ---------- */
+.lp-card {
+  background: #fff;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid #edf1f0;
+  box-shadow: 0 4px 14px -8px rgba(3, 18, 8, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+.lp-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 22px 40px -18px rgba(3, 18, 8, 0.4);
+}
+.lp-card__media {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #eef1f0;
+}
+.lp-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+.lp-card:hover .lp-card__media img {
+  transform: scale(1.07);
+}
+.lp-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 1.1rem 1.15rem 1.15rem;
+}
+.lp-card__footer {
+  margin-top: auto;
+  padding-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid #f1f4f3;
+}
+.lp-card__btn {
+  flex-shrink: 0;
+  background: #2A9D8F;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 0.6rem;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+.lp-card__btn:hover {
+  background: #1F7A6D;
+}
+.lp-badge {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(4px);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #15574B;
+  text-transform: capitalize;
+}
+.lp-heart {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  padding: 0.45rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #495057;
+  opacity: 0;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+.lp-card:hover .lp-heart {
+  opacity: 1;
+}
+.lp-heart:hover {
+  color: #E76F51;
+}
+
+/* ---------- Section heading ---------- */
+.lp-section-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #212529;
+}
+.lp-section-sub {
+  color: #6C757D;
+  margin-top: 0.25rem;
+}

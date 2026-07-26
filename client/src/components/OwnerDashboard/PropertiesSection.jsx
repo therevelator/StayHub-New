@@ -28,7 +28,7 @@ export const PropertiesSection = ({ properties }) => {
   const navigate = useNavigate();
 
   const handlePropertyClick = (propertyId) => {
-    navigate(`/owner/properties/${propertyId}`);
+    navigate(`/properties/${propertyId}`);
   };
 
   return (

@@ -2,7 +2,10 @@
   "scripts": {
     "client": "npm run dev --prefix client",
     "server": "npm start --prefix server",
-    "start": "concurrently \"npm run client\" \"npm run server\""
+    "start": "concurrently \"npm run client\" \"npm run server\"",
+    "test:e2e": "cypress run",
+    "cypress:run": "cypress run",
+    "cypress:open": "cypress open"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.3",
@@ -15,7 +18,9 @@
     "react-helmet-async": "^2.0.5"
   },
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "cypress": "^13.17.0",
-    "concurrently": "^8.2.2"
+    "dotenv": "^17.4.2",
+    "mysql2": "^3.23.1"
   }
 }

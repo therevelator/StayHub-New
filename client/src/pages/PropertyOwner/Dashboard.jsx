@@ -12,7 +12,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
-  const isPropertiesPage = location.pathname === '/owner/properties';
+  const isPropertiesPage = location.pathname === '/properties';
 
   const fetchProperties = async () => {
     try {
@@ -103,7 +103,7 @@ const Dashboard = () => {
   const handleEditProperty = (e, propertyId) => {
     e.preventDefault();
     e.stopPropagation();
-    navigate(`/owner/properties/${propertyId}/edit`);
+    navigate(`/properties/${propertyId}/edit`);
   };
 
   if (loading) {
@@ -115,7 +115,7 @@ const Dashboard = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">{isPropertiesPage ? 'My Properties' : 'Owner Dashboard'}</h1>
         <Button asChild>
-          <Link to="/owner/properties/add">Add New Property</Link>
+          <Link to="/properties/add">Add New Property</Link>
         </Button>
       </div>
 
@@ -128,7 +128,7 @@ const Dashboard = () => {
               </svg>
               <p className="text-gray-600 mb-4 text-lg">You don't have any properties yet.</p>
               <Button asChild className="bg-blue-600 hover:bg-blue-700">
-                <Link to="/owner/properties/add" className="flex items-center">
+                <Link to="/properties/add" className="flex items-center">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
                   </svg>
@@ -140,7 +140,7 @@ const Dashboard = () => {
         ) : (
           properties.map((property) => (
             <Card key={property.id} className="overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-200 group">
-              <Link to={`/owner/properties/${property.id}`} className="block">
+              <Link to={`/properties/${property.id}`} className="block">
                 <div className="h-40 bg-gradient-to-r from-blue-500 to-indigo-600 relative overflow-hidden">
                   {property.image_url ? (
                     <img 

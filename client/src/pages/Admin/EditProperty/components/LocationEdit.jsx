@@ -34,6 +34,41 @@ const MapUpdater = ({ center }) => {
   return null;
 };
 
+// Free, keyless geocoding via OpenStreetMap Nominatim.
+// (Replaces the previous OpenCage calls, whose API key is no longer valid.)
+const mapNominatim = (item) => {
+  const a = item.address || {};
+  return {
+    lat: parseFloat(item.lat),
+    lng: parseFloat(item.lon),
+    components: {
+      road: [a.road, a.house_number].filter(Boolean).join(' '),
+      city: a.city || a.town || a.village || a.municipality || '',
+      state: a.state || a.county || '',
+      country: a.country || '',
+      postcode: a.postcode || '',
+    },
+  };
+};
+
+const nominatimSearch = async (query) => {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(query)}`,
+    { headers: { 'Accept-Language': 'en' } }
+  );
+  const data = await res.json();
+  return Array.isArray(data) ? data.map(mapNominatim) : [];
+};
+
+const nominatimReverse = async (lat, lng) => {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${lat}&lon=${lng}`,
+    { headers: { 'Accept-Language': 'en' } }
+  );
+  const data = await res.json();
+  return data && data.address ? mapNominatim(data) : null;
+};
+
 const LocationEdit = ({ property, onUpdate, disabled }) => {
   const [formData, setFormData] = useState({
     street: '',
@@ -103,21 +138,17 @@ const LocationEdit = ({ property, onUpdate, disabled }) => {
         const { latitude, longitude } = position.coords;
         
         try {
-          // Reverse geocoding using OpenCage
-          const response = await fetch(
-            `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}`
-          );
-          const data = await response.json();
-          
-          if (data.results && data.results[0]) {
-            const result = data.results[0].components;
+          const result = await nominatimReverse(latitude, longitude);
+
+          if (result) {
+            const c = result.components;
             setFormData(prev => ({
               ...prev,
-              street: result.road || '',
-              city: result.city || result.town || result.village || '',
-              state: result.state || '',
-              country: result.country || '',
-              postal_code: result.postcode || '',
+              street: c.road || '',
+              city: c.city || '',
+              state: c.state || '',
+              country: c.country || '',
+              postal_code: c.postcode || '',
               latitude: latitude.toString(),
               longitude: longitude.toString()
             }));
@@ -172,38 +203,51 @@ const LocationEdit = ({ property, onUpdate, disabled }) => {
     toast.loading('Verifying address...');
 
     try {
-      // Add city and country to query to improve accuracy
-      const query = `${address} ${formData.city} ${formData.country}`;
-      const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}&limit=5`
-      );
-      const data = await response.json();
+      // Try progressively simpler queries. Users often type the full address
+      // (incl. city/country) into the street field, so a naive concatenation of
+      // every field produces a redundant query Nominatim can't match. Fall back
+      // to less specific variants until one returns a hit.
+      const candidates = [
+        [formData.street, formData.city, formData.country].filter(Boolean).join(', '),
+        [formData.street, formData.country].filter(Boolean).join(', '),
+        formData.street,
+        [formData.city, formData.state, formData.country].filter(Boolean).join(', '),
+      ].filter((q, i, arr) => q && arr.indexOf(q) === i);
 
-      if (data.results && data.results.length > 0) {
-        // Find the result that best matches our city and country
-        const matchingResult = data.results.find(result => {
-          const components = result.components;
-          const cityMatch = components.city?.toLowerCase() === formData.city.toLowerCase() ||
-                          components.town?.toLowerCase() === formData.city.toLowerCase();
-          const countryMatch = components.country?.toLowerCase() === formData.country.toLowerCase();
-          return cityMatch && countryMatch;
-        }) || data.results[0]; // Fallback to first result if no match
+      let results = [];
+      for (const q of candidates) {
+        results = await nominatimSearch(q);
+        if (results.length > 0) break;
+      }
 
-        const { lat, lng } = matchingResult.geometry;
-        
-        // Update form with the verified components
-        const components = matchingResult.components;
-        setFormData(prev => ({
+      if (results.length > 0) {
+        // Prefer a result matching the entered city + country; else the first.
+        const best =
+          results.find((r) => {
+            const cityMatch =
+              r.components.city &&
+              formData.city &&
+              r.components.city.toLowerCase() === formData.city.toLowerCase();
+            const countryMatch =
+              r.components.country &&
+              formData.country &&
+              r.components.country.toLowerCase() === formData.country.toLowerCase();
+            return cityMatch && countryMatch;
+          }) || results[0];
+
+        const { lat, lng, components } = best;
+
+        setFormData((prev) => ({
           ...prev,
-          street: components.road || components.street || prev.street,
-          city: components.city || components.town || prev.city,
+          street: components.road || prev.street,
+          city: components.city || prev.city,
           state: components.state || prev.state,
           country: components.country || prev.country,
           postal_code: components.postcode || prev.postal_code,
           latitude: lat.toString(),
-          longitude: lng.toString()
+          longitude: lng.toString(),
         }));
-        
+
         setMapCenter([lat, lng]);
         setMarkerPosition([lat, lng]);
         toast.dismiss();
@@ -233,21 +277,17 @@ const LocationEdit = ({ property, onUpdate, disabled }) => {
     setMarkerPosition([lat, lng]);
 
     try {
-      // Reverse geocoding using OpenCage
-      const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${lat}+${lng}&key=${import.meta.env.VITE_OPENCAGE_API_KEY}`
-      );
-      const data = await response.json();
-      
-      if (data.results && data.results[0]) {
-        const result = data.results[0].components;
+      const result = await nominatimReverse(lat, lng);
+
+      if (result) {
+        const c = result.components;
         setFormData(prev => ({
           ...prev,
-          street: result.road || result.street || '',
-          city: result.city || result.town || result.village || '',
-          state: result.state || '',
-          country: result.country || '',
-          postal_code: result.postcode || '',
+          street: c.road || '',
+          city: c.city || '',
+          state: c.state || '',
+          country: c.country || '',
+          postal_code: c.postcode || '',
           latitude: lat.toString(),
           longitude: lng.toString()
         }));

@@ -1,0 +1,256 @@
+/* ============================================================
+   StayHub — Admin add/edit design system.
+   Scoped under .admin-shell / .admin-modal so it never leaks
+   into the rest of the app. Palette matches the landing (teal).
+   ============================================================ */
+
+.admin-shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+/* ---------- Header ---------- */
+.admin-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.admin-header__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #2a9d8f;
+  margin-bottom: 0.35rem;
+}
+.admin-header__title {
+  font-size: clamp(1.6rem, 3vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #111827;
+  margin: 0;
+}
+.admin-header__subtitle {
+  color: #6b7280;
+  margin-top: 0.25rem;
+  font-size: 0.95rem;
+}
+
+/* ---------- Tabs ---------- */
+.admin-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  background: #fff;
+  border: 1px solid #e8ecec;
+  border-radius: 0.9rem;
+  box-shadow: 0 4px 16px -12px rgba(3, 18, 8, 0.3);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.admin-tabs::-webkit-scrollbar { display: none; }
+.admin-tab {
+  flex: 1 0 auto;
+  white-space: nowrap;
+  padding: 0.6rem 1rem;
+  border: none;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.admin-tab:hover {
+  color: #1f7a6d;
+  background: #f0f9f8;
+}
+.admin-tab--active,
+.admin-tab--active:hover {
+  color: #fff;
+  background: linear-gradient(135deg, #2a9d8f 0%, #1f7a6d 100%);
+  box-shadow: 0 8px 18px -8px rgba(42, 157, 143, 0.65);
+}
+
+/* ---------- Panel (card around the active form) ---------- */
+.admin-panel {
+  margin-top: 1.5rem;
+  background: #fff;
+  border: 1px solid #edf1f0;
+  border-radius: 1rem;
+  padding: 1.75rem;
+  box-shadow: 0 6px 26px -16px rgba(3, 18, 8, 0.3);
+}
+.admin-panel__head {
+  margin-bottom: 1.35rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f1f4f3;
+}
+.admin-panel__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+.admin-panel__desc {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-top: 0.2rem;
+}
+
+/* ---------- Form controls (scoped) ---------- */
+.admin-panel label,
+.admin-modal label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.82rem;
+}
+.admin-panel input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.admin-panel select,
+.admin-panel textarea,
+.admin-modal input:not([type='checkbox']):not([type='radio']):not([type='file']),
+.admin-modal select,
+.admin-modal textarea {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #d7dedd !important;
+  border-radius: 0.6rem !important;
+  background: #fff;
+  color: #111827;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  box-shadow: none !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.admin-panel textarea,
+.admin-modal textarea { resize: vertical; min-height: 96px; }
+.admin-panel input:focus,
+.admin-panel select:focus,
+.admin-panel textarea:focus,
+.admin-modal input:focus,
+.admin-modal select:focus,
+.admin-modal textarea:focus {
+  outline: none;
+  border-color: #2a9d8f !important;
+  box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.18) !important;
+}
+.admin-panel input:disabled,
+.admin-panel select:disabled,
+.admin-panel textarea:disabled,
+.admin-modal input:disabled,
+.admin-modal select:disabled,
+.admin-modal textarea:disabled {
+  background: #f3f5f5;
+  color: #9aa2a1;
+  cursor: not-allowed;
+}
+
+/* ---------- Buttons ---------- */
+.af-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: 0.65rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.af-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.af-btn--primary {
+  background: linear-gradient(135deg, #2a9d8f 0%, #1f7a6d 100%);
+  color: #fff;
+  box-shadow: 0 10px 20px -10px rgba(42, 157, 143, 0.7);
+}
+.af-btn--primary:hover:not(:disabled) { transform: translateY(-1px); }
+.af-btn--ghost {
+  background: #fff;
+  border-color: #d7dedd;
+  color: #374151;
+}
+.af-btn--ghost:hover { background: #f6faf9; border-color: #c3cdcc; }
+
+.admin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #f1f4f3;
+}
+
+/* ---------- Rooms list ---------- */
+.admin-rooms__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+.admin-rooms__title { font-size: 1.15rem; font-weight: 700; color: #111827; margin: 0; }
+.admin-room-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid #edf1f0;
+  border-radius: 0.85rem;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.admin-room-card + .admin-room-card { margin-top: 0.75rem; }
+.admin-room-card:hover {
+  border-color: #cfe6e2;
+  box-shadow: 0 10px 24px -16px rgba(3, 18, 8, 0.45);
+}
+.admin-room-card__title { font-weight: 700; color: #111827; }
+.admin-room-card__meta { color: #6b7280; font-size: 0.85rem; margin-top: 0.15rem; }
+.admin-room-card__price { color: #1f7a6d; font-weight: 600; }
+.admin-room-card__actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.admin-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.55rem;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.admin-icon-btn:hover { background: #f6faf9; border-color: #2a9d8f; color: #1f7a6d; }
+.admin-icon-btn--danger:hover { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.admin-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.admin-empty {
+  text-align: center;
+  padding: 3rem 1.25rem;
+  border: 1px dashed #d7dedd;
+  border-radius: 1rem;
+  background: #fafbfb;
+}
+.admin-empty__title { color: #374151; font-weight: 600; }
+.admin-empty__desc { color: #9aa2a1; font-size: 0.875rem; margin-top: 0.25rem; }
+
+/* ---------- Room modal polish ---------- */
+.admin-modal__card {
+  border-radius: 1rem !important;
+  box-shadow: 0 30px 60px -20px rgba(3, 18, 8, 0.5) !important;
+}
+.admin-modal__title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #111827;
+}

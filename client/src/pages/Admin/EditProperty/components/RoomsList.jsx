@@ -81,97 +81,92 @@ const RoomsList = ({ propertyId, rooms, onRoomSubmit, onRoomDelete, disabled }) 
     setEditingRoom(null);
   };
 
+  const formatBeds = (room) => {
+    try {
+      const beds = Array.isArray(room.beds)
+        ? room.beds
+        : typeof room.beds === 'string'
+          ? JSON.parse(room.beds)
+          : [];
+      return beds.map((bed) => `${bed.count} ${bed.type}`).join(', ');
+    } catch (error) {
+      return '';
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-medium text-gray-900">Rooms</h2>
-        <button
-          type="button"
-          onClick={handleAddRoom}
-          disabled={disabled}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          <PlusIcon className="h-5 w-5 mr-2" />
+    <div>
+      <div className="admin-rooms__head">
+        <div>
+          <h2 className="admin-rooms__title">Rooms</h2>
+          <p className="admin-panel__desc" style={{ marginBottom: 0 }}>
+            {rooms?.length ? `${rooms.length} room${rooms.length > 1 ? 's' : ''}` : 'Add the rooms guests can book'}
+          </p>
+        </div>
+        <button type="button" onClick={handleAddRoom} disabled={disabled} className="af-btn af-btn--primary">
+          <PlusIcon className="h-5 w-5" />
           Add Room
         </button>
       </div>
 
       {rooms && rooms.length > 0 ? (
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
-          <ul className="divide-y divide-gray-200">
-            {rooms.map((room) => (
-              <li key={room.id || `temp-${rooms.indexOf(room)}`}>
-                <div className="px-4 py-4 flex items-center justify-between sm:px-6">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-medium text-gray-900 truncate">
-                      {room.name}
-                    </h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      {room.room_type} • Max Occupancy: {room.max_occupancy}
-                    </p>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Price per Night: ${room.price_per_night}
-                    </p>
-                    {room.beds && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        Beds: {(() => {
-                          try {
-                            const beds = Array.isArray(room.beds) 
-                              ? room.beds 
-                              : typeof room.beds === 'string' 
-                                ? JSON.parse(room.beds) 
-                                : [];
-                            return beds.map(bed => `${bed.count} ${bed.type}`).join(', ') || 'No bed information';
-                          } catch (error) {
-                            console.error('Error parsing beds:', error);
-                            return 'No bed information';
-                          }
-                        })()} 
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCalendar(room)}
-                      disabled={disabled}
-                      className="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <CalendarIcon className="h-4 w-4" />
-                      <span className="sr-only">Room calendar</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleEditRoom(room)}
-                      disabled={disabled}
-                      data-testid={`edit-room-${room.id}`}
-                      aria-label={`Edit room ${room.name}`}
-                      className="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <PencilIcon className="h-4 w-4" />
-                      <span className="sr-only">Edit {room.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onRoomDelete(room.id)}
-                      disabled={disabled}
-                      className="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                      <span className="sr-only">Delete room</span>
-                    </button>
-                  </div>
+        <div>
+          {rooms.map((room) => {
+            const beds = formatBeds(room);
+            return (
+              <div key={room.id || `temp-${rooms.indexOf(room)}`} className="admin-room-card">
+                <div className="min-w-0">
+                  <h3 className="admin-room-card__title truncate">{room.name}</h3>
+                  <p className="admin-room-card__meta">
+                    {room.room_type} • Max {room.max_occupancy} guests
+                    {beds ? ` • ${beds}` : ''}
+                  </p>
+                  <p className="admin-room-card__meta">
+                    <span className="admin-room-card__price">${room.price_per_night}</span> / night
+                  </p>
                 </div>
-              </li>
-            ))}
-          </ul>
+                <div className="admin-room-card__actions">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCalendar(room)}
+                    disabled={disabled}
+                    title="Room calendar"
+                    className="admin-icon-btn"
+                  >
+                    <CalendarIcon className="h-4 w-4" />
+                    <span className="sr-only">Room calendar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleEditRoom(room)}
+                    disabled={disabled}
+                    data-testid={`edit-room-${room.id}`}
+                    aria-label={`Edit room ${room.name}`}
+                    title="Edit room"
+                    className="admin-icon-btn"
+                  >
+                    <PencilIcon className="h-4 w-4" />
+                    <span className="sr-only">Edit {room.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRoomDelete(room.id)}
+                    disabled={disabled}
+                    title="Delete room"
+                    className="admin-icon-btn admin-icon-btn--danger"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                    <span className="sr-only">Delete room</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        <div className="text-center py-12 bg-white shadow rounded-lg">
-          <p className="text-sm text-gray-500">No rooms added yet</p>
-          <p className="mt-1 text-sm text-gray-500">
-            Add rooms to your property to start accepting bookings
-          </p>
+        <div className="admin-empty">
+          <p className="admin-empty__title">No rooms added yet</p>
+          <p className="admin-empty__desc">Add rooms to your property to start accepting bookings.</p>
         </div>
       )}
 

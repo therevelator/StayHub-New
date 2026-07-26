@@ -48,8 +48,10 @@ const Login = () => {
       // Call the context login
       login(result.user, result.token);
       
-      // Navigate to the page they came from or home
-      const from = location.state?.from || '/';
+      // Navigate to the page they came from: prefer router state, then the
+      // ?returnUrl= query param (used by login links across the app), then home.
+      const returnUrl = new URLSearchParams(location.search).get('returnUrl');
+      const from = location.state?.from || returnUrl || '/';
       navigate(from);
     } catch (err) {
       console.error('Login error in component:', err);
