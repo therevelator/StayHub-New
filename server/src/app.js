@@ -11,6 +11,7 @@ import bookingRoutes from './routes/booking.routes.js';
 import bodyParser from 'body-parser';
 import ownerRoutes from './routes/owner.routes.js';
 import userRoutes from './routes/user.routes.js';
+import aiRoutes from './routes/ai.routes.js';
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ app.use('/api/properties', roomRoutes);
 app.use('/api/owner', ownerRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Serve the built frontend (production single-service deploy). The client build
 // lands in ../../client/dist; when present, serve it and fall back to index.html
