@@ -38,9 +38,28 @@ const theme = {
         800: '#343A40',
         900: '#212529',
       },
+      // Booking Console redesign tokens (design_handoff concept 1a)
+      ink: {
+        900: '#0E2A26', // search hero background, active flow pill, primary map pin
+        700: '#1B1F1D', // headings and primary body text
+        500: '#8A8377', // warm muted text, mono labels
+      },
+      surface: {
+        raised: '#FCFCFB', // filter rail, table head, summary column
+      },
+      placeholder: {
+        a: '#EFEBE4', // image placeholder stripe pair
+        b: '#E4DFD6',
+      },
+      map: {
+        base: '#EEF1F0', // map canvas
+        grid: '#E4E9E7', // map grid lines
+        park: '#DCE7DE', // park polygon
+      },
     },
     fontFamily: {
       sans: ['Inter', 'ui-sans-serif', 'system-ui'],
+      mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
     },
     fontSize: {
       xs: ['0.75rem', { lineHeight: '1rem' }],
@@ -70,6 +89,12 @@ const theme = {
       md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
       lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
       xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+      // Booking Console redesign shadows
+      'card-hover': '0 12px 24px -18px rgba(20,40,38,.5)',
+      'hero-search': '0 30px 60px -25px rgba(0,0,0,.5)',
+      'sticky-bar': '0 -12px 30px -22px rgba(0,0,0,.4)',
+      'filters-sheet': '0 -20px 50px -20px rgba(0,0,0,.35)',
+      'map-pin': '0 4px 10px -4px rgba(0,0,0,.3)',
     },
   },
 };

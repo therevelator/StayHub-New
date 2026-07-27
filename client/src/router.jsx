@@ -17,6 +17,7 @@ import EditRooms from './pages/EditRooms/EditRooms';
 import RoomPage from './pages/RoomPage/RoomPage';
 import Trips from './pages/Trips/Trips';
 import Planning from './pages/Planning/Planning';
+import SearchConsole from './pages/SearchConsole/SearchConsole';
 import AdminRoute from './components/AdminRoute';
 import PrivateRoute from './components/PrivateRoute';
 import PropertyOwnerRoute from './components/PropertyOwnerRoute';
@@ -99,6 +100,8 @@ export const router = createBrowserRouter([
     path: '/',
     element: <App />,
     children: [
+      // A1 Search — full-bleed preview, outside MainLayout (no Header/container)
+      { path: 'console', element: <SearchConsole /> },
       {
         path: '/',
         element: <MainLayout />,
