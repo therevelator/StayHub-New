@@ -230,7 +230,7 @@
 
 @media (max-width: 1024px) {
   .room-content {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -241,6 +241,9 @@
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  /* Allow this grid column to shrink below its content's intrinsic width so a
+     wide child can't push the whole page into horizontal scroll on mobile. */
+  min-width: 0;
 }
 
 .detail-section {
@@ -297,7 +300,9 @@
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  /* min(180px, 100%) lets columns shrink below 180px on narrow screens
+     instead of forcing the grid (and the page) wider than the viewport. */
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
   gap: 1rem;
 }
 
@@ -334,6 +339,7 @@
    ========================================== */
 .booking-sidebar {
   position: relative;
+  min-width: 0;
 }
 
 .booking-card {
