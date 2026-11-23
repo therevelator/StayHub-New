@@ -104,11 +104,11 @@ export const router = createBrowserRouter([
     path: '/',
     element: <App />,
     children: [
-      // Booking Console flow (design concept 1a). Full-bleed screens with their
-      // own toolbars, so they sit outside MainLayout (no Header/container).
-      { index: true, element: <SearchConsole /> },            // A1 Search
-      { path: 'console', element: <SearchConsole /> },        // earlier preview URL
-      { path: 'search', element: <ConsoleResults /> },        // A2 Results
+      // Booking Console flow (design concept 1a), kept as a preview under /console.
+      // Full-bleed screens with their own toolbars, so they sit outside MainLayout.
+      // The existing landing page (/) and results page (/search) are untouched.
+      { path: 'console', element: <SearchConsole /> },        // A1 Search
+      { path: 'console/search', element: <ConsoleResults /> }, // A2 Results
       { path: 'stay/:id', element: <ConsoleStay /> },         // A3 Rooms compare
       { path: 'book/:roomId', element: <ConsoleCheckout /> }, // A4 Checkout
       { path: 'trips/:ref', element: <ConsoleConfirmed /> },  // A5 Confirmed
@@ -124,14 +124,13 @@ export const router = createBrowserRouter([
             path: '/planning',
             element: <Planning />,
           },
-          // Previous landing and results pages stay reachable while the new flow settles.
-          { path: 'home', element: <Home /> },
+          { index: true, element: <Home /> },
           { path: 'login', element: <Login /> },
           { path: 'register', element: <Register /> },
 
           { path: 'property/:propertyId', element: <PropertyDetails /> },
           { path: 'property/:propertyId/room/:roomId', element: <RoomPage /> },
-          { path: 'search-classic', element: <SearchResults /> },
+          { path: 'search', element: <SearchResults /> },
           {
             path: 'myreservations',
             element: <GuestRoute><MyReservations /></GuestRoute>

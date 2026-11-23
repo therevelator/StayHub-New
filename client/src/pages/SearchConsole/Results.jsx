@@ -425,7 +425,7 @@ export default function Results() {
   return (
     <div className="h-screen flex flex-col bg-white text-ink-700">
       <Toolbar>
-        <BackLink onClick={() => navigate(`/?${tripQuery(searchParams)}`)}>Edit search</BackLink>
+        <BackLink onClick={() => navigate(`/console?${tripQuery(searchParams)}`)}>Edit search</BackLink>
         <span className="font-semibold">{tripSummary(trip)}</span>
         <span className="text-[13px] text-gray-600" aria-live="polite">
           {showSkeleton ? 'Cutting the list…' : `${sorted.length} ${sorted.length === 1 ? 'stay' : 'stays'} left after your filters`}
@@ -501,7 +501,7 @@ export default function Results() {
                     Search for 1 guest
                   </button>
                 )}
-                <button type="button" onClick={() => navigate(`/?${tripQuery(searchParams)}`)} className="border border-gray-300 hover:border-primary-500 text-[13px] rounded-[8px] px-4 py-2">
+                <button type="button" onClick={() => navigate(`/console?${tripQuery(searchParams)}`)} className="border border-gray-300 hover:border-primary-500 text-[13px] rounded-[8px] px-4 py-2">
                   Edit search
                 </button>
               </div>

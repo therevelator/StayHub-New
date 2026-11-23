@@ -67,7 +67,7 @@ export default function Checkout() {
     return <Navigate to={`/login?returnUrl=${encodeURIComponent(`${location.pathname}${location.search}`)}`} replace />;
   }
 
-  const backToStay = () => navigate(propertyId ? `/stay/${propertyId}?${tripQuery(searchParams)}` : '/');
+  const backToStay = () => navigate(propertyId ? `/stay/${propertyId}?${tripQuery(searchParams)}` : '/console');
   const room = toArray(property?.rooms).find((r) => String(r.id) === String(roomId)) || null;
 
   if (status === 'loading') {

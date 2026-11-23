@@ -115,7 +115,7 @@ export default function Stay() {
   if (status !== 'ready' || !property) {
     return (
       <div className="h-screen flex flex-col bg-white text-ink-700">
-        <Toolbar><BackLink onClick={() => navigate(`/search?${tripQuery(searchParams)}`)}>Results</BackLink></Toolbar>
+        <Toolbar><BackLink onClick={() => navigate(`/console/search?${tripQuery(searchParams)}`)}>Results</BackLink></Toolbar>
         <div className="p-8 text-[14px]">
           {status === 'missing' ? 'This stay is no longer listed.' : 'We could not load this stay.'}{' '}
           {status === 'error' && <button type="button" className="underline" onClick={() => window.location.reload()}>Retry</button>}
@@ -172,7 +172,7 @@ export default function Stay() {
   return (
     <div className="h-screen flex flex-col bg-white text-ink-700">
       <Toolbar>
-        <BackLink onClick={() => navigate(`/search?${tripQuery(searchParams)}`)}>Results</BackLink>
+        <BackLink onClick={() => navigate(`/console/search?${tripQuery(searchParams)}`)}>Results</BackLink>
         <span className="font-semibold">{property.name}{property.city ? ` · ${property.city}` : ''}</span>
         <span className="text-[13px] text-gray-600">{meta}</span>
       </Toolbar>

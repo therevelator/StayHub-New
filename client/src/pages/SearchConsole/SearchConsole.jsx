@@ -94,9 +94,9 @@ export default function SearchConsole() {
       if (checkIn) params.set('checkIn', checkIn);
       if (checkOut) params.set('checkOut', checkOut);
       Object.entries(preset).forEach(([k, v]) => params.set(k, String(v)));
-      navigate(`/search?${params.toString()}`);
+      navigate(`/console/search?${params.toString()}`);
     } catch {
-      navigate(`/search?location=${encodeURIComponent(loc)}&guests=${adults}`);
+      navigate(`/console/search?location=${encodeURIComponent(loc)}&guests=${adults}`);
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
-// Booking Console flow (design concept 1a):
-// search (/) -> results (/search) -> rooms compare (/stay/:id) -> checkout (/book/:roomId) -> confirmed (/trips/:ref)
+// Booking Console flow (design concept 1a), a preview that lives under /console:
+// search (/console) -> results (/console/search) -> rooms compare (/stay/:id) -> checkout (/book/:roomId) -> confirmed (/trips/:ref)
 import { addDays, fmt } from '../../support/utils';
 
 const base = (() => {
@@ -18,12 +18,12 @@ describe('UI · Booking Console', () => {
     cy.intercept('GET', /nominatim\.openstreetmap\.org\/search/, {
       body: [{ lat: '44.4268', lon: '26.1025', display_name: 'Bucharest, Romania', address: { city: 'Bucharest', country: 'Romania' } }],
     });
-    cy.visit('/', { onBeforeLoad: (win) => win.localStorage.clear() });
+    cy.visit('/console', { onBeforeLoad: (win) => win.localStorage.clear() });
     cy.contains('h1', 'Tell us the shape of the trip').should('be.visible');
     cy.contains('button', 'Sign in').should('be.visible');
 
     cy.contains('button', 'Cut the list').click();
-    cy.location('pathname').should('eq', '/search');
+    cy.location('pathname').should('eq', '/console/search');
     cy.location('search').should('include', 'lat=44.4268').and('include', 'guests=2');
     cy.contains('left after your filters', { timeout: 15000 }).should('be.visible');
   });
@@ -55,7 +55,7 @@ describe('UI · Booking Console', () => {
     });
 
     it('lists the stay with a total for the dates and filters live', () => {
-      cy.visit(`/search?location=Bucharest%2C+Romania&lat=44.4323&lon=26.1063&radius=5&${trip}`);
+      cy.visit(`/console/search?location=Bucharest%2C+Romania&lat=44.4323&lon=26.1063&radius=5&${trip}`);
       cy.contains('article', ctx.name, { timeout: 15000 }).should('contain.text', '€300');
 
       // The test property has a flexible policy, so it survives this deal-breaker.

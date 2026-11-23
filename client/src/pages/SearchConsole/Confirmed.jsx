@@ -125,7 +125,7 @@ export default function Confirmed() {
           <div className="flex gap-2 mt-4 flex-wrap">
             <button type="button" onClick={addToCalendar} className={outlined}>Add to calendar</button>
             <button type="button" onClick={() => navigate('/myreservations')} className={outlined}>My reservations</button>
-            <button type="button" onClick={() => navigate('/')} className="flex-1 bg-primary-500 hover:bg-primary-600 text-white text-[13px] font-semibold rounded-[9px] px-3 py-[11px] transition-colors min-h-[44px]">
+            <button type="button" onClick={() => navigate('/console')} className="flex-1 bg-primary-500 hover:bg-primary-600 text-white text-[13px] font-semibold rounded-[9px] px-3 py-[11px] transition-colors min-h-[44px]">
               Book another stay
             </button>
           </div>

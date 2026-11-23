@@ -1,15 +1,14 @@
 // Login flow through the actual UI form.
 
 describe('UI · Login flow', () => {
-  it('logs in via the form and lands signed in on the search screen', () => {
+  it('logs in via the form and shows the authenticated header', () => {
     cy.registerUser().then(({ email, password }) => {
       cy.visit('/login');
       cy.get('#email').type(email);
       cy.get('#password').type(password);
       cy.contains('button', 'Sign in').click();
 
-      // After login the app goes to /, the Booking Console search screen.
-      cy.contains('button', 'Sign out', { timeout: 15000 }).should('be.visible');
+      cy.contains('Sign Out', { timeout: 15000 }).should('be.visible');
       cy.location('pathname').should('eq', '/');
     });
   });

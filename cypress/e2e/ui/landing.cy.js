@@ -1,9 +1,8 @@
-// Classic landing page (now at /home; / is the Booking Console search screen,
-// covered by console-flow.cy.js) — smoke test for the hero + search.
+// Landing page — smoke test for the redesigned hero + search.
 
 describe('UI · Landing page', () => {
   beforeEach(() => {
-    cy.visit('/home');
+    cy.visit('/');
   });
 
   it('renders the hero and search bar', () => {
