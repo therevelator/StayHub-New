@@ -2,13 +2,13 @@
 
 describe('UI · Navigation & route guards', () => {
   it('shows "Sign In" in the header when logged out', () => {
-    cy.visit('/', { onBeforeLoad: (win) => win.localStorage.clear() });
+    cy.visit('/home', { onBeforeLoad: (win) => win.localStorage.clear() });
     cy.contains('Sign In').should('be.visible');
   });
 
   it('shows "Sign Out" in the header when logged in', () => {
     cy.registerUser().then((u) => {
-      cy.visitAs('/', { token: u.token, user: u.user });
+      cy.visitAs('/home', { token: u.token, user: u.user });
       cy.contains('Sign Out').should('be.visible');
     });
   });

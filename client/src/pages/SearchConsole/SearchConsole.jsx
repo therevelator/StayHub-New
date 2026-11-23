@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 // A1 — Search (Booking Console concept 1a).
 // Full-bleed dark hero: state the shape of the trip in one bar, land on a short list.
@@ -11,21 +12,35 @@ const fmtDate = (iso) => {
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
+const isoDay = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const daysFromNow = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d; };
+
+// Presets: each one is a real search (dates and/or filters), applied to the place in the bar.
 const QUICK_CHIPS = [
-  'Tonight, under €100',
-  'Same hotel as May',
-  'Near the office, quiet',
-  'Two rooms, one floor',
+  { label: 'Tonight, under €100', build: () => ({ checkIn: isoDay(daysFromNow(0)), checkOut: isoDay(daysFromNow(1)), pmax: 100 }) },
+  {
+    label: 'This weekend',
+    build: () => {
+      const toFriday = (5 - new Date().getDay() + 7) % 7;
+      return { checkIn: isoDay(daysFromNow(toFriday)), checkOut: isoDay(daysFromNow(toFriday + 2)) };
+    },
+  },
+  { label: 'Breakfast included', build: () => ({ f: 'breakfast' }) },
+  { label: 'Free cancellation', build: () => ({ f: 'free-cancel' }) },
 ];
 
 export default function SearchConsole() {
   const navigate = useNavigate();
-  const [location, setLocation] = useState('Bucharest, Romania');
+  const [searchParams] = useSearchParams();
+  const { isAuthenticated, user, logout } = useAuth();
+  // "Edit search" comes back here with the trip in the URL.
+  const [location, setLocation] = useState(searchParams.get('location') || 'Bucharest, Romania');
   const [suggestions, setSuggestions] = useState([]);
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [adults, setAdults] = useState(2);
-  const [rooms, setRooms] = useState(1);
+  const [checkIn, setCheckIn] = useState(searchParams.get('checkIn') || '');
+  const [checkOut, setCheckOut] = useState(searchParams.get('checkOut') || '');
+  const [adults, setAdults] = useState(parseInt(searchParams.get('guests'), 10) || 2);
+  const [rooms, setRooms] = useState(parseInt(searchParams.get('rooms'), 10) || 1);
   const [panel, setPanel] = useState(null); // 'loc' | 'when' | 'who' | null
   const [loading, setLoading] = useState(false);
   const barRef = useRef(null);
@@ -60,8 +75,8 @@ export default function SearchConsole() {
     }, 300);
   };
 
-  const runSearch = async (overrideLocation) => {
-    const loc = (overrideLocation || location).trim();
+  const runSearch = async (preset = {}) => {
+    const loc = location.trim();
     if (!loc) return;
     setLoading(true);
     try {
@@ -78,6 +93,7 @@ export default function SearchConsole() {
       params.set('rooms', String(rooms));
       if (checkIn) params.set('checkIn', checkIn);
       if (checkOut) params.set('checkOut', checkOut);
+      Object.entries(preset).forEach(([k, v]) => params.set(k, String(v)));
       navigate(`/search?${params.toString()}`);
     } catch {
       navigate(`/search?location=${encodeURIComponent(loc)}&guests=${adults}`);
@@ -122,11 +138,23 @@ export default function SearchConsole() {
       {/* Top bar */}
       <div className="flex items-center justify-between px-[34px] py-[22px] border-b border-white/[0.08]">
         <div className="text-[17px] font-bold tracking-[-.01em]">StayHub</div>
-        <div className="flex gap-[26px] text-[13px] text-white/[0.62]">
-          <span className="text-white">Stays</span>
-          <span onClick={() => navigate('/trips')} className="cursor-pointer hover:text-white">Trips</span>
-          <span className="cursor-pointer hover:text-white">Saved</span>
-          <span onClick={() => navigate('/login')} className="text-white cursor-pointer">Ana P.</span>
+        <div className="flex gap-x-[26px] gap-y-2 flex-wrap justify-end text-[13px] text-white/[0.62]">
+          <span className="text-white" aria-current="page">Stays</span>
+          <button type="button" onClick={() => navigate('/myreservations')} className="hover:text-white">Trips</button>
+          <button type="button" onClick={() => navigate('/planning')} className="hover:text-white">Plan</button>
+          {isAuthenticated ? (
+            <>
+              <button
+                type="button" className="text-white"
+                onClick={() => navigate(user?.role === 'admin' ? '/admin/properties' : user?.role === 'host' ? '/dashboard' : '/myreservations')}
+              >
+                {[user?.firstName, user?.lastName ? `${user.lastName[0]}.` : ''].filter(Boolean).join(' ') || user?.email}
+              </button>
+              <button type="button" onClick={logout} className="hover:text-white">Sign out</button>
+            </>
+          ) : (
+            <button type="button" onClick={() => navigate('/login')} className="text-white">Sign in</button>
+          )}
         </div>
       </div>
 
@@ -220,9 +248,9 @@ export default function SearchConsole() {
         <div className="flex items-center gap-3 flex-wrap">
           <span className={`${MONO} text-white/60`}>Start from</span>
           {QUICK_CHIPS.map((c) => (
-            <button key={c} type="button" onClick={() => runSearch('Bucharest, Romania')}
+            <button key={c.label} type="button" onClick={() => runSearch(c.build())}
               className="border border-white/[0.18] rounded-full px-[15px] py-2 text-[13px] hover:bg-white/10 transition-colors">
-              {c}
+              {c.label}
             </button>
           ))}
         </div>

@@ -18,6 +18,10 @@ import RoomPage from './pages/RoomPage/RoomPage';
 import Trips from './pages/Trips/Trips';
 import Planning from './pages/Planning/Planning';
 import SearchConsole from './pages/SearchConsole/SearchConsole';
+import ConsoleResults from './pages/SearchConsole/Results';
+import ConsoleStay from './pages/SearchConsole/Stay';
+import ConsoleCheckout from './pages/SearchConsole/Checkout';
+import ConsoleConfirmed from './pages/SearchConsole/Confirmed';
 import AdminRoute from './components/AdminRoute';
 import PrivateRoute from './components/PrivateRoute';
 import PropertyOwnerRoute from './components/PropertyOwnerRoute';
@@ -100,8 +104,14 @@ export const router = createBrowserRouter([
     path: '/',
     element: <App />,
     children: [
-      // A1 Search — full-bleed preview, outside MainLayout (no Header/container)
-      { path: 'console', element: <SearchConsole /> },
+      // Booking Console flow (design concept 1a). Full-bleed screens with their
+      // own toolbars, so they sit outside MainLayout (no Header/container).
+      { index: true, element: <SearchConsole /> },            // A1 Search
+      { path: 'console', element: <SearchConsole /> },        // earlier preview URL
+      { path: 'search', element: <ConsoleResults /> },        // A2 Results
+      { path: 'stay/:id', element: <ConsoleStay /> },         // A3 Rooms compare
+      { path: 'book/:roomId', element: <ConsoleCheckout /> }, // A4 Checkout
+      { path: 'trips/:ref', element: <ConsoleConfirmed /> },  // A5 Confirmed
       {
         path: '/',
         element: <MainLayout />,
@@ -114,13 +124,14 @@ export const router = createBrowserRouter([
             path: '/planning',
             element: <Planning />,
           },
-          { index: true, element: <Home /> },
+          // Previous landing and results pages stay reachable while the new flow settles.
+          { path: 'home', element: <Home /> },
           { path: 'login', element: <Login /> },
           { path: 'register', element: <Register /> },
 
           { path: 'property/:propertyId', element: <PropertyDetails /> },
           { path: 'property/:propertyId/room/:roomId', element: <RoomPage /> },
-          { path: 'search', element: <SearchResults /> },
+          { path: 'search-classic', element: <SearchResults /> },
           {
             path: 'myreservations',
             element: <GuestRoute><MyReservations /></GuestRoute>

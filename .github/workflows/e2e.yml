@@ -60,16 +60,30 @@ jobs:
       - name: Load database schema
         run: npm run db:init --prefix server
 
+      # Boots the client (127.0.0.1:3000) and the server (:5001) together and
+      # waits for both here: the Cypress action's own wait-on gave up on the
+      # first refused connection instead of retrying.
+      - name: Start the app
+        run: |
+          npm run start:ci > app.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5001/api/health > /dev/null && curl -sf http://127.0.0.1:3000 > /dev/null; then
+              echo "app is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "app did not start in time"; cat app.log; exit 1
+
       - name: Run E2E tests
         uses: cypress-io/github-action@v6
         with:
           install: false
-          # Boots the client (127.0.0.1:3000) and the server (:5001) together.
-          start: npm run start:ci
-          wait-on: 'http://127.0.0.1:3000, http://127.0.0.1:5001/api/health'
-          wait-on-timeout: 120
           browser: chrome
           config: baseUrl=http://127.0.0.1:3000
+
+      - name: Show app log
+        if: failure()
+        run: tail -n 200 app.log || true
 
       - name: Upload failure artifacts
         if: failure()
