@@ -1,4 +1,5 @@
 import db from '../db/index.js';
+import { parseJson } from '../utils/json.js';
 import * as propertyModel from '../models/property.model.js';
 import * as roomModel from '../models/room.model.js';
 // Removed uuid import as we're using custom booking reference
@@ -146,12 +147,13 @@ export const getRooms = async (req, res) => {
       SELECT 
         r.*,
         p.name as property_name,
-        p.location as property_location,
-        p.type as property_type,
+        CONCAT(p.city, ', ', p.country) as property_location,
+        p.property_type as property_type,
         p.rating as property_rating
       FROM rooms r
       JOIN properties p ON r.property_id = p.id
       WHERE r.property_id = ?
+      ORDER BY r.created_at ASC
     `, [propertyId]);
 
     console.log('Raw rooms from DB:', rooms);
@@ -159,12 +161,12 @@ export const getRooms = async (req, res) => {
     // Parse JSON fields for each room
     const parsedRooms = rooms.map(room => ({
       ...room,
-      beds: room.beds ? JSON.parse(room.beds) : [],
-      amenities: room.amenities ? JSON.parse(room.amenities) : [],
-      accessibility_features: room.accessibility_features ? JSON.parse(room.accessibility_features) : [],
-      energy_saving_features: room.energy_saving_features ? JSON.parse(room.energy_saving_features) : [],
-      climate: room.climate ? JSON.parse(room.climate) : { type: 'ac', available: true },
-      images: room.images ? JSON.parse(room.images) : [],
+      beds: parseJson(room.beds, []),
+      amenities: parseJson(room.amenities, []),
+      accessibility_features: parseJson(room.accessibility_features, []),
+      energy_saving_features: parseJson(room.energy_saving_features, []),
+      climate: parseJson(room.climate, { type: 'ac', available: true }),
+      images: parseJson(room.images, []),
       // Convert boolean fields
       has_private_bathroom: Boolean(room.has_private_bathroom),
       smoking: Boolean(room.smoking),

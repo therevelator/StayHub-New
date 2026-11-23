@@ -68,6 +68,11 @@ npm install
 npm run db:init
 npm run db:seed
 
+# Optional - AI trip planner (/planning): put your Gemini API key in
+# server/.env.local (git-ignored, loaded before .env):
+#   GEMINI_API_KEY=your_key
+# Without it the planner answers "not set up on this server".
+
 # Start the server
 npm run dev
 ```

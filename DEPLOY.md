@@ -39,6 +39,7 @@ DB_NAME=${{Postgres.PGDATABASE}}
 JWT_SECRET=<paste a long random string>
 JWT_EXPIRES_IN=24h
 NODE_ENV=production
+GEMINI_API_KEY=<optional: enables the AI trip planner>
 ```
 
 Notes:

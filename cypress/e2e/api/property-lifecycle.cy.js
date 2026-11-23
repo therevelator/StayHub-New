@@ -42,4 +42,35 @@ describe('API · Property lifecycle', () => {
       });
     });
   });
+
+  it('returns a room\'s beds and amenities wherever rooms are listed', () => {
+    const beds = [{ type: 'Queen Bed', count: 1 }, { type: 'Single Bed', count: 2 }];
+    const amenities = ['Wi-Fi', 'Balcony'];
+
+    cy.createProperty(token, { name: 'Beds Inn' }).then((propertyId) => {
+      cy.createRoom(token, propertyId, { name: 'Family Room', beds, amenities }).then((roomId) => {
+        // Property details embed the rooms.
+        cy.request(`${api()}/properties/${propertyId}`).then((res) => {
+          const room = res.body.data.rooms.find((r) => r.id === roomId);
+          expect(room, 'room in property details').to.exist;
+          expect(room.beds).to.deep.equal(beds);
+          expect(room.amenities).to.deep.equal(amenities);
+        });
+
+        // The room list endpoint returns the same data plus the property's summary.
+        cy.request({
+          url: `${api()}/properties/${propertyId}/rooms`,
+          headers: { Authorization: `Bearer ${token}` },
+        }).then((res) => {
+          expect(res.status).to.eq(200);
+          expect(res.body.data).to.have.length(1);
+          const [room] = res.body.data;
+          expect(room).to.include({ id: roomId, name: 'Family Room', property_name: 'Beds Inn', property_type: 'hotel' });
+          expect(room.property_location).to.eq('Bucharest, Romania');
+          expect(room.beds).to.deep.equal(beds);
+          expect(room.amenities).to.deep.equal(amenities);
+        });
+      });
+    });
+  });
 });

@@ -1,4 +1,5 @@
 import db from '../db/index.js';
+import { parseJson } from '../utils/json.js';
 
 // Helper function to safely handle JSON fields
 const safeJsonStringify = (value, defaultValue) => {
@@ -25,16 +26,8 @@ const safeJsonStringify = (value, defaultValue) => {
   }
 };
 
-// Helper function to safely parse JSON
-const safeJsonParse = (str, defaultValue) => {
-  if (!str) return defaultValue;
-  try {
-    return JSON.parse(str);
-  } catch (e) {
-    console.error('Error parsing JSON:', e, 'for string:', str);
-    return defaultValue;
-  }
-};
+// Helper function to safely read a JSON column (parsed jsonb or JSON text)
+const safeJsonParse = parseJson;
 
 // Helper function to generate room description
 const generateRoomDescription = (roomData) => {

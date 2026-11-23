@@ -1,6 +1,18 @@
 import db from '../config/database.js';
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+// Models are tried in order: when one is overloaded or rate-limited, the next takes over.
+const geminiModels = () => [
+  ...new Set([
+    process.env.GEMINI_MODEL || 'gemini-flash-latest',
+    ...(process.env.GEMINI_FALLBACK_MODELS || 'gemini-flash-lite-latest,gemini-3.5-flash').split(','),
+  ].map((m) => m.trim()).filter(Boolean)),
+];
+
+// A bad request or a rejected key fails the same way on every model: stop there.
+// Anything else (overloaded, rate-limited, retired model, network) moves on to the next.
+const FATAL = new Set([400, 401, 403]);
+const ATTEMPT_ROUNDS = 2;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const haversineKm = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
@@ -14,16 +26,12 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
 
 const hasCoords = (p) => p && typeof p.lat === 'number' && typeof p.lon === 'number';
 
-// Call Gemini with a prompt, expecting a JSON object back.
-const callGemini = async (prompt) => {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('GEMINI_API_KEY is not configured');
-
+const requestGemini = async (model, key, prompt) => {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: 'application/json', temperature: 0.6 },
@@ -31,10 +39,9 @@ const callGemini = async (prompt) => {
     }
   );
 
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = data?.error?.message || `Gemini error ${res.status}`;
-    const err = new Error(msg);
+    const err = new Error(data?.error?.message || `Gemini error ${res.status}`);
     err.status = res.status;
     throw err;
   }
@@ -43,9 +50,33 @@ const callGemini = async (prompt) => {
   try {
     return JSON.parse(text);
   } catch {
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    return JSON.parse(cleaned);
+    return JSON.parse(text.replace(/```json|```/g, '').trim());
   }
+};
+
+// Call Gemini with a prompt, expecting a JSON object back.
+const callGemini = async (prompt) => {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    const err = new Error('GEMINI_API_KEY is not configured');
+    err.code = 'AI_NOT_CONFIGURED';
+    throw err;
+  }
+
+  let lastError;
+  for (let round = 1; round <= ATTEMPT_ROUNDS; round += 1) {
+    for (const model of geminiModels()) {
+      try {
+        return await requestGemini(model, key, prompt);
+      } catch (error) {
+        lastError = error;
+        if (FATAL.has(error.status)) throw error;
+        console.warn(`AI guide: model ${model} failed (${error.status || error.message}), round ${round}`);
+      }
+    }
+    if (round < ATTEMPT_ROUNDS) await pause(2500);
+  }
+  throw lastError;
 };
 
 // Build the hidden prompt from the traveller's filters. This runs server-side
@@ -225,13 +256,21 @@ export const generateGuide = async (req, res) => {
     });
   } catch (error) {
     console.error('AI guide error:', error.message);
-    const status = error.status === 429 ? 429 : 500;
+    if (error.code === 'AI_NOT_CONFIGURED') {
+      return res.status(503).json({
+        status: 'error',
+        message: 'The AI trip planner is not set up on this server (GEMINI_API_KEY is missing).',
+      });
+    }
+    const status = error.status === 429 ? 429 : [500, 503].includes(error.status) ? 503 : 500;
     res.status(status).json({
       status: 'error',
       message:
         status === 429
           ? 'The AI service is rate-limited right now. Please try again in a moment.'
-          : 'Failed to generate the travel guide.',
+          : status === 503
+            ? 'The AI service is overloaded right now. Please try again in a moment.'
+            : 'Failed to generate the travel guide.',
     });
   }
 };

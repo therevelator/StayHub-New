@@ -1,4 +1,5 @@
 import { pool as db } from '../config/db.js';
+import { parseJson } from '../utils/json.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const Booking = {
@@ -60,53 +61,13 @@ const Booking = {
         console.log('Processing booking:', booking.id);
         console.log('Raw beds data:', booking.room_beds);
         
-        // Parse JSON fields
-        let beds = [];
-        try {
-          if (booking.room_beds) {
-            beds = JSON.parse(booking.room_beds);
-            console.log('Successfully parsed beds:', beds);
-          } else {
-            console.log('No beds data found in booking');
-          }
-        } catch (e) {
-          console.error('Error parsing beds:', e, 'Raw value:', booking.room_beds);
-        }
-        
-        let amenities = [];
-        try {
-          amenities = booking.amenities ? JSON.parse(booking.amenities) : [];
-        } catch (e) {
-          console.error('Error parsing amenities:', e);
-        }
-        
-        let accessibility_features = [];
-        try {
-          accessibility_features = booking.accessibility_features ? JSON.parse(booking.accessibility_features) : [];
-        } catch (e) {
-          console.error('Error parsing accessibility_features:', e);
-        }
-        
-        let energy_saving_features = [];
-        try {
-          energy_saving_features = booking.energy_saving_features ? JSON.parse(booking.energy_saving_features) : [];
-        } catch (e) {
-          console.error('Error parsing energy_saving_features:', e);
-        }
-        
-        let climate = { type: 'ac', available: true };
-        try {
-          climate = booking.climate ? JSON.parse(booking.climate) : climate;
-        } catch (e) {
-          console.error('Error parsing climate:', e);
-        }
-        
-        let images = [];
-        try {
-          images = booking.images ? JSON.parse(booking.images) : [];
-        } catch (e) {
-          console.error('Error parsing images:', e);
-        }
+        // JSON columns arrive parsed (jsonb) or, for older rows, as JSON text
+        const beds = parseJson(booking.room_beds, []);
+        const amenities = parseJson(booking.amenities, []);
+        const accessibility_features = parseJson(booking.accessibility_features, []);
+        const energy_saving_features = parseJson(booking.energy_saving_features, []);
+        const climate = parseJson(booking.climate, { type: 'ac', available: true });
+        const images = parseJson(booking.images, []);
 
         return {
           id: booking.id,
