@@ -9,12 +9,12 @@ export const getPropertyAnalytics = async (req, res) => {
                 COUNT(DISTINCT b.id) as total_bookings,
                 COUNT(DISTINCT CASE WHEN b.status = 'confirmed' THEN b.id END) as completed_bookings,
                 COUNT(DISTINCT CASE WHEN b.status = 'cancelled' THEN b.id END) as cancelled_bookings,
-                IFNULL(SUM(CASE WHEN b.status = 'confirmed' THEN b.total_price END), 0) as total_revenue,
+                COALESCE(SUM(CASE WHEN b.status = 'confirmed' THEN b.total_price END), 0.00) as total_revenue,
                 AVG(CASE WHEN b.status = 'confirmed' THEN b.total_price END) as average_booking_value
             FROM bookings b
             JOIN rooms r ON b.room_id = r.id
             WHERE r.property_id = ?
-            AND b.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            AND b.created_at >= NOW() - INTERVAL '30 days'
         `;
         
         const [result] = await pool.query(query, [propertyId]);
@@ -51,7 +51,7 @@ export const getRevenueAnalytics = async (req, res) => {
             JOIN rooms r ON b.room_id = r.id
             WHERE r.property_id = ?
             AND b.status = 'confirmed'
-            AND b.check_in_date >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND b.check_in_date >= CURRENT_DATE - ?::int
             GROUP BY DATE(b.check_in_date)
             ORDER BY date ASC
         `;
@@ -90,7 +90,7 @@ export const getBookingAnalytics = async (req, res) => {
             FROM bookings b
             JOIN rooms r ON b.room_id = r.id
             WHERE r.property_id = ?
-            AND b.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND b.created_at >= NOW() - make_interval(days => ?::int)
             GROUP BY DATE(b.created_at)
             ORDER BY date ASC
         `;
@@ -121,12 +121,9 @@ export const getOccupancyAnalytics = async (req, res) => {
         }
         
         const query = `
-            WITH RECURSIVE dates AS (
-                SELECT CURDATE() as date
-                UNION ALL
-                SELECT date - INTERVAL 1 DAY
-                FROM dates
-                WHERE date > CURDATE() - INTERVAL ? DAY
+            WITH dates AS (
+                SELECT d::date AS date
+                FROM generate_series(CURRENT_DATE - ?::int, CURRENT_DATE, INTERVAL '1 day') AS d
             ),
             room_counts AS (
                 SELECT COUNT(*) as total_rooms
@@ -138,16 +135,16 @@ export const getOccupancyAnalytics = async (req, res) => {
                     d.date,
                     COUNT(DISTINCT b.room_id) as booked_rooms
                 FROM dates d
-                LEFT JOIN bookings b ON d.date BETWEEN b.check_in_date AND DATE_SUB(b.check_out_date, INTERVAL 1 DAY)
+                LEFT JOIN bookings b ON d.date BETWEEN b.check_in_date AND b.check_out_date - 1
                     AND b.status = 'confirmed'
                 LEFT JOIN rooms r ON b.room_id = r.id AND r.property_id = ?
                 GROUP BY d.date
             )
             SELECT 
                 db.date,
-                IFNULL(db.booked_rooms, 0) as occupied_rooms,
+                COALESCE(db.booked_rooms, 0) as occupied_rooms,
                 rc.total_rooms,
-                ROUND((IFNULL(db.booked_rooms, 0) / NULLIF(rc.total_rooms, 0)) * 100, 2) as occupancy_rate
+                ROUND((COALESCE(db.booked_rooms, 0)::numeric / NULLIF(rc.total_rooms, 0)) * 100, 2) as occupancy_rate
             FROM daily_bookings db
             CROSS JOIN room_counts rc
             ORDER BY db.date DESC

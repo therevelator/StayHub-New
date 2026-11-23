@@ -4,10 +4,10 @@ export const createAvailabilityRecord = async (roomId, date, status, bookingId =
   const [result] = await db.query(
     `INSERT INTO room_availability (room_id, date, status, booking_id, notes) 
      VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE 
-     status = VALUES(status),
-     booking_id = VALUES(booking_id),
-     notes = VALUES(notes)`,
+     ON CONFLICT (room_id, date) DO UPDATE SET
+     status = EXCLUDED.status,
+     booking_id = EXCLUDED.booking_id,
+     notes = EXCLUDED.notes`,
     [roomId, date, status, bookingId, notes]
   );
   return result;
@@ -42,14 +42,8 @@ export const bulkUpdateAvailability = async (roomId, dateRange, status, bookingI
 
     // Generate dates within the range
     const [dates] = await connection.query(
-      `WITH RECURSIVE date_sequence AS (
-         SELECT ? as date
-         UNION ALL
-         SELECT date + INTERVAL 1 DAY
-         FROM date_sequence
-         WHERE date < ?
-       )
-       SELECT date FROM date_sequence`,
+      `SELECT to_char(d, 'YYYY-MM-DD') AS date
+       FROM generate_series(?::date, ?::date, INTERVAL '1 day') AS d`,
       [dateRange.startDate, dateRange.endDate]
     );
 
@@ -58,10 +52,10 @@ export const bulkUpdateAvailability = async (roomId, dateRange, status, bookingI
       await connection.query(
         `INSERT INTO room_availability (room_id, date, status, booking_id, notes)
          VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-         status = VALUES(status),
-         booking_id = VALUES(booking_id),
-         notes = VALUES(notes)`,
+         ON CONFLICT (room_id, date) DO UPDATE SET
+         status = EXCLUDED.status,
+         booking_id = EXCLUDED.booking_id,
+         notes = EXCLUDED.notes`,
         [roomId, date, status, bookingId, notes]
       );
     }

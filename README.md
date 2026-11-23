@@ -1,11 +1,11 @@
 # StayHub - Modern Accommodation Booking Platform
 
-A scalable and modern web application for booking accommodations worldwide, built with React, Node.js, and MySQL.
+A scalable and modern web application for booking accommodations worldwide, built with React, Node.js, and PostgreSQL.
 
 ## System Requirements
 
 - Node.js v14 or higher
-- MySQL 8.0 or higher
+- PostgreSQL 14 or higher
 - npm or yarn
 - Docker (optional, for containerized database)
 
@@ -21,37 +21,35 @@ A scalable and modern web application for booking accommodations worldwide, buil
 ### Backend
 - Node.js
 - Express
-- MySQL (primary database)
+- PostgreSQL (primary database)
 - JWT for authentication
 
 ## Quick Start
 
 ### 1. Database Setup
 
-#### Using Docker (Recommended)
+#### Local PostgreSQL (Recommended)
 ```bash
-# Pull MySQL image
-docker pull mysql:8.0
+# macOS (Homebrew)
+brew install postgresql@16 && brew services start postgresql@16
 
-# Create a Docker volume for persistent data
-docker volume create stayhub_mysqldata
-
-# Start MySQL container
-docker run --name stayhub-mysql \
-  -e MYSQL_ROOT_PASSWORD=your_password \
-  -e MYSQL_DATABASE=stayhub \
-  -v stayhub_mysqldata:/var/lib/mysql \
-  -p 3306:3306 \
-  -d mysql:8.0
+# Create the database
+createdb stayhub
 ```
 
-#### Manual MySQL Setup
-1. Install MySQL 8.0
-2. Create a new database:
-```sql
-CREATE DATABASE stayhub;
+#### Using Docker
+```bash
+docker run --name stayhub-postgres \
+  -e POSTGRES_USER=stayhub \
+  -e POSTGRES_PASSWORD=your_password \
+  -e POSTGRES_DB=stayhub \
+  -v stayhub_pgdata:/var/lib/postgresql/data \
+  -p 5432:5432 \
+  -d postgres:16
 ```
-3. Run the schema.sql file from server/src/db/schema.sql
+
+The tables and demo data are loaded in the backend setup below
+(`npm run db:init` and `npm run db:seed`).
 
 ### 2. Backend Setup
 
@@ -62,11 +60,13 @@ cd server
 # Install dependencies
 npm install
 
-# Create .env file and update with your credentials
-cp .env.example .env
+# Point server/.env at your database: DB_HOST, DB_PORT (5432), DB_USER,
+# DB_PASSWORD, DB_NAME - or a single DATABASE_URL. With a local Homebrew
+# PostgreSQL, leaving DB_USER and DB_PASSWORD empty connects as your OS user.
 
-# Seed the database with demo properties
-npm run seed
+# Create the tables, then load the demo data and demo accounts
+npm run db:init
+npm run db:seed
 
 # Start the server
 npm run dev
@@ -204,7 +204,7 @@ VITE_API_URL=http://localhost:5001/api
 
 ## Database Schema
 
-The application uses MySQL as its primary database. The complete schema can be found in server/src/db/schema.sql. Key tables include:
+The application uses PostgreSQL as its primary database. The complete schema can be found in server/src/db/schema.sql. Key tables include:
 
 - `users`: User accounts and authentication
 - `properties`: Property listings and details

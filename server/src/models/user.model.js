@@ -29,7 +29,7 @@ export const createUser = async (userData) => {
 
 export const getUserByEmail = async (email) => {
   try {
-    const query = 'SELECT * FROM users WHERE email = ?';
+    const query = 'SELECT * FROM users WHERE LOWER(email) = LOWER(?)';
     const [rows] = await db.query(query, [email]);
     return rows[0];
   } catch (error) {

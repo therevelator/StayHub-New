@@ -28,7 +28,7 @@ class User {
     try {
       console.log('Finding user by email:', email);
       const [rows] = await db.query(
-        'SELECT * FROM users WHERE email = ?',
+        'SELECT * FROM users WHERE LOWER(email) = LOWER(?)',
         [email]
       );
       console.log('Found user by email:', rows[0]);
@@ -121,7 +121,7 @@ class User {
       return defaultProfile;
     } catch (error) {
       console.error('Error in createProfile:', error);
-      if (error.code === 'ER_DUP_ENTRY') {
+      if (error.code === '23505') { // unique_violation
         throw new Error('Profile already exists for this user');
       }
       throw new Error(`Failed to create user profile: ${error.message}`);

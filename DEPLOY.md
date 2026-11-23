@@ -2,9 +2,9 @@
 
 StayHub runs as **one service**: the Express backend serves both the API
 (`/api/*`) and the built React frontend (same origin, so no CORS). It connects
-to a **managed MySQL** database. Everything below lives on Railway.
+to a **managed PostgreSQL** database. Everything below lives on Railway.
 
-> You need a Railway account and (for MySQL) a paid/verified plan. Account
+> You need a Railway account and (for the database) a paid/verified plan. Account
 > creation, provisioning and setting variables are done by you in the Railway
 > dashboard — the repo is already configured for it.
 
@@ -13,9 +13,9 @@ to a **managed MySQL** database. Everything below lives on Railway.
 ## 1. Create the project + database
 
 1. Go to [railway.app](https://railway.app) → **New Project**.
-2. **New → Database → Add MySQL**. Railway provisions a MySQL service (note its
-   name, e.g. `MySQL`). It exposes: `MYSQLHOST`, `MYSQLPORT`, `MYSQLUSER`,
-   `MYSQLPASSWORD`, `MYSQLDATABASE`.
+2. **New → Database → Add PostgreSQL**. Railway provisions a PostgreSQL service
+   (note its name, e.g. `Postgres`). It exposes: `PGHOST`, `PGPORT`, `PGUSER`,
+   `PGPASSWORD`, `PGDATABASE` and a ready-made `DATABASE_URL`.
 
 ## 2. Add the app service
 
@@ -28,14 +28,14 @@ to a **managed MySQL** database. Everything below lives on Railway.
 ## 3. Set environment variables (app service → Variables)
 
 Use Railway **reference variables** so the DB creds stay in sync (replace
-`MySQL` with your database service's actual name):
+`Postgres` with your database service's actual name):
 
 ```
-DB_HOST=${{MySQL.MYSQLHOST}}
-DB_PORT=${{MySQL.MYSQLPORT}}
-DB_USER=${{MySQL.MYSQLUSER}}
-DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
-DB_NAME=${{MySQL.MYSQLDATABASE}}
+DB_HOST=${{Postgres.PGHOST}}
+DB_PORT=${{Postgres.PGPORT}}
+DB_USER=${{Postgres.PGUSER}}
+DB_PASSWORD=${{Postgres.PGPASSWORD}}
+DB_NAME=${{Postgres.PGDATABASE}}
 JWT_SECRET=<paste a long random string>
 JWT_EXPIRES_IN=24h
 NODE_ENV=production
@@ -44,12 +44,15 @@ NODE_ENV=production
 Notes:
 - **`PORT`** is injected by Railway automatically — do **not** set it. The server
   listens on `process.env.PORT`.
+- Instead of the five `DB_*` variables you can set a single
+  `DATABASE_URL=${{Postgres.DATABASE_URL}}`. Add `DB_SSL=true` if your provider
+  requires TLS.
 - **CORS** isn't needed (frontend is same-origin). The frontend auto-uses a
   relative `/api` on any non-localhost host, so no frontend URL to configure.
 
 ## 4. Initialize the database (once)
 
-After the first successful deploy, load the schema into the MySQL service. In
+After the first successful deploy, load the schema into the PostgreSQL service. In
 the **app service** open a shell / one-off command (Railway → the service →
 "…" → *Run a command* or the shell) and run:
 
@@ -79,13 +82,13 @@ The host account owns all the seeded properties. The seed contains no real user
 data — only these demo accounts.
 
 > Re-running `db:init` re-creates the tables (drops existing) — only run it again
-> if you intend to reset. `db:seed` uses REPLACE, so it's safe to re-run.
+> if you intend to reset. `db:seed` upserts on primary keys, so it's safe to re-run.
 
 ## 5. Expose the app
 
 App service → **Settings → Networking → Generate Domain**. Open the generated
 URL — the StayHub landing page loads and the whole app (login, listings,
-booking) works against the Railway MySQL.
+booking) works against the Railway PostgreSQL.
 
 ---
 
@@ -93,7 +96,7 @@ booking) works against the Railway MySQL.
 
 ```
 Browser ──> Railway domain ──> Express service (PORT)
-                                 ├─ /api/*        → API routes → MySQL service
+                                 ├─ /api/*        → API routes → PostgreSQL service
                                  └─ everything else → client/dist (React SPA)
 ```
 

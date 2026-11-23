@@ -1,10 +1,10 @@
-// Loads a .sql file into the configured MySQL. Defaults to schema.sql.
+// Loads a .sql file into the configured PostgreSQL database. Defaults to schema.sql.
 //   npm run db:init --prefix server    -> loads schema.sql (creates tables)
 //   npm run db:seed --prefix server    -> loads seed-demo.sql (demo data)
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import mysql from 'mysql2/promise';
+import pg from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -12,21 +12,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const run = async () => {
   const file = process.argv[2] || 'schema.sql';
-  const schemaPath = path.join(__dirname, file);
-  const schema = fs.readFileSync(schemaPath, 'utf8');
+  const sql = fs.readFileSync(path.join(__dirname, file), 'utf8');
+  const database = process.env.DB_NAME || 'stayhub';
 
-  const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || '127.0.0.1',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'stayhub',
-    port: Number(process.env.DB_PORT) || 3306,
-    multipleStatements: true,
-  });
+  const client = new pg.Client(
+    process.env.DATABASE_URL
+      ? { connectionString: process.env.DATABASE_URL }
+      : {
+          host: process.env.DB_HOST || 'localhost',
+          port: Number(process.env.DB_PORT) || 5432,
+          user: process.env.DB_USER || process.env.USER || 'postgres',
+          password: process.env.DB_PASSWORD || undefined,
+          database,
+        }
+  );
 
-  console.log(`Loading ${file} into "${process.env.DB_NAME || 'stayhub'}" ...`);
-  await conn.query(schema);
-  await conn.end();
+  await client.connect();
+  console.log(`Loading ${file} into "${database}" ...`);
+  await client.query(sql);
+  await client.end();
   console.log(`${file} loaded ✅`);
 };
 

@@ -18,7 +18,7 @@ const queryAdmin = async () => {
         u.email,
         u.role
       FROM properties p
-      LEFT JOIN users u ON p.host_id = u.id COLLATE utf8mb4_0900_ai_ci
+      LEFT JOIN users u ON p.host_id = u.id
       WHERE p.id = ?
     `;
 

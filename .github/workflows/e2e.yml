@@ -9,15 +9,16 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      mysql:
-        image: mysql:8.0
+      postgres:
+        image: postgres:16
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: stayhub
+          POSTGRES_USER: stayhub
+          POSTGRES_PASSWORD: stayhub
+          POSTGRES_DB: stayhub
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-cmd="pg_isready -U stayhub -d stayhub"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=15
@@ -30,10 +31,10 @@ jobs:
       PORT: 5001
       NODE_ENV: development
       DB_HOST: 127.0.0.1
-      DB_USER: root
-      DB_PASSWORD: root
+      DB_USER: stayhub
+      DB_PASSWORD: stayhub
       DB_NAME: stayhub
-      DB_PORT: 3306
+      DB_PORT: 5432
       JWT_SECRET: ci-test-secret
       JWT_EXPIRES_IN: 24h
       CORS_ORIGIN: http://127.0.0.1:3000
@@ -49,23 +50,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install MySQL client
-        run: sudo apt-get update && sudo apt-get install -y mysql-client
-
-      - name: Wait for MySQL and load schema
-        run: |
-          for i in $(seq 1 30); do
-            mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -proot --silent && break
-            echo "waiting for mysql..."; sleep 2
-          done
-          mysql -h 127.0.0.1 -P 3306 -uroot -proot stayhub < server/src/db/schema.sql
-          echo "schema loaded"
-
       - name: Install dependencies
         run: |
           npm ci
           npm ci --prefix server
           npm ci --prefix client
+
+      # The postgres service is already healthy here (see health-cmd above).
+      - name: Load database schema
+        run: npm run db:init --prefix server
 
       - name: Run E2E tests
         uses: cypress-io/github-action@v6

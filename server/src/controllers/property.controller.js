@@ -50,7 +50,7 @@ const searchProperties = async (req, res) => {
     const basicQuery = `
       SELECT id, guests, property_type, city, country, latitude, longitude
       FROM properties p
-      WHERE is_active = 1 
+      WHERE is_active = TRUE 
       AND guests >= ?
     `;
     const [basicProperties] = await db.query(basicQuery, [parseInt(guests)]);
@@ -66,18 +66,15 @@ const searchProperties = async (req, res) => {
         country,
         latitude,
         longitude,
-        ST_Distance_Sphere(
-          point(longitude, latitude),
-          point(?, ?)
-        ) * 0.001 as distance_km
+        distance_km(latitude, longitude, ?, ?) as distance_km
       FROM properties
-      WHERE is_active = 1 
+      WHERE is_active = TRUE 
       AND guests >= ?
       ORDER BY distance_km ASC
     `;
     const [propertiesWithDistance] = await db.query(distanceQuery, [
-      parseFloat(lon), 
-      parseFloat(lat), 
+      parseFloat(lat),
+      parseFloat(lon),
       parseInt(guests)
     ]);
     console.log('Properties with distances:', propertiesWithDistance);
@@ -89,18 +86,16 @@ const searchProperties = async (req, res) => {
           r.property_id,
           LOWER(REPLACE(REPLACE(REPLACE(bed.type, ' ', ''), '&', ''), '-', '')) as bed_name
         FROM rooms r
-        CROSS JOIN JSON_TABLE(
-          COALESCE(r.beds, '[]'),
-          '$[*]' COLUMNS (
-            type VARCHAR(255) PATH '$.type'
-          )
-        ) bed
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(r.beds) = 'array' THEN r.beds ELSE '[]'::jsonb END
+        ) AS bed_item(value)
+        CROSS JOIN LATERAL (SELECT bed_item.value->>'type' AS type) bed
         WHERE bed.type IS NOT NULL
       ),
       AggregatedBeds AS (
         SELECT 
           property_id,
-          JSON_ARRAYAGG(bed_name) as room_beds
+          jsonb_agg(bed_name) as room_beds
         FROM RoomBeds
         GROUP BY property_id
       ),
@@ -116,37 +111,36 @@ const searchProperties = async (req, res) => {
           amenity_name
         FROM (
           -- Room boolean fields as amenities
-          SELECT property_id, 'roomservice' as amenity_name FROM rooms WHERE has_room_service = 1
+          SELECT property_id, 'roomservice' as amenity_name FROM rooms WHERE has_room_service = TRUE
           UNION
-          SELECT property_id, 'privatebathroom' FROM rooms WHERE has_private_bathroom = 1
+          SELECT property_id, 'privatebathroom' FROM rooms WHERE has_private_bathroom = TRUE
           UNION
-          SELECT property_id, 'balcony' FROM rooms WHERE has_balcony = 1
+          SELECT property_id, 'balcony' FROM rooms WHERE has_balcony = TRUE
           UNION
-          SELECT property_id, 'kitchen' FROM rooms WHERE has_kitchen = 1
+          SELECT property_id, 'kitchen' FROM rooms WHERE has_kitchen = TRUE
           UNION
-          SELECT property_id, 'minibar' FROM rooms WHERE has_minibar = 1
+          SELECT property_id, 'minibar' FROM rooms WHERE has_minibar = TRUE
           UNION
-          SELECT property_id, 'breakfastincluded' FROM rooms WHERE includes_breakfast = 1
+          SELECT property_id, 'breakfastincluded' FROM rooms WHERE includes_breakfast = TRUE
           UNION
-          SELECT property_id, 'extrabedavailable' FROM rooms WHERE extra_bed_available = 1
+          SELECT property_id, 'extrabedavailable' FROM rooms WHERE extra_bed_available = TRUE
           UNION
-          SELECT property_id, 'petsallowed' FROM rooms WHERE pets_allowed = 1
+          SELECT property_id, 'petsallowed' FROM rooms WHERE pets_allowed = TRUE
           UNION
-          SELECT property_id, 'toiletries' FROM rooms WHERE has_toiletries = 1
+          SELECT property_id, 'toiletries' FROM rooms WHERE has_toiletries = TRUE
           UNION
-          SELECT property_id, 'towelslinens' FROM rooms WHERE has_towels_linens = 1
+          SELECT property_id, 'towelslinens' FROM rooms WHERE has_towels_linens = TRUE
           UNION
-          SELECT property_id, 'smokingallowed' FROM rooms WHERE smoking = 1
+          SELECT property_id, 'smokingallowed' FROM rooms WHERE smoking = TRUE
           UNION
           -- Room amenities array
           SELECT 
             r.property_id,
             LOWER(REPLACE(REPLACE(REPLACE(a.amenity, ' ', ''), '&', ''), '-', '')) as amenity_name
           FROM rooms r
-          JOIN JSON_TABLE(
-            COALESCE(r.amenities, '[]'),
-            '$[*]' COLUMNS (amenity VARCHAR(255) PATH '$')
-          ) a
+          CROSS JOIN LATERAL jsonb_array_elements_text(
+            CASE WHEN jsonb_typeof(r.amenities) = 'array' THEN r.amenities ELSE '[]'::jsonb END
+          ) AS a(amenity)
         ) room_amenities
       ),
       CombinedAmenities AS (
@@ -157,7 +151,7 @@ const searchProperties = async (req, res) => {
       AggregatedAmenities AS (
         SELECT 
           property_id,
-          JSON_ARRAYAGG(amenity_name) as room_amenities
+          jsonb_agg(amenity_name) as room_amenities
         FROM CombinedAmenities
         GROUP BY property_id
       )
@@ -171,10 +165,10 @@ const searchProperties = async (req, res) => {
           FROM property_images pi 
           WHERE pi.property_id = p.id 
           LIMIT 1
-        ) as imageUrl,
+        ) as "imageUrl",
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(
+            jsonb_build_object(
               'id', r.id,
               'name', r.name,
               'type', r.room_type,
@@ -196,12 +190,12 @@ const searchProperties = async (req, res) => {
           WHERE r.property_id = p.id
         ) as total_max_occupancy,
         (
-          SELECT JSON_ARRAYAGG(amenity)
+          SELECT jsonb_agg(amenity)
           FROM property_amenities
           WHERE property_id = p.id
         ) as property_amenities,
         (
-          SELECT JSON_ARRAYAGG(
+          SELECT jsonb_agg(
             LOWER(REPLACE(REPLACE(REPLACE(amenity, ' ', ''), '&', ''), '-', ''))
           )
           FROM property_amenities
@@ -222,23 +216,20 @@ const searchProperties = async (req, res) => {
     // Add distance calculation
     if (lat && lon) {
       query += `
-        ST_Distance_Sphere(
-          point(p.longitude, p.latitude),
-          point(?, ?)
-        ) * 0.001 as distance_km
+        distance_km(p.latitude, p.longitude, ?, ?) as distance_km
       `;
     } else {
       query += ` NULL as distance_km`;
     }
 
     query += ` FROM properties p
-      LEFT JOIN users u ON p.host_id = u.id COLLATE utf8mb4_unicode_ci
-      WHERE p.is_active = 1
+      LEFT JOIN users u ON p.host_id = u.id
+      WHERE p.is_active = TRUE
     `;
 
     const queryParams = [];
     if (lat && lon) {
-      queryParams.push(parseFloat(lon), parseFloat(lat));
+      queryParams.push(parseFloat(lat), parseFloat(lon));
     }
 
     if (guests) {
@@ -252,15 +243,17 @@ const searchProperties = async (req, res) => {
     }
 
     if (location && location !== 'Current Location') {
-      query += ' AND (LOWER(p.city) LIKE ? OR LOWER(p.country) LIKE ? OR LOWER(p.state) LIKE ? OR LOWER(p.name) LIKE ?)';
+      // unaccent(): "Bucuresti" must still find "București" (MySQL's collation ignored accents)
+      query += ' AND (unaccent(LOWER(p.city)) LIKE unaccent(?) OR unaccent(LOWER(p.country)) LIKE unaccent(?) OR unaccent(LOWER(p.state)) LIKE unaccent(?) OR unaccent(LOWER(p.name)) LIKE unaccent(?))';
       const searchLocation = `%${location.toLowerCase()}%`;
       queryParams.push(searchLocation, searchLocation, searchLocation, searchLocation);
     }
 
     // When coordinates are provided and no name/location search, filter by radius
     if (lat && lon && (!location || location === 'Current Location')) {
-      query += ` HAVING distance_km <= ?`;
-      queryParams.push(parseFloat(radius));
+      // PostgreSQL cannot filter on a select alias, so repeat the expression
+      query += ` AND distance_km(p.latitude, p.longitude, ?, ?) <= ?`;
+      queryParams.push(parseFloat(lat), parseFloat(lon), parseFloat(radius));
       query += ` ORDER BY distance_km ASC`;
     } else if (lat && lon) {
       // When searching by name/location with coordinates, order by distance but don't filter
@@ -290,7 +283,7 @@ const searchProperties = async (req, res) => {
         ...property,
         rooms: rooms || [],
         price: lowestPrice,
-        is_active: property.is_active === 1,
+        is_active: Boolean(property.is_active),
         distance: property.distance_km ? 
           Math.round(property.distance_km * 10) / 10 : null // Round to 1 decimal
       };
@@ -701,10 +694,10 @@ export const getAllProperties = async (req, res) => {
           FROM property_images pi 
           WHERE pi.property_id = p.id 
           LIMIT 1
-        ) as imageUrl,
+        ) as "imageUrl",
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(
+            jsonb_build_object(
               'id', r.id,
               'name', r.name,
               'type', r.room_type,
@@ -721,7 +714,7 @@ export const getAllProperties = async (req, res) => {
           WHERE r.property_id = p.id
         ) as rooms
       FROM properties p
-      LEFT JOIN users u ON p.host_id COLLATE utf8mb4_0900_ai_ci = u.id COLLATE utf8mb4_0900_ai_ci
+      LEFT JOIN users u ON p.host_id = u.id
       WHERE 1=1
     `;
 
@@ -729,12 +722,12 @@ export const getAllProperties = async (req, res) => {
 
     // Add user filtering only if user exists and is NOT admin
     if (req.user && req.user.role !== 'admin') {
-      query += ' AND p.host_id COLLATE utf8mb4_0900_ai_ci = ? COLLATE utf8mb4_0900_ai_ci';
+      query += ' AND p.host_id = ?';
       queryParams.push(req.user.id);
     } else {
       // For public view or admin view, only show active properties
       if (!req.user || req.user.role !== 'admin') {
-        query += ' AND p.is_active = 1';
+        query += ' AND p.is_active = TRUE';
       }
     }
 
@@ -768,7 +761,7 @@ export const getAllProperties = async (req, res) => {
         ...property,
         rooms: rooms || [],
         price: lowestPrice, // Use lowest room price as property price
-        is_active: property.is_active === 1 // Ensure boolean value
+        is_active: Boolean(property.is_active) // Ensure boolean value
       };
     });
 
@@ -845,7 +838,7 @@ export const getPropertyById = async (req, res) => {
           JOIN rooms r ON b.room_id = r.id 
           WHERE r.property_id = p.id 
           AND b.status = 'confirmed' 
-          AND b.check_out_date >= CURDATE()
+          AND b.check_out_date >= CURRENT_DATE
         ) as active_bookings_count,
         (
           SELECT COUNT(*)
@@ -863,13 +856,13 @@ export const getPropertyById = async (req, res) => {
           AND m.receiver_id = ?
         ) as unread_messages_count,
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(
+            jsonb_build_object(
               'id', r.id,
               'name', r.name,
               'room_type', r.room_type,
               'bathroom_type', r.bathroom_type,
-              'beds', IF(r.beds IS NULL OR r.beds = '', '[]', r.beds),
+              'beds', COALESCE(r.beds::text, '[]'),
               'room_size', r.room_size,
               'max_occupancy', r.max_occupancy,
               'base_price', r.base_price,
@@ -880,26 +873,26 @@ export const getPropertyById = async (req, res) => {
               'description', r.description,
               'view_type', r.view_type,
               'has_private_bathroom', r.has_private_bathroom,
-              'amenities', IF(r.amenities IS NULL OR r.amenities = '', '[]', r.amenities),
+              'amenities', COALESCE(r.amenities::text, '[]'),
               'smoking', r.smoking,
-              'accessibility_features', IF(r.accessibility_features IS NULL OR r.accessibility_features = '', '[]', r.accessibility_features),
+              'accessibility_features', COALESCE(r.accessibility_features::text, '[]'),
               'floor_level', r.floor_level,
               'has_balcony', r.has_balcony,
               'has_kitchen', r.has_kitchen,
               'has_minibar', r.has_minibar,
-              'climate', IF(r.climate IS NULL OR r.climate = '', '{"type":"ac","available":true}', r.climate),
+              'climate', COALESCE(r.climate::text, '{"type":"ac","available":true}'),
               'price_per_night', r.price_per_night,
               'cancellation_policy', r.cancellation_policy,
               'includes_breakfast', r.includes_breakfast,
               'extra_bed_available', r.extra_bed_available,
               'pets_allowed', r.pets_allowed,
-              'images', IF(r.images IS NULL OR r.images = '', '[]', r.images),
+              'images', COALESCE(r.images::text, '[]'),
               'cleaning_frequency', r.cleaning_frequency,
               'has_toiletries', r.has_toiletries,
               'has_towels_linens', r.has_towels_linens,
               'has_room_service', r.has_room_service,
               'flooring_type', r.flooring_type,
-              'energy_saving_features', IF(r.energy_saving_features IS NULL OR r.energy_saving_features = '', '[]', r.energy_saving_features),
+              'energy_saving_features', COALESCE(r.energy_saving_features::text, '[]'),
               'status', r.status,
               'created_at', r.created_at,
               'updated_at', r.updated_at
@@ -909,56 +902,55 @@ export const getPropertyById = async (req, res) => {
           WHERE r.property_id = p.id
         ) as rooms,
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(recent.item) FROM (SELECT
+            jsonb_build_object(
               'id', b.id,
               'guest_name', CONCAT(u.first_name, ' ', u.last_name),
-              'check_in_date', DATE_FORMAT(b.check_in_date, '%Y-%m-%d'),
-              'check_out_date', DATE_FORMAT(b.check_out_date, '%Y-%m-%d'),
+              'check_in_date', to_char(b.check_in_date, 'YYYY-MM-DD'),
+              'check_out_date', to_char(b.check_out_date, 'YYYY-MM-DD'),
               'status', b.status,
               'room_name', r.name,
               'total_price', b.total_price
-            )
-          )
+            ) AS item
           FROM bookings b
           JOIN rooms r ON b.room_id = r.id
           JOIN users u ON b.user_id = u.id
           WHERE r.property_id = p.id
           ORDER BY b.check_in_date DESC
           LIMIT 5
+          ) recent
         ) as recent_bookings,
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(
+            jsonb_build_object(
               'id', mt.id,
               'title', mt.title,
               'description', mt.description,
               'priority', mt.priority,
               'status', mt.status,
-              'due_date', DATE_FORMAT(mt.due_date, '%Y-%m-%d'),
-              'created_at', DATE_FORMAT(mt.created_at, '%Y-%m-%d %H:%i:%s')
-            )
+              'due_date', to_char(mt.due_date, 'YYYY-MM-DD'),
+              'created_at', to_char(mt.created_at, 'YYYY-MM-DD HH24:MI:SS')
+            ) ORDER BY mt.due_date ASC
           )
           FROM maintenance_tasks mt
           WHERE mt.property_id = p.id
           AND mt.status != 'completed'
-          ORDER BY mt.due_date ASC
         ) as maintenance_tasks,
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(recent.item) FROM (SELECT
+            jsonb_build_object(
               'id', ft.id,
               'amount', ft.amount,
               'type', ft.type,
               'description', ft.description,
               'status', ft.status,
-              'created_at', DATE_FORMAT(ft.created_at, '%Y-%m-%d %H:%i:%s')
-            )
-          )
+              'created_at', to_char(ft.transaction_date, 'YYYY-MM-DD HH24:MI:SS')
+            ) AS item
           FROM financial_transactions ft
           WHERE ft.property_id = p.id
-          ORDER BY ft.created_at DESC
+          ORDER BY ft.transaction_date DESC
           LIMIT 10
+          ) recent
         ) as recent_transactions
       FROM properties p
       WHERE p.id = ? AND p.host_id = ?
@@ -1131,11 +1123,11 @@ export const getOwnerProperties = async (req, res) => {
           JOIN rooms r ON b.room_id = r.id 
           WHERE r.property_id = p.id 
           AND b.status = 'confirmed' 
-          AND b.check_out_date >= CURDATE()
+          AND b.check_out_date >= CURRENT_DATE
         ) as active_bookings_count,
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(
+            jsonb_build_object(
               'id', r.id,
               'name', r.name,
               'price_per_night', r.base_price
@@ -1145,21 +1137,21 @@ export const getOwnerProperties = async (req, res) => {
           WHERE r.property_id = p.id
         ) as rooms,
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(recent.item) FROM (SELECT
+            jsonb_build_object(
               'id', b.id,
               'guest_name', CONCAT(u.first_name, ' ', u.last_name),
               'check_in_date', b.check_in_date,
               'check_out_date', b.check_out_date,
               'status', b.status
-            )
-          )
+            ) AS item
           FROM bookings b
           JOIN rooms r ON b.room_id = r.id
           JOIN users u ON b.user_id = u.id
           WHERE r.property_id = p.id
           ORDER BY b.check_in_date DESC
           LIMIT 3
+          ) recent
         ) as recent_bookings
       FROM properties p
       WHERE p.host_id = ?
@@ -1270,7 +1262,7 @@ export const updateBookingStatus = async (req, res) => {
 const updatePropertyMaxOccupancy = async (propertyId) => {
   const query = `
     UPDATE properties p
-    SET p.guests = (
+    SET guests = (
       SELECT COALESCE(SUM(r.max_occupancy), 0)
       FROM rooms r
       WHERE r.property_id = ?
@@ -1360,7 +1352,7 @@ const deleteRoom = async (req, res) => {
 
     // Check for active bookings
     const [bookings] = await db.query(
-      'SELECT COUNT(*) as count FROM bookings WHERE room_id = ? AND status IN ("pending", "confirmed")',
+      'SELECT COUNT(*) as count FROM bookings WHERE room_id = ? AND status IN (\'pending\', \'confirmed\')',
       [roomId]
     );
 
@@ -1483,7 +1475,7 @@ export const cancelBooking = async (req, res) => {
 
     // Cancel the booking
     await db.query(
-      'UPDATE bookings SET status = "cancelled", updated_at = NOW() WHERE id = ?',
+      'UPDATE bookings SET status = \'cancelled\', updated_at = NOW() WHERE id = ?',
       [bookingId]
     );
 

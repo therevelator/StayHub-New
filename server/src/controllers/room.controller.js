@@ -269,8 +269,8 @@ export const getRoomAvailability = async (req, res) => {
       SELECT 
         id,
         room_id,
-        DATE_FORMAT(check_in_date, '%Y-%m-%d') as check_in_date,
-        DATE_FORMAT(check_out_date, '%Y-%m-%d') as check_out_date
+        to_char(check_in_date, 'YYYY-MM-DD') as check_in_date,
+        to_char(check_out_date, 'YYYY-MM-DD') as check_out_date
       FROM bookings
       WHERE room_id IN (${propertyRooms.map(r => r.id).join(',')})
       AND status != 'cancelled'
@@ -539,7 +539,7 @@ export const deleteRoom = async (req, res) => {
 
     // Check for active bookings only (pending or confirmed)
     const [activeBookings] = await connection.query(
-      'SELECT id, status FROM bookings WHERE room_id = ? AND status IN ("pending", "confirmed")',
+      'SELECT id, status FROM bookings WHERE room_id = ? AND status IN (\'pending\', \'confirmed\')',
       [roomId]
     );
 
@@ -553,7 +553,7 @@ export const deleteRoom = async (req, res) => {
 
     // Delete all cancelled bookings
     await connection.query(
-      'DELETE FROM bookings WHERE room_id = ? AND status = "cancelled"',
+      'DELETE FROM bookings WHERE room_id = ? AND status = \'cancelled\'',
       [roomId]
     );
 
@@ -576,7 +576,7 @@ export const deleteRoom = async (req, res) => {
     console.error('Error deleting room:', error);
     res.status(500).json({
       status: 'error',
-      message: error.code === 'ER_ROW_IS_REFERENCED_2' 
+      message: error.code === '23503' 
         ? 'Cannot delete room because it has active bookings. Please cancel or complete all bookings for this room first.'
         : 'Failed to delete room',
       code: error.code || 'UNKNOWN_ERROR'
@@ -594,7 +594,7 @@ const getRoomHelper = async (roomId) => {
       r.name,
       r.room_type,
       r.bed_type,
-      IF(r.beds IS NULL OR r.beds = '', '[]', r.beds) as beds,
+      COALESCE(r.beds::text, '[]') as beds,
       r.max_occupancy,
       r.base_price,
       r.cleaning_fee,
@@ -608,29 +608,29 @@ const getRoomHelper = async (roomId) => {
       r.view_type,
       r.has_private_bathroom,
       r.smoking,
-      IF(r.accessibility_features IS NULL OR r.accessibility_features = '', '[]', r.accessibility_features) as accessibility_features,
+      COALESCE(r.accessibility_features::text, '[]') as accessibility_features,
       r.floor_level,
       r.has_balcony,
       r.has_kitchen,
       r.has_minibar,
-      IF(r.climate IS NULL OR r.climate = '', '{"type":"ac","available":true}', r.climate) as climate,
+      COALESCE(r.climate::text, '{"type":"ac","available":true}') as climate,
       r.price_per_night,
       r.cancellation_policy,
       r.includes_breakfast,
       r.extra_bed_available,
       r.pets_allowed,
-      IF(r.images IS NULL OR r.images = '', '[]', r.images) as images,
+      COALESCE(r.images::text, '[]') as images,
       r.cleaning_frequency,
       r.has_toiletries,
       r.has_towels_linens,
       r.has_room_service,
       r.flooring_type,
-      IF(r.energy_saving_features IS NULL OR r.energy_saving_features = '', '[]', r.energy_saving_features) as energy_saving_features,
+      COALESCE(r.energy_saving_features::text, '[]') as energy_saving_features,
       r.status,
       r.room_size,
-      IF(r.amenities IS NULL OR r.amenities = '', '[]', r.amenities) as amenities,
+      COALESCE(r.amenities::text, '[]') as amenities,
       p.name as property_name,
-      CONCAT(p.street, ', ', p.city, ', ', p.country) as property_location,
+      p.street || ', ' || p.city || ', ' || p.country as property_location,
       p.property_type,
       p.rating,
       p.star_rating,

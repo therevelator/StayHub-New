@@ -27,91 +27,9 @@ const formatTime = (timeStr) => {
   }
 };
 
-// Create properties table
-const createPropertiesTable = async () => {
-  const queries = [
-    // Properties table
-    `CREATE TABLE IF NOT EXISTS properties (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      name VARCHAR(255) NOT NULL,
-      description TEXT NOT NULL,
-      latitude DECIMAL(10, 8) NOT NULL,
-      longitude DECIMAL(11, 8) NOT NULL,
-      street VARCHAR(255),
-      city VARCHAR(255) NOT NULL,
-      state VARCHAR(255),
-      country VARCHAR(255) NOT NULL,
-      postal_code VARCHAR(20),
-      star_rating DECIMAL(2, 1),
-      host_id VARCHAR(36) NOT NULL,
-      guests INT NOT NULL,
-      bedrooms INT NOT NULL,
-      beds INT NOT NULL,
-      bathrooms INT NOT NULL,
-      property_type ENUM('hotel', 'apartment', 'villa', 'resort', 'guesthouse', 'hostel') NOT NULL,
-      languages_spoken JSON,
-      check_in_time TIME,
-      check_out_time TIME,
-      cancellation_policy VARCHAR(50),
-      pet_policy VARCHAR(255),
-      event_policy VARCHAR(255),
-      min_stay INT DEFAULT 1,
-      max_stay INT DEFAULT 30,
-      house_rules TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (host_id) REFERENCES users(id)
-    )`,
-
-    // Property amenities table with categories
-    `CREATE TABLE IF NOT EXISTS property_amenities (
-      property_id INT,
-      amenity VARCHAR(100),
-      category VARCHAR(50) NOT NULL,
-      PRIMARY KEY (property_id, amenity, category),
-      FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
-    )`,
-
-    // Property images table
-    `CREATE TABLE IF NOT EXISTS property_images (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      property_id INT,
-      url VARCHAR(255) NOT NULL,
-      caption VARCHAR(255),
-      FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
-    )`,
-
-    // Property rules table
-    `CREATE TABLE IF NOT EXISTS property_rules (
-      property_id INT,
-      rule VARCHAR(255),
-      PRIMARY KEY (property_id, rule),
-      FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
-    )`,
-
-    // Rooms table
-    `CREATE TABLE IF NOT EXISTS rooms (
-      id INT PRIMARY KEY AUTO_INCREMENT,
-      property_id INT,
-      name VARCHAR(255) NOT NULL,
-      room_type VARCHAR(50),
-      beds JSON,
-      max_occupancy INT,
-      base_price DECIMAL(10, 2),
-      cleaning_fee DECIMAL(10, 2),
-      service_fee DECIMAL(10, 2),
-      tax_rate DECIMAL(5, 2),
-      security_deposit DECIMAL(10, 2),
-      description TEXT,
-      bathroom_type VARCHAR(50),
-      FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
-    )`
-  ];
-
-  for (const query of queries) {
-    await db.query(query);
-  }
-};
+// Tables are created from src/db/schema.sql (npm run db:init); kept so the
+// legacy seed script can still call it.
+const createPropertiesTable = async () => {};
 
 // Find properties within radius using Haversine formula
 const findPropertiesInRadius = async (lat, lon, radius, guests, propertyType) => {
@@ -129,10 +47,10 @@ const findPropertiesInRadius = async (lat, lon, radius, guests, propertyType) =>
           FROM property_images pi 
           WHERE pi.property_id = p.id 
           LIMIT 1
-        ) as imageUrl,
+        ) as "imageUrl",
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(
+            jsonb_build_object(
               'id', r.id,
               'name', r.name,
               'type', r.room_type,
@@ -149,9 +67,9 @@ const findPropertiesInRadius = async (lat, lon, radius, guests, propertyType) =>
           WHERE r.property_id = p.id
         ) as rooms
       FROM properties p
-      LEFT JOIN users u ON p.host_id = u.id COLLATE utf8mb4_0900_ai_ci
+      LEFT JOIN users u ON p.host_id = u.id
       WHERE 
-        p.is_active = 1
+        p.is_active = TRUE
         AND p.latitude IS NOT NULL 
         AND p.longitude IS NOT NULL
     `;
@@ -202,7 +120,7 @@ const findPropertiesInRadius = async (lat, lon, radius, guests, propertyType) =>
       return {
         ...property,
         rooms: rooms || [],
-        is_active: property.is_active === 1
+        is_active: Boolean(property.is_active)
       };
     });
   } catch (error) {
@@ -258,7 +176,7 @@ const validPropertyTypes = ['hotel', 'apartment', 'villa', 'resort', 'guesthouse
 // Add this helper function at the top
 const formatTimeString = (timeStr) => {
   if (!timeStr) return null;
-  // Convert MySQL TIME format (HH:mm:ss) to HH:mm format
+  // Convert SQL TIME format (HH:mm:ss) to HH:mm format
   const match = timeStr.match(/(\d{2}):(\d{2})/);
   if (match) {
     return dayjs().hour(match[1]).minute(match[2]);
@@ -272,7 +190,7 @@ const getPropertyById = async (id) => {
     WITH RoomDetails AS (
       SELECT r.*, 
              COALESCE(
-               (SELECT JSON_ARRAYAGG(amenity)
+               (SELECT jsonb_agg(amenity)
                 FROM (SELECT DISTINCT amenity 
                       FROM room_amenities 
                       WHERE room_id = r.id) t
@@ -285,8 +203,8 @@ const getPropertyById = async (id) => {
     SELECT 
       p.*,
       COALESCE(
-        JSON_ARRAYAGG(
-          JSON_OBJECT(
+        jsonb_agg(
+          jsonb_build_object(
             'id', rd.id,
             'property_id', rd.property_id,
             'name', rd.name,
@@ -332,8 +250,8 @@ const getPropertyById = async (id) => {
       ) as rooms,
       COALESCE(
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(
+            jsonb_build_object(
               'category', COALESCE(pa.category, 'general'),
               'amenity', pa.amenity
             )
@@ -346,8 +264,8 @@ const getPropertyById = async (id) => {
       p.house_rules,
       COALESCE(
         (
-          SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
+          SELECT jsonb_agg(
+            jsonb_build_object(
               'id', pi.id,
               'url', pi.url,
               'caption', pi.caption
@@ -589,8 +507,6 @@ const updateProperty = async (propertyId, propertyData) => {
 
     // Execute the update
     const query = 'UPDATE properties SET ? WHERE id = ?';
-    const sqlQuery = connection.format(query, [updateData, propertyId]);
-    console.log('[PropertyModel] SQL Query:', sqlQuery);
 
     const [result] = await connection.query(query, [updateData, propertyId]);
     if (!result.affectedRows) {
@@ -671,8 +587,8 @@ const deleteProperty = async (propertyId) => {
     await connection.rollback();
     console.error('Error deleting property:', error);
     
-    // Handle MySQL foreign key constraint errors
-    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+    // Handle foreign key constraint errors (23503 = foreign_key_violation)
+    if (error.code === '23503') {
       throw new Error('Cannot delete property because it has active bookings or other dependencies');
     }
     
